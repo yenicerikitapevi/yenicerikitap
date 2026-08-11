@@ -1,0 +1,14 @@
+# SQLite Database
+yeniceri.db
+yeniceri.db-journal
+
+# Logs & Temp
+*.log
+scratch/
+.tmp/
+
+# OS & IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
