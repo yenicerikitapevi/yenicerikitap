@@ -15,8 +15,10 @@ define('DB_NAME', 'yeniceri_db');
 define('DB_USER', 'root');
 define('DB_PASS', '');
 
-// Site Temel Sabitleri
-define('SITE_URL', 'http://localhost:8000');
+// Site Temel Sabitleri - Dinamik Domain Tespiti (Render, Vercel ve Localhost Uyumlu)
+$protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') || (!empty($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https') ? 'https://' : 'http://';
+$host = $_SERVER['HTTP_HOST'] ?? 'localhost:8000';
+define('SITE_URL', $protocol . $host);
 define('APP_NAME', 'Yeniçeri Kitabevi');
 
 global $pdo;
