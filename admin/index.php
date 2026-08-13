@@ -41,10 +41,12 @@ $admin_name = $_SESSION['admin_user']['name'] ?? 'Yönetici';
 <body>
     <div class="admin-wrapper">
         <aside class="admin-sidebar shadow-lg">
-            <div class="p-4 border-bottom border-secondary border-opacity-25 text-center">
-                <a href="index.php?p=FrontPage" class="text-white text-decoration-none d-flex align-items-center justify-content-center gap-2">
-                    <i class="bi bi-shield-check text-danger fs-3"></i>
-                    <span class="fw-extrabold fs-5 tracking-tight">YENİÇERİ <small class="fw-normal text-secondary fs-7 d-block">Admin Panel</small></span>
+            <div class="p-3 border-bottom border-secondary border-opacity-25 text-center">
+                <a href="index.php?p=FrontPage" class="text-white text-decoration-none d-inline-block">
+                    <div class="bg-white p-2 rounded-3 mb-1 shadow-sm d-inline-block">
+                        <img src="../assets/images/logo_horizontal.png" alt="Yeniçeri Kitabevi" style="height: 38px; object-fit: contain;">
+                    </div>
+                    <small class="fw-bold text-secondary fs-8 d-block text-uppercase tracking-wider">Admin Panel</small>
                 </a>
             </div>
 

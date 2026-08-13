@@ -62,12 +62,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 </head>
 <body>
     <div class="login-card p-4 p-md-5">
-        <div class="text-center mb-4">
-            <div class="d-inline-flex align-items-center justify-content-center bg-danger text-white rounded-circle mb-3" style="width: 60px; height: 60px;">
-                <i class="bi bi-shield-lock-fill fs-2"></i>
-            </div>
-            <h4 class="fw-bold text-dark mb-1">Yeniçeri Kitabevi</h4>
-            <p class="text-muted fs-7">Yönetim Paneli Girişi</p>
+        <div class="text-center mb-3">
+            <img src="../assets/images/logo_vertical.png" alt="Yeniçeri Kitabevi" style="height: 135px; object-fit: contain;" class="mb-2">
+            <p class="text-muted fs-7 mb-0">Yönetim Paneli Girişi</p>
         </div>
 
         <?php if ($error): ?>

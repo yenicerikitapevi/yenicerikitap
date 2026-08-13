@@ -42,7 +42,7 @@ $items = db_fetch_all("SELECT oi.*, b.title, b.isbn
         <div class="invoice-box">
             <div class="row align-items-center mb-4">
                 <div class="col-6">
-                    <h3 class="fw-extrabold text-danger mb-1">YENİÇERİ KİTABEVİ</h3>
+                    <img src="../assets/images/logo_horizontal.png" alt="Yeniçeri Kitabevi" style="height: 48px; object-fit: contain;" class="mb-2">
                     <p class="text-muted mb-0">İstasyon Mah. Hikmet Özer Cad. No:48/A<br>Etimesgut / Ankara<br>Tel: 0312 245 00 00</p>
                 </div>
                 <div class="col-6 text-end">

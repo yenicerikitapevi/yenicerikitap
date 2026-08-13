@@ -75,12 +75,8 @@ foreach ($collections as $col) {
         <div class="container">
             <div class="row align-items-center g-3">
                 <div class="col-6 col-lg-3">
-                    <a href="index.php" class="navbar-brand text-dark d-flex align-items-center gap-2">
-                        <i class="bi bi-book-half fs-1 text-danger"></i>
-                        <div>
-                            <span class="fw-extrabold lh-1 d-block">YENİÇERİ</span>
-                            <small class="fs-8 text-muted fw-bold tracking-widest text-uppercase">Kitabevi</small>
-                        </div>
+                    <a href="index.php" class="navbar-brand text-dark d-flex align-items-center">
+                        <img src="assets/images/logo_horizontal.png" alt="Yeniçeri Kitabevi" style="height: 52px; max-width: 220px; object-fit: contain;">
                     </a>
                 </div>
 
@@ -302,8 +298,9 @@ foreach ($collections as $col) {
     <footer>
         <div class="container">
             <div class="row g-4 pb-5 border-bottom border-secondary border-opacity-25">
-                <div class="col-lg-4">
-                    <h4 class="fw-extrabold text-white mb-3"><i class="bi bi-book-half text-danger me-2"></i> YENİÇERİ KİTABEVİ</h4>
+                    <div class="bg-white d-inline-block px-3 py-2 rounded-3 mb-3 shadow-sm">
+                        <img src="assets/images/logo_horizontal.png" alt="Yeniçeri Kitabevi" style="height: 40px; object-fit: contain;">
+                    </div>
                     <p class="fs-7 opacity-75 mb-3">Yeniçeri Kitabevi, binlerce edebi eser, tarih araştırması ve çocuk kitabı ile Ankara Etimesgut merkezli okurlarına hızlı ve güvenli hizmet vermektedir.</p>
                     <div class="d-flex gap-2">
                         <a href="https://wa.me/<?= preg_replace('/[^0-9]/', '', $site['site_whatsapp'] ?? '05550000000') ?>" target="_blank" class="btn btn-danger btn-sm rounded-pill font-bold px-3">

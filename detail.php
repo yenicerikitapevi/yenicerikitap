@@ -46,9 +46,8 @@ $img_src = !empty($book['cover_image']) ? 'assets/images/' . $book['cover_image'
 
     <header class="bg-white py-3 border-bottom shadow-sm">
         <div class="container d-flex align-items-center justify-content-between">
-            <a href="index.php" class="navbar-brand text-dark d-flex align-items-center gap-2">
-                <i class="bi bi-book-half fs-2 text-danger"></i>
-                <span class="fw-extrabold fs-4">YENİÇERİ KİTABEVİ</span>
+            <a href="index.php" class="navbar-brand text-dark d-flex align-items-center">
+                <img src="assets/images/logo_horizontal.png" alt="Yeniçeri Kitabevi" style="height: 48px; max-width: 220px; object-fit: contain;">
             </a>
             <button class="btn btn-outline-light text-white rounded-pill px-3 py-2 fw-bold" data-bs-toggle="offcanvas" data-bs-target="#cartDrawer">
                 <i class="bi bi-bag-handle-fill text-danger me-1"></i> Sepetim <span class="badge bg-danger rounded-pill cart-count-badge">0</span>

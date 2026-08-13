@@ -17,9 +17,8 @@ require_once __DIR__ . '/config.php';
 <body>
     <header class="bg-white py-3 border-bottom shadow-sm">
         <div class="container d-flex align-items-center justify-content-between">
-            <a href="index.php" class="navbar-brand text-dark d-flex align-items-center gap-2">
-                <i class="bi bi-book-half fs-2 text-danger"></i>
-                <span class="fw-extrabold fs-4">YENİÇERİ KİTABEVİ</span>
+            <a href="index.php" class="navbar-brand text-dark d-flex align-items-center">
+                <img src="assets/images/logo_horizontal.png" alt="Yeniçeri Kitabevi" style="height: 48px; max-width: 220px; object-fit: contain;">
             </a>
             <a href="index.php" class="btn btn-outline-dark rounded-pill px-3 font-semibold"><i class="bi bi-arrow-left me-1"></i> Anasayfaya Dön</a>
         </div>
