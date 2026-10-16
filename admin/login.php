@@ -76,7 +76,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <label class="form-label fw-semibold fs-7 text-secondary">E-Posta Adresi</label>
                 <div class="input-group">
                     <span class="input-group-text bg-light border-end-0"><i class="bi bi-envelope"></i></span>
-                    <input type="email" name="email" class="form-control bg-light border-start-0" placeholder="admin@yeniceri.com" value="admin@yeniceri.com" required>
+                    <input type="email" name="email" class="form-control bg-light border-start-0" placeholder="admin@yeniceri.com" required>
                 </div>
             </div>
 
@@ -84,7 +84,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <label class="form-label fw-semibold fs-7 text-secondary">Parola</label>
                 <div class="input-group">
                     <span class="input-group-text bg-light border-end-0"><i class="bi bi-key"></i></span>
-                    <input type="password" name="password" class="form-control bg-light border-start-0" placeholder="••••••••" value="admin123" required>
+                    <input type="password" name="password" class="form-control bg-light border-start-0" placeholder="••••••••" required>
                 </div>
             </div>
 
@@ -93,9 +93,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </button>
         </form>
 
-        <div class="mt-4 text-center fs-7 text-muted border-top pt-3">
-            <small><i class="bi bi-info-circle me-1"></i> Varsayılan Giriş: <strong>admin@yeniceri.com</strong> / <strong>admin123</strong></small>
-        </div>
     </div>
 </body>
 </html>

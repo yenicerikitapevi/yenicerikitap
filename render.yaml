@@ -1,5 +1,18 @@
 services:
   - type: web
     name: yenicerikitap
-    env: docker
-    plan: free
+    runtime: docker
+    plan: starter
+    # Kalıcı disk: SQLite veritabanı yeniden başlatma ve deploy sonrasında korunur
+    disk:
+      name: yeniceri-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: DB_DRIVER
+        value: sqlite
+      - key: SQLITE_PATH
+        value: /var/data/yeniceri.db
+      # İlk kurulumda yönetici parolası; Render panelinde Environment sekmesinden görülebilir
+      - key: ADMIN_PASSWORD
+        generateValue: true

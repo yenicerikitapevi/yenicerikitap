@@ -9,11 +9,14 @@ if (session_status() === PHP_SESSION_NONE) {
 }
 
 // 1. VERİTABANI AYARLARI (MySQL & Fallback SQLite)
-define('DB_HOST', '127.0.0.1');
-define('DB_PORT', '3306');
-define('DB_NAME', 'yeniceri_db');
-define('DB_USER', 'root');
-define('DB_PASS', '');
+// Değerler ortam değişkenlerinden okunur (Render panelinden ayarlanır), yoksa yerel varsayılanlar kullanılır.
+define('DB_DRIVER', getenv('DB_DRIVER') ?: 'mysql'); // 'sqlite' ise MySQL denemesi atlanır
+define('DB_HOST', getenv('DB_HOST') ?: '127.0.0.1');
+define('DB_PORT', getenv('DB_PORT') ?: '3306');
+define('DB_NAME', getenv('DB_NAME') ?: 'yeniceri_db');
+define('DB_USER', getenv('DB_USER') ?: 'root');
+define('DB_PASS', getenv('DB_PASS') ?: '');
+define('SQLITE_PATH', getenv('SQLITE_PATH') ?: __DIR__ . '/yeniceri.db'); // Render'da kalıcı disk: /var/data/yeniceri.db
 
 // Site Temel Sabitleri - Dinamik Domain Tespiti (Render, Vercel ve Localhost Uyumlu)
 $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') || (!empty($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https') ? 'https://' : 'http://';
@@ -23,37 +26,41 @@ define('APP_NAME', 'Yeniçeri Kitabevi');
 
 global $pdo;
 
-try {
-    // 1. Deneme: MySQL / MariaDB PDO Bağlantısı
-    $dsn = "mysql:host=" . DB_HOST . ";port=" . DB_PORT . ";dbname=" . DB_NAME . ";charset=utf8mb4";
-    $pdo = new PDO($dsn, DB_USER, DB_PASS, [
-        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-        PDO::ATTR_EMULATE_PREPARES => false,
-    ]);
-} catch (PDOException $e) {
-    // 2. Deneme: MySQL sunucusu çalışıyor ancak 'yeniceri_db' veritabanı henüz oluşturulmadıysa otomatik oluştur
-    if (strpos($e->getMessage(), 'Unknown database') !== false || $e->getCode() == 1049) {
-        try {
-            $root_pdo = new PDO("mysql:host=" . DB_HOST . ";port=" . DB_PORT . ";charset=utf8mb4", DB_USER, DB_PASS);
-            $root_pdo->exec("CREATE DATABASE IF NOT EXISTS `" . DB_NAME . "` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;");
+if (DB_DRIVER === 'sqlite') {
+    init_sqlite_fallback();
+} else {
+    try {
+        // 1. Deneme: MySQL / MariaDB PDO Bağlantısı
+        $dsn = "mysql:host=" . DB_HOST . ";port=" . DB_PORT . ";dbname=" . DB_NAME . ";charset=utf8mb4";
+        $pdo = new PDO($dsn, DB_USER, DB_PASS, [
+            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+            PDO::ATTR_EMULATE_PREPARES => false,
+        ]);
+    } catch (PDOException $e) {
+        // 2. Deneme: MySQL sunucusu çalışıyor ancak 'yeniceri_db' veritabanı henüz oluşturulmadıysa otomatik oluştur
+        if (strpos($e->getMessage(), 'Unknown database') !== false || $e->getCode() == 1049) {
+            try {
+                $root_pdo = new PDO("mysql:host=" . DB_HOST . ";port=" . DB_PORT . ";charset=utf8mb4", DB_USER, DB_PASS);
+                $root_pdo->exec("CREATE DATABASE IF NOT EXISTS `" . DB_NAME . "` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;");
             
-            $pdo = new PDO($dsn, DB_USER, DB_PASS, [
-                PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-                PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC
-            ]);
+                $pdo = new PDO($dsn, DB_USER, DB_PASS, [
+                    PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+                    PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC
+                ]);
 
-            // MySQL şemasını schema.sql dosyasından import et
-            $schema_file = __DIR__ . '/schema.sql';
-            if (file_exists($schema_file)) {
-                $sql_content = file_get_contents($schema_file);
-                $pdo->exec($sql_content);
+                // MySQL şemasını schema.sql dosyasından import et
+                $schema_file = __DIR__ . '/schema.sql';
+                if (file_exists($schema_file)) {
+                    $sql_content = file_get_contents($schema_file);
+                    $pdo->exec($sql_content);
+                }
+            } catch (PDOException $ex_create) {
+                init_sqlite_fallback();
             }
-        } catch (PDOException $ex_create) {
+        } else {
             init_sqlite_fallback();
         }
-    } else {
-        init_sqlite_fallback();
     }
 }
 
@@ -63,7 +70,10 @@ try {
 function init_sqlite_fallback() {
     global $pdo;
     try {
-        $sqlite_file = __DIR__ . '/yeniceri.db';
+        $sqlite_file = SQLITE_PATH;
+        if (!is_dir(dirname($sqlite_file))) {
+            mkdir(dirname($sqlite_file), 0775, true);
+        }
         $is_new = !file_exists($sqlite_file);
         
         $pdo = new PDO("sqlite:" . $sqlite_file, null, null, [
@@ -205,7 +215,14 @@ function init_sqlite_db($db) {
         $db->exec($s);
     }
 
-    $pass = password_hash('admin123', PASSWORD_DEFAULT);
+    // Yönetici parolası koda yazılmaz: ADMIN_PASSWORD ortam değişkeninden alınır.
+    // Tanımlı değilse rastgele üretilir ve sunucu loglarına yazılır (Render > Logs).
+    $admin_plain = getenv('ADMIN_PASSWORD');
+    if (!$admin_plain) {
+        $admin_plain = bin2hex(random_bytes(8));
+        error_log('[Yeniceri] ADMIN_PASSWORD tanimli degil. Olusturulan yonetici parolasi: ' . $admin_plain);
+    }
+    $pass = password_hash($admin_plain, PASSWORD_DEFAULT);
     $cpass = password_hash('123456', PASSWORD_DEFAULT);
 
     $db->exec("INSERT INTO users (id, name, email, password_hash, role, status, phone, address) VALUES
