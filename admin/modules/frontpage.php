@@ -7,7 +7,8 @@ if (!defined('SITE_URL')) exit;
 $total_books = db_fetch("SELECT COUNT(*) as cnt FROM books")['cnt'] ?? 0;
 $total_users = db_fetch("SELECT COUNT(*) as cnt FROM users WHERE role = 'customer'")['cnt'] ?? 0;
 $total_orders = db_fetch("SELECT COUNT(*) as cnt FROM orders")['cnt'] ?? 0;
-$total_revenue = db_fetch("SELECT SUM(total_amount) as total FROM orders WHERE status != 'İptal'")['total'] ?? 0;
+// Ciroya yalnızca ödemesi alınmış siparişler girer (ödeme bekleyen ve iptal edilenler hariç)
+$total_revenue = db_fetch("SELECT SUM(total_amount) as total FROM orders WHERE status NOT IN ('İptal', 'Ödeme Bekliyor')")['total'] ?? 0;
 
 $critical_stock_books = db_fetch_all("SELECT b.*, a.name as author_name, p.name as publisher_name 
                                       FROM books b 
@@ -165,6 +166,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['quick_stock_update'])
                                     <div class="fw-bold text-danger fs-7"><?= format_price($order['total_amount']) ?></div>
                                     <?php
                                     $st_badge = [
+                                        'Ödeme Bekliyor' => 'bg-info text-dark',
                                         'Hazırlanıyor' => 'bg-warning text-dark',
                                         'Kargolandı' => 'bg-dark text-white',
                                         'Tamamlandı' => 'bg-success text-white',

@@ -8,12 +8,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_settings'])) {
     $settings_keys = [
         'site_title', 'site_description', 'site_email', 'site_phone', 
         'site_whatsapp', 'site_address', 'shipping_free_limit', 
-        'flat_shipping_cost', 'payment_merchant_id', 'payment_api_key'
+        'flat_shipping_cost', 'bank_name', 'bank_account_name', 'bank_iban'
     ];
 
     foreach ($settings_keys as $key) {
         if (isset($_POST[$key])) {
             $val = sanitize($_POST[$key]);
+            if (in_array($key, ['shipping_free_limit', 'flat_shipping_cost'], true)) {
+                $val = number_format(max(0, (float)str_replace(',', '.', $val)), 2, '.', '');
+            }
             $exists = db_fetch("SELECT id FROM settings WHERE setting_key = ?", [$key]);
             if ($exists) {
                 db_query("UPDATE settings SET setting_value = ? WHERE setting_key = ?", [$val, $key]);
@@ -40,8 +43,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_password'])) {
         set_flash('danger', 'Mevcut şifreniz hatalı!');
     } elseif ($new_pass !== $confirm_pass) {
         set_flash('danger', 'Yeni şifreler eşleşmiyor!');
-    } elseif (strlen($new_pass) < 6) {
-        set_flash('danger', 'Yeni şifre en az 6 karakter olmalıdır!');
+    } elseif (strlen($new_pass) < 10) {
+        set_flash('danger', 'Yeni şifre en az 10 karakter olmalıdır!');
     } else {
         $new_hash = password_hash($new_pass, PASSWORD_DEFAULT);
         db_query("UPDATE users SET password_hash = ? WHERE id = ?", [$new_hash, $admin_id]);
@@ -116,14 +119,24 @@ foreach ($setting_rows as $row) {
                             <input type="number" step="0.01" name="flat_shipping_cost" class="form-control" value="<?= e($s['flat_shipping_cost'] ?? '29.90') ?>">
                         </div>
 
-                        <div class="col-md-6">
-                            <label class="form-label fw-semibold fs-7">Sanal POS Merchant ID</label>
-                            <input type="text" name="payment_merchant_id" class="form-control" value="<?= e($s['payment_merchant_id'] ?? '') ?>">
+                        <div class="col-md-12 pt-2">
+                            <h6 class="fw-bold text-dark mb-0"><i class="bi bi-bank text-danger me-1"></i> Havale / EFT Bilgileri</h6>
+                            <small class="text-muted">Sipariş veren müşteriye bu bilgiler gösterilir.</small>
                         </div>
 
                         <div class="col-md-6">
-                            <label class="form-label fw-semibold fs-7">Sanal POS API Key</label>
-                            <input type="password" name="payment_api_key" class="form-control" value="<?= e($s['payment_api_key'] ?? '') ?>">
+                            <label class="form-label fw-semibold fs-7">Banka Adı</label>
+                            <input type="text" name="bank_name" class="form-control" value="<?= e($s['bank_name'] ?? '') ?>" placeholder="Örn: Ziraat Bankası">
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold fs-7">Hesap Sahibi (Alıcı Adı)</label>
+                            <input type="text" name="bank_account_name" class="form-control" value="<?= e($s['bank_account_name'] ?? '') ?>">
+                        </div>
+
+                        <div class="col-md-12">
+                            <label class="form-label fw-semibold fs-7">IBAN</label>
+                            <input type="text" name="bank_iban" class="form-control font-monospace" value="<?= e($s['bank_iban'] ?? '') ?>" placeholder="TR00 0000 0000 0000 0000 0000 00">
                         </div>
                     </div>
 
@@ -153,12 +166,12 @@ foreach ($setting_rows as $row) {
 
                     <div class="mb-3">
                         <label class="form-label fw-semibold fs-7">Yeni Şifre</label>
-                        <input type="password" name="new_password" class="form-control" required minlength="6">
+                        <input type="password" name="new_password" class="form-control" required minlength="10">
                     </div>
 
                     <div class="mb-3">
                         <label class="form-label fw-semibold fs-7">Yeni Şifre (Tekrar)</label>
-                        <input type="password" name="confirm_password" class="form-control" required minlength="6">
+                        <input type="password" name="confirm_password" class="form-control" required minlength="10">
                     </div>
 
                     <button type="submit" class="btn btn-dark w-100 font-semibold py-2">

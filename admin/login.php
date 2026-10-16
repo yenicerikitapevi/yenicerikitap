@@ -15,6 +15,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $user = db_fetch("SELECT * FROM users WHERE email = ? AND role = 'admin' AND status = 'active'", [$email]);
         
         if ($user && password_verify($password, $user['password_hash'])) {
+            session_regenerate_id(true); // oturum sabitleme (session fixation) saldırısına karşı
             $_SESSION['admin_user'] = [
                 'id' => $user['id'],
                 'name' => $user['name'],
@@ -25,6 +26,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             log_action('Admin Girişi', 'Auth', $user['id'], 'Başarılı yönetim paneli oturumu açıldı.');
             redirect(SITE_URL . '/admin/index.php?p=FrontPage');
         } else {
+            sleep(1); // parola deneme saldırılarını yavaşlatır
             $error = 'Geçersiz e-posta veya parola!';
         }
     } else {

@@ -18,7 +18,35 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function getCart() {
-    return JSON.parse(localStorage.getItem('yeniceri_cart') || '[]');
+    try {
+        const cart = JSON.parse(localStorage.getItem('yeniceri_cart') || '[]');
+        return Array.isArray(cart) ? cart : [];
+    } catch (e) {
+        return [];
+    }
+}
+
+function escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, ch => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    })[ch]);
+}
+
+// Sepeti sunucudaki güncel fiyat/stok bilgisiyle eşitler
+function syncCartWithCatalog(catalog) {
+    const cart = [];
+    getCart().forEach(item => {
+        const book = catalog[item.id];
+        if (!book || book.stock <= 0) return;
+        cart.push({
+            ...item,
+            title: book.title,
+            price: parseFloat(book.price),
+            qty: Math.min(Math.max(1, parseInt(item.qty, 10) || 1), book.stock)
+        });
+    });
+    saveCart(cart);
+    return cart;
 }
 
 function saveCart(cart) {
@@ -93,18 +121,18 @@ function renderCartModal() {
         html += `
             <div class="d-flex align-items-center mb-3 pb-3 border-bottom">
                 <div class="bg-light p-2 rounded me-3" style="width: 50px; height: 65px;">
-                    <img src="${item.image ? item.image : 'assets/images/book_placeholder.svg'}" class="w-100 h-100 object-fit-cover rounded" alt="${item.title}">
+                    <img src="${escapeHtml(item.image ? item.image : 'assets/images/book_placeholder.svg')}" class="w-100 h-100 object-fit-cover rounded" alt="${escapeHtml(item.title)}" onerror="this.src='assets/images/book_placeholder.svg'">
                 </div>
                 <div class="flex-grow-1 me-2">
-                    <h6 class="mb-1 text-truncate" style="max-width: 160px;">${item.title}</h6>
-                    <span class="text-danger fw-bold fs-7">₺${item.price.toFixed(2)}</span>
+                    <h6 class="mb-1 text-truncate" style="max-width: 160px;">${escapeHtml(item.title)}</h6>
+                    <span class="text-danger fw-bold fs-7">₺${Number(item.price).toFixed(2)}</span>
                 </div>
                 <div class="d-flex align-items-center border rounded me-2">
-                    <button class="btn btn-sm btn-light px-2" onclick="updateQuantity('${item.id}', -1)">-</button>
-                    <span class="px-2 fw-semibold fs-7">${item.qty}</span>
-                    <button class="btn btn-sm btn-light px-2" onclick="updateQuantity('${item.id}', 1)">+</button>
+                    <button class="btn btn-sm btn-light px-2" onclick="updateQuantity(${parseInt(item.id, 10)}, -1)">-</button>
+                    <span class="px-2 fw-semibold fs-7">${parseInt(item.qty, 10)}</span>
+                    <button class="btn btn-sm btn-light px-2" onclick="updateQuantity(${parseInt(item.id, 10)}, 1)">+</button>
                 </div>
-                <button class="btn btn-sm text-danger" onclick="removeFromCart('${item.id}')">
+                <button class="btn btn-sm text-danger" onclick="removeFromCart(${parseInt(item.id, 10)})">
                     <i class="bi bi-trash"></i>
                 </button>
             </div>`;
@@ -117,6 +145,7 @@ function renderCartModal() {
 }
 
 function showToast(message, type = 'info') {
+    if (typeof bootstrap === 'undefined') return; // Bootstrap CDN yüklenemezse sepet yine de çalışsın
     let container = document.getElementById('toastContainer');
     if (!container) {
         container = document.createElement('div');
@@ -132,7 +161,7 @@ function showToast(message, type = 'info') {
             <div class="d-flex">
                 <div class="toast-body d-flex align-items-center gap-2">
                     <i class="bi bi-check-circle-fill text-danger fs-5"></i>
-                    <span>${message}</span>
+                    <span>${escapeHtml(message)}</span>
                 </div>
                 <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
             </div>

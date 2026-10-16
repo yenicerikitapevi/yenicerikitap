@@ -4,8 +4,8 @@
  */
 if (!defined('SITE_URL')) exit;
 
-if (isset($_GET['toggle_status']) && isset($_GET['id'])) {
-    $user_id = (int)$_GET['id'];
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['toggle_status'], $_POST['id'])) {
+    $user_id = (int)$_POST['id'];
     $u = db_fetch("SELECT name, status FROM users WHERE id = ? AND role = 'customer'", [$user_id]);
     if ($u) {
         $new_status = ($u['status'] === 'active') ? 'inactive' : 'active';
@@ -27,7 +27,7 @@ if (!empty($search)) {
     $params[] = "%$search%";
 }
 
-$customers = db_fetch_all("SELECT u.*, (SELECT COUNT(*) FROM orders o WHERE o.user_id = u.id) as order_count, (SELECT SUM(total_amount) FROM orders o WHERE o.user_id = u.id AND o.status != 'İptal') as total_spent FROM users u WHERE {$where} ORDER BY u.id DESC", $params);
+$customers = db_fetch_all("SELECT u.*, (SELECT COUNT(*) FROM orders o WHERE o.user_id = u.id) as order_count, (SELECT SUM(total_amount) FROM orders o WHERE o.user_id = u.id AND o.status NOT IN ('İptal', 'Ödeme Bekliyor')) as total_spent FROM users u WHERE {$where} ORDER BY u.id DESC", $params);
 ?>
 
 <div class="d-flex align-items-center justify-content-between mb-4">
@@ -105,9 +105,13 @@ $customers = db_fetch_all("SELECT u.*, (SELECT COUNT(*) FROM orders o WHERE o.us
                                     <?php endif; ?>
                                 </td>
                                 <td class="text-end pe-4">
-                                    <a href="index.php?p=Members&toggle_status=1&id=<?= $c['id'] ?>" class="btn btn-sm <?= $c['status'] === 'active' ? 'btn-outline-warning' : 'btn-outline-success' ?>" onclick="return confirm('Müşteri durumunu değiştirmek istediğinize emin misiniz?');">
-                                        <?= $c['status'] === 'active' ? '<i class="bi bi-slash-circle me-1"></i> Pasif Yap' : '<i class="bi bi-check-circle me-1"></i> Aktif Yap' ?>
-                                    </a>
+                                    <form method="POST" action="index.php?p=Members" class="d-inline" onsubmit="return confirm('Müşteri durumunu değiştirmek istediğinize emin misiniz?');">
+                                        <input type="hidden" name="toggle_status" value="1">
+                                        <input type="hidden" name="id" value="<?= $c['id'] ?>">
+                                        <button type="submit" class="btn btn-sm <?= $c['status'] === 'active' ? 'btn-outline-warning' : 'btn-outline-success' ?>">
+                                            <?= $c['status'] === 'active' ? '<i class="bi bi-slash-circle me-1"></i> Pasif Yap' : '<i class="bi bi-check-circle me-1"></i> Aktif Yap' ?>
+                                        </button>
+                                    </form>
                                 </td>
                             </tr>
                         <?php endforeach; ?>

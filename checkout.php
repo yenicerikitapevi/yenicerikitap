@@ -6,60 +6,122 @@ require_once __DIR__ . '/config.php';
 
 $order_created = false;
 $new_order_number = '';
+$order_total = 0;
+$errors = [];
+$form = ['name' => '', 'email' => '', 'phone' => '', 'address' => ''];
+
+// Sanal POS entegrasyonu olmadığı için şimdilik yalnızca Havale/EFT kabul edilir
+$payment_method = 'EFT / Havale';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['complete_checkout'])) {
-    $name    = sanitize($_POST['name']);
-    $email   = sanitize($_POST['email']);
-    $phone   = sanitize($_POST['phone']);
-    $address = sanitize($_POST['address']);
-    $payment_method = sanitize($_POST['payment_method']);
-    
-    $cart_json = $_POST['cart_data'] ?? '[]';
-    $cart_items = json_decode($cart_json, true) ?? [];
+    foreach ($form as $key => $_) {
+        $form[$key] = sanitize($_POST[$key] ?? '');
+    }
 
-    if (!empty($cart_items)) {
-        $user = db_fetch("SELECT id FROM users WHERE email = ?", [$email]);
-        if (!$user) {
-            $pass_hash = password_hash('123456', PASSWORD_DEFAULT);
-            db_query("INSERT INTO users (name, email, password_hash, role, status, phone, address) VALUES (?, ?, ?, 'customer', 'active', ?, ?)", [$name, $email, $pass_hash, $phone, $address]);
-            $user_id = db_last_id();
-        } else {
-            $user_id = $user['id'];
-        }
+    if ($form['name'] === '' || $form['phone'] === '' || $form['address'] === '') {
+        $errors[] = 'Lütfen ad soyad, telefon ve teslimat adresi alanlarını doldurun.';
+    }
+    if (!filter_var($form['email'], FILTER_VALIDATE_EMAIL)) {
+        $errors[] = 'Lütfen geçerli bir e-posta adresi girin.';
+    }
 
-        $subtotal = 0;
+    // Sepetteki fiyatlara güvenilmez: yalnızca kitap ID ve adet alınır, fiyat ve stok veritabanından okunur
+    $requested = [];
+    $cart_items = json_decode($_POST['cart_data'] ?? '[]', true);
+    if (is_array($cart_items)) {
         foreach ($cart_items as $item) {
-            $subtotal += ($item['price'] * $item['qty']);
+            $b_id = (int)($item['id'] ?? 0);
+            $qty  = (int)($item['qty'] ?? 0);
+            if ($b_id > 0 && $qty > 0) {
+                $requested[$b_id] = ($requested[$b_id] ?? 0) + $qty;
+            }
         }
-        $shipping = ($subtotal >= 350) ? 0 : 29.90;
-        $total_amount = $subtotal + $shipping;
+    }
+    if (empty($requested)) {
+        $errors[] = 'Sepetiniz boş.';
+    }
 
-        $new_order_number = 'YNC-' . date('Ymd') . '-' . rand(100, 999);
+    if (empty($errors)) {
+        global $pdo;
+        try {
+            $pdo->beginTransaction();
 
-        db_query("INSERT INTO orders (order_number, user_id, total_amount, shipping_amount, status, payment_method, shipping_address) VALUES (?, ?, ?, ?, 'Hazırlanıyor', ?, ?)", 
-            [$new_order_number, $user_id, $total_amount, $shipping, $payment_method, $address]);
-        $order_id = db_last_id();
+            $lines = [];
+            $subtotal = 0;
+            foreach ($requested as $b_id => $qty) {
+                $book = db_fetch("SELECT id, title, price, stock FROM books WHERE id = ? AND is_active = 1", [$b_id]);
+                if (!$book) {
+                    $errors[] = 'Sepetinizdeki bir kitap artık satışta değil. Lütfen sepetinizi güncelleyin.';
+                    continue;
+                }
+                if ($qty > (int)$book['stock']) {
+                    $errors[] = '"' . $book['title'] . '" için stokta yalnızca ' . max(0, (int)$book['stock']) . ' adet var.';
+                    continue;
+                }
+                $price = (float)$book['price'];
+                $lines[] = ['id' => $b_id, 'qty' => $qty, 'price' => $price, 'total' => $price * $qty];
+                $subtotal += $price * $qty;
+            }
 
-        foreach ($cart_items as $item) {
-            $b_id = (int)$item['id'];
-            $qty = (int)$item['qty'];
-            $price = (float)$item['price'];
-            $item_total = $price * $qty;
+            $user = db_fetch("SELECT id, status FROM users WHERE email = ?", [$form['email']]);
+            if ($user && $user['status'] !== 'active') {
+                $errors[] = 'Bu e-posta adresiyle şu an sipariş verilemiyor. Lütfen bizimle iletişime geçin.';
+            }
 
-            db_query("INSERT INTO order_items (order_id, book_id, quantity, price, total) VALUES (?, ?, ?, ?, ?)",
-                [$order_id, $b_id, $qty, $price, $item_total]);
+            if (!empty($errors)) {
+                $pdo->rollBack();
+            } else {
+                if (!$user) {
+                    // Müşteri hesabıyla giriş özelliği yok; tahmin edilemeyen rastgele bir parola atanır
+                    $pass_hash = password_hash(bin2hex(random_bytes(16)), PASSWORD_DEFAULT);
+                    db_query("INSERT INTO users (name, email, password_hash, role, status, phone, address) VALUES (?, ?, ?, 'customer', 'active', ?, ?)",
+                        [$form['name'], $form['email'], $pass_hash, $form['phone'], $form['address']]);
+                    $user_id = db_last_id();
+                } else {
+                    $user_id = $user['id'];
+                }
 
-            db_query("UPDATE books SET stock = stock - ? WHERE id = ?", [$qty, $b_id]);
+                $shipping = shipping_cost($subtotal);
+                $order_total = $subtotal + $shipping;
+
+                // Benzersiz sipariş numarası (çakışma ihtimaline karşı kontrol edilir)
+                do {
+                    $new_order_number = 'YNC-' . date('Ymd') . '-' . strtoupper(bin2hex(random_bytes(3)));
+                } while (db_fetch("SELECT id FROM orders WHERE order_number = ?", [$new_order_number]));
+
+                db_query("INSERT INTO orders (order_number, user_id, total_amount, shipping_amount, status, payment_method, shipping_address) VALUES (?, ?, ?, ?, 'Ödeme Bekliyor', ?, ?)",
+                    [$new_order_number, $user_id, $order_total, $shipping, $payment_method, $form['address']]);
+                $order_id = db_last_id();
+
+                foreach ($lines as $line) {
+                    db_query("INSERT INTO order_items (order_id, book_id, quantity, price, total) VALUES (?, ?, ?, ?, ?)",
+                        [$order_id, $line['id'], $line['qty'], $line['price'], $line['total']]);
+                    // Aynı anda gelen siparişlerde stok eksiye düşmesin
+                    $updated = db_query("UPDATE books SET stock = stock - ? WHERE id = ? AND stock >= ?", [$line['qty'], $line['id'], $line['qty']]);
+                    if ($updated->rowCount() !== 1) {
+                        throw new RuntimeException('Stok yetersiz: kitap #' . $line['id']);
+                    }
+                }
+
+                db_query("INSERT INTO transactions (order_id, transaction_type, amount, status, gateway_response) VALUES (?, ?, ?, 'Bekliyor', ?)",
+                    [$order_id, $payment_method, $order_total, 'Havale/EFT bekleniyor']);
+
+                $pdo->commit();
+                $order_created = true;
+            }
+        } catch (Throwable $ex) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            error_log('[Yeniceri] Siparis olusturulamadi: ' . $ex->getMessage());
+            $errors[] = 'Siparişiniz şu an oluşturulamadı. Lütfen birkaç dakika sonra tekrar deneyin.';
         }
-
-        $tx_status = ($payment_method === 'Kredi Kartı') ? 'Onaylandı' : 'Bekliyor';
-        $gateway_msg = ($payment_method === 'Kredi Kartı') ? 'POS Onayı Alındı - REF: ' . rand(100000, 999999) : 'Ziraat Bankası Havale Bekleniyor';
-        db_query("INSERT INTO transactions (order_id, transaction_type, amount, status, gateway_response) VALUES (?, ?, ?, ?, ?)",
-            [$order_id, $payment_method, $total_amount, $tx_status, $gateway_msg]);
-
-        $order_created = true;
     }
 }
+
+$bank_name    = setting('bank_name');
+$bank_holder  = setting('bank_account_name');
+$bank_iban    = setting('bank_iban');
 ?>
 <!DOCTYPE html>
 <html lang="tr">
@@ -87,15 +149,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['complete_checkout']))
                 <div class="d-inline-flex align-items-center justify-content-center bg-danger text-white rounded-circle mb-3" style="width: 70px; height: 70px;">
                     <i class="bi bi-check-lg display-4"></i>
                 </div>
-                <h2 class="fw-extrabold text-dark mb-2">Siparişiniz Başarıyla Alındı!</h2>
+                <h2 class="fw-extrabold text-dark mb-2">Siparişiniz Alındı!</h2>
                 <p class="text-muted">Sipariş Numaranız: <strong class="text-danger"><?= e($new_order_number) ?></strong></p>
-                <p class="fs-7 text-secondary mb-4">Sipariş detaylarınız kayıtlı e-posta adresinize gönderilmiştir. Ankara / Etimesgut depomuzdan kargonuz hazırlanmaktadır.</p>
-                
+
+                <div class="text-start bg-light border rounded-3 p-4 my-4">
+                    <h6 class="fw-bold text-dark mb-3"><i class="bi bi-bank me-1 text-danger"></i> Havale / EFT Bilgileri</h6>
+                    <p class="fs-7 mb-2">Ödenecek Tutar: <strong class="text-danger"><?= format_price($order_total) ?></strong></p>
+                    <?php if ($bank_iban !== ''): ?>
+                        <?php if ($bank_name !== ''): ?><p class="fs-7 mb-1">Banka: <strong><?= e($bank_name) ?></strong></p><?php endif; ?>
+                        <?php if ($bank_holder !== ''): ?><p class="fs-7 mb-1">Alıcı: <strong><?= e($bank_holder) ?></strong></p><?php endif; ?>
+                        <p class="fs-7 mb-3">IBAN: <strong class="font-monospace"><?= e($bank_iban) ?></strong></p>
+                    <?php else: ?>
+                        <p class="fs-7 mb-3">IBAN bilgisi için lütfen bizimle iletişime geçin: <strong><?= e(setting('site_phone', '0312 245 00 00')) ?></strong></p>
+                    <?php endif; ?>
+                    <p class="fs-8 text-secondary mb-0">Lütfen açıklama kısmına sipariş numaranızı (<strong><?= e($new_order_number) ?></strong>) yazın. Ödemeniz onaylandıktan sonra siparişiniz kargoya hazırlanacaktır.</p>
+                </div>
+
                 <a href="index.php" class="btn btn-danger font-bold px-4 py-2 rounded-pill">Alışverişe Devam Et</a>
                 <script>localStorage.removeItem('yeniceri_cart');</script>
             </div>
         <?php else: ?>
             <h3 class="fw-extrabold text-dark mb-4"><i class="bi bi-bag-check-fill text-danger me-2"></i> Siparişi Tamamla</h3>
+
+            <?php if (!empty($errors)): ?>
+                <div class="alert alert-danger">
+                    <?php foreach ($errors as $err): ?>
+                        <div><?= e($err) ?></div>
+                    <?php endforeach; ?>
+                </div>
+            <?php endif; ?>
 
             <div class="row g-4">
                 <div class="col-lg-7">
@@ -109,39 +191,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['complete_checkout']))
                             <div class="row g-3">
                                 <div class="col-md-6">
                                     <label class="form-label fw-semibold fs-7">Adınız Soyadınız *</label>
-                                    <input type="text" name="name" class="form-control" placeholder="Ahmet Yılmaz" required>
+                                    <input type="text" name="name" class="form-control" placeholder="Ad Soyad" value="<?= e($form['name']) ?>" required>
                                 </div>
 
                                 <div class="col-md-6">
                                     <label class="form-label fw-semibold fs-7">E-Posta Adresi *</label>
-                                    <input type="email" name="email" class="form-control" placeholder="ahmet@example.com" required>
+                                    <input type="email" name="email" class="form-control" placeholder="ornek@eposta.com" value="<?= e($form['email']) ?>" required>
                                 </div>
 
                                 <div class="col-md-6">
                                     <label class="form-label fw-semibold fs-7">Telefon Numarası *</label>
-                                    <input type="text" name="phone" class="form-control" placeholder="0555 111 22 33" required>
+                                    <input type="tel" name="phone" class="form-control" placeholder="05xx xxx xx xx" value="<?= e($form['phone']) ?>" required>
                                 </div>
 
                                 <div class="col-md-12">
                                     <label class="form-label fw-semibold fs-7">Teslimat Adresi *</label>
-                                    <textarea name="address" class="form-control" rows="3" required>İstasyon Mah. Akasya Cad. No:12 Etimesgut / Ankara</textarea>
+                                    <textarea name="address" class="form-control" rows="3" placeholder="Mahalle, cadde/sokak, bina no, daire, ilçe / il" required><?= e($form['address']) ?></textarea>
                                 </div>
                             </div>
 
-                            <h5 class="fw-bold text-dark mt-4 mb-3"><i class="bi bi-credit-card-2-front text-danger me-2"></i> Ödeme Yöntemi</h5>
-                            
-                            <div class="form-check mb-2">
-                                <input class="form-check-input" type="radio" name="payment_method" id="pm_cc" value="Kredi Kartı" checked>
-                                <label class="form-check-label fw-semibold" for="pm_cc">Kredi / Banka Kartı ile Ödeme (Anında Onay)</label>
-                            </div>
+                            <h5 class="fw-bold text-dark mt-4 mb-3"><i class="bi bi-bank text-danger me-2"></i> Ödeme Yöntemi</h5>
 
-                            <div class="form-check mb-4">
-                                <input class="form-check-input" type="radio" name="payment_method" id="pm_eft" value="EFT / Havale">
-                                <label class="form-check-label fw-semibold" for="pm_eft">Banka Havalesi / EFT (Ziraat Bankası)</label>
+                            <div class="border rounded-3 p-3 mb-4 bg-light">
+                                <div class="fw-semibold"><i class="bi bi-check-circle-fill text-success me-1"></i> Banka Havalesi / EFT</div>
+                                <div class="fs-7 text-secondary mt-1">Siparişi onayladıktan sonra IBAN bilgilerimiz gösterilir. Ödemeniz ulaştığında siparişiniz kargoya hazırlanır.</div>
                             </div>
 
                             <button type="submit" class="btn btn-danger btn-lg w-100 fw-bold py-3 rounded-3 shadow" id="btnSubmitOrder">
-                                <i class="bi bi-lock-fill me-1"></i> Siparişi Onayla ve Öde
+                                <i class="bi bi-lock-fill me-1"></i> Siparişi Onayla
                             </button>
                         </form>
                     </div>
@@ -159,10 +236,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['complete_checkout']))
 
     <script src="assets/js/app.js"></script>
     <script>
+        const SHIPPING_FREE_LIMIT = <?= json_encode((float)setting('shipping_free_limit', '350')) ?>;
+        const FLAT_SHIPPING_COST = <?= json_encode((float)setting('flat_shipping_cost', '29.90')) ?>;
+
+        // Güncel fiyat ve stoklar: sepette eski fiyat kalmışsa düzeltilir, satıştan kalkan kitaplar çıkarılır
+        const CATALOG = <?= json_encode(array_column(db_fetch_all("SELECT id, title, price, stock FROM books WHERE is_active = 1"), null, 'id'), JSON_HEX_TAG | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE) ?>;
+
         document.addEventListener('DOMContentLoaded', () => {
-            const cart = getCart();
-            document.getElementById('cartDataInput').value = JSON.stringify(cart);
-            
+            const cart = syncCartWithCatalog(CATALOG);
+            const cartInput = document.getElementById('cartDataInput');
+            if (cartInput) cartInput.value = JSON.stringify(cart);
+
+            const form = document.getElementById('checkoutForm');
+            if (form) {
+                // Çift tıklamada iki sipariş oluşmasın
+                form.addEventListener('submit', () => {
+                    document.getElementById('btnSubmitOrder').disabled = true;
+                });
+            }
+
             const container = document.getElementById('checkoutSummaryList');
             if (container) {
                 if (cart.length === 0) {
@@ -175,11 +267,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['complete_checkout']))
                 cart.forEach(item => {
                     total += (item.price * item.qty);
                     html += `<div class="d-flex justify-content-between fs-7 mb-2">
-                                <span>${item.title} (x${item.qty})</span>
+                                <span>${escapeHtml(item.title)} (x${item.qty})</span>
                                 <span class="fw-bold">₺${(item.price * item.qty).toFixed(2)}</span>
                             </div>`;
                 });
-                const shipping = total >= 350 ? 0 : 29.90;
+                const shipping = total >= SHIPPING_FREE_LIMIT ? 0 : FLAT_SHIPPING_COST;
                 html += `<hr><div class="d-flex justify-content-between fs-7 mb-1"><span>Kargo Ücreti:</span><span>₺${shipping.toFixed(2)}</span></div>`;
                 html += `<div class="d-flex justify-content-between fs-5 fw-bold text-danger mt-2"><span>Toplam:</span><span>₺${(total + shipping).toFixed(2)}</span></div>`;
                 container.innerHTML = html;

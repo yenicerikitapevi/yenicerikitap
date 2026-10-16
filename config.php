@@ -4,7 +4,15 @@
  * Platform: Native PHP (OOP / Modular PDO Connection)
  */
 
+$is_https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') || (!empty($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https');
+
 if (session_status() === PHP_SESSION_NONE) {
+    // Oturum çerezi JavaScript'ten okunamaz ve başka sitelerden gelen POST isteklerinde gönderilmez (CSRF koruması)
+    session_set_cookie_params([
+        'httponly' => true,
+        'secure'   => $is_https,
+        'samesite' => 'Lax',
+    ]);
     session_start();
 }
 
@@ -19,7 +27,7 @@ define('DB_PASS', getenv('DB_PASS') ?: '');
 define('SQLITE_PATH', getenv('SQLITE_PATH') ?: __DIR__ . '/yeniceri.db'); // Render'da kalıcı disk: /var/data/yeniceri.db
 
 // Site Temel Sabitleri - Dinamik Domain Tespiti (Render, Vercel ve Localhost Uyumlu)
-$protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') || (!empty($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https') ? 'https://' : 'http://';
+$protocol = $is_https ? 'https://' : 'http://';
 $host = $_SERVER['HTTP_HOST'] ?? 'localhost:8000';
 define('SITE_URL', $protocol . $host);
 define('APP_NAME', 'Yeniçeri Kitabevi');
@@ -64,6 +72,54 @@ if (DB_DRIVER === 'sqlite') {
     }
 }
 
+// Mevcut veritabanlarına sonradan eklenen tablolar (ilk kurulumdan sonra eklenen özellikler için)
+if ($pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite') {
+    $pdo->exec("CREATE TABLE IF NOT EXISTS contact_messages (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, email TEXT, subject TEXT, message TEXT, is_read INTEGER DEFAULT 0, ip_address TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP);");
+} else {
+    $pdo->exec("CREATE TABLE IF NOT EXISTS contact_messages (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(255), email VARCHAR(255), subject VARCHAR(255), message TEXT, is_read TINYINT DEFAULT 0, ip_address VARCHAR(64), created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;");
+}
+
+/**
+ * Site ayarlarını (settings tablosu) bir kez okuyup döndürür
+ */
+function get_settings() {
+    static $settings = null;
+    if ($settings === null) {
+        $settings = [];
+        foreach (db_fetch_all("SELECT setting_key, setting_value FROM settings") as $row) {
+            $settings[$row['setting_key']] = $row['setting_value'];
+        }
+    }
+    return $settings;
+}
+
+function setting($key, $default = '') {
+    $s = get_settings();
+    return (isset($s[$key]) && $s[$key] !== '') ? $s[$key] : $default;
+}
+
+/**
+ * WhatsApp bağlantısı: "0555 000 00 00" gibi numaraları wa.me'nin istediği 905550000000 biçimine çevirir
+ */
+function whatsapp_link($phone) {
+    $digits = preg_replace('/[^0-9]/', '', (string)$phone);
+    if (strpos($digits, '0') === 0) {
+        $digits = '9' . $digits;
+    } elseif (strlen($digits) === 10) {
+        $digits = '90' . $digits;
+    }
+    return 'https://wa.me/' . $digits;
+}
+
+/**
+ * Kargo ücreti: ara toplam ücretsiz kargo limitinin altındaysa sabit ücret uygulanır
+ */
+function shipping_cost($subtotal) {
+    $free_limit = (float)setting('shipping_free_limit', '350');
+    $flat_cost  = (float)setting('flat_shipping_cost', '29.90');
+    return ($subtotal >= $free_limit) ? 0.0 : $flat_cost;
+}
+
 /**
  * SQLite Otomatik Geçiş ve Başlatma Fonksiyonu
  */
@@ -80,7 +136,9 @@ function init_sqlite_fallback() {
             PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC
         ]);
-        
+        // Aynı anda gelen siparişlerde "database is locked" hatası yerine kısa süre bekle
+        $pdo->exec('PRAGMA busy_timeout = 5000');
+
         if ($is_new) {
             init_sqlite_db($pdo);
         }

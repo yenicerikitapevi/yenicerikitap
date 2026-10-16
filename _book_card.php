@@ -35,12 +35,16 @@ $img_src = !empty($b['cover_image']) ? 'assets/images/' . $b['cover_image'] : 'a
             <?php endif; ?>
         </div>
 
-        <button class="btn btn-add-cart mt-auto" 
-                data-id="<?= $b['id'] ?>" 
-                data-title="<?= e($b['title']) ?>" 
-                data-price="<?= $b['price'] ?>" 
-                data-image="<?= e($img_src) ?>">
-            <i class="bi bi-bag-plus-fill me-1"></i> Sepete Ekle
-        </button>
+        <?php if ((int)$b['stock'] > 0): ?>
+            <button class="btn btn-add-cart mt-auto"
+                    data-id="<?= $b['id'] ?>"
+                    data-title="<?= e($b['title']) ?>"
+                    data-price="<?= $b['price'] ?>"
+                    data-image="<?= e($img_src) ?>">
+                <i class="bi bi-bag-plus-fill me-1"></i> Sepete Ekle
+            </button>
+        <?php else: ?>
+            <button class="btn btn-secondary mt-auto" disabled>Tükendi</button>
+        <?php endif; ?>
     </div>
 </div>

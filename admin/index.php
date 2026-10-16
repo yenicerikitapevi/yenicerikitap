@@ -12,6 +12,7 @@ $allowed_pages = [
     'Members'      => 'members.php',
     'Orders'       => 'orders.php',
     'Transactions' => 'transactions.php',
+    'Messages'     => 'messages.php',
     'ActionLogs'   => 'actionlogs.php',
     'Settings'     => 'settings.php'
 ];
@@ -27,6 +28,7 @@ if (array_key_exists($requested_p, $allowed_pages)) {
 }
 
 $admin_name = $_SESSION['admin_user']['name'] ?? 'Yönetici';
+$unread_messages = db_fetch("SELECT COUNT(*) as cnt FROM contact_messages WHERE is_read = 0")['cnt'] ?? 0;
 ?>
 <!DOCTYPE html>
 <html lang="tr">
@@ -76,6 +78,11 @@ $admin_name = $_SESSION['admin_user']['name'] ?? 'Yönetici';
                     <i class="bi bi-credit-card-2-front"></i> Ödeme Kayıtları
                 </a>
 
+                <a href="index.php?p=Messages" class="nav-link <?= $current_p === 'Messages' ? 'active' : '' ?>">
+                    <i class="bi bi-envelope"></i> Mesajlar
+                    <?php if ($unread_messages > 0): ?><span class="badge bg-danger rounded-pill ms-1"><?= (int)$unread_messages ?></span><?php endif; ?>
+                </a>
+
                 <div class="px-3 mt-4 mb-2 text-uppercase text-secondary fs-8 fw-bold">Sistem & Denetim</div>
 
                 <a href="index.php?p=ActionLogs" class="nav-link <?= $current_p === 'ActionLogs' ? 'active' : '' ?>">
@@ -108,6 +115,7 @@ $admin_name = $_SESSION['admin_user']['name'] ?? 'Yönetici';
                             'Members' => 'Müşteri & Üye Yönetimi',
                             'Orders' => 'Sipariş Operasyonları',
                             'Transactions' => 'Ödeme & Finans Takibi',
+                            'Messages' => 'Gelen Mesajlar',
                             'ActionLogs' => 'Sistem ve Denetim Logları',
                             'Settings' => 'Genel Site Ayarları'
                         ];

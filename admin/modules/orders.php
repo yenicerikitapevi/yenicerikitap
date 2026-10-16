@@ -4,14 +4,39 @@
  */
 if (!defined('SITE_URL')) exit;
 
+$order_statuses = [
+    'Ödeme Bekliyor' => 'bg-info text-dark',
+    'Hazırlanıyor'   => 'bg-warning text-dark',
+    'Kargolandı'     => 'bg-dark text-white',
+    'Tamamlandı'     => 'bg-success text-white',
+    'İptal'          => 'bg-danger text-white',
+];
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_order_status'])) {
     $order_id = (int)$_POST['order_id'];
-    $new_status = sanitize($_POST['status']);
+    $new_status = sanitize($_POST['status'] ?? '');
     $tracking_number = sanitize($_POST['tracking_number'] ?? '');
 
-    $ord = db_fetch("SELECT order_number FROM orders WHERE id = ?", [$order_id]);
-    if ($ord) {
+    $ord = db_fetch("SELECT order_number, status FROM orders WHERE id = ?", [$order_id]);
+    if ($ord && isset($order_statuses[$new_status])) {
+        $old_status = $ord['status'];
+        global $pdo;
+        $pdo->beginTransaction();
+
+        // İptal edilen siparişin kitapları stoğa geri döner; iptalden geri alınırsa tekrar düşülür
+        if ($new_status === 'İptal' && $old_status !== 'İptal') {
+            db_query("UPDATE books SET stock = stock + (SELECT COALESCE(SUM(quantity), 0) FROM order_items WHERE order_id = ? AND book_id = books.id) WHERE id IN (SELECT book_id FROM order_items WHERE order_id = ?)", [$order_id, $order_id]);
+            db_query("UPDATE transactions SET status = 'İptal' WHERE order_id = ?", [$order_id]);
+        } elseif ($old_status === 'İptal' && $new_status !== 'İptal') {
+            db_query("UPDATE books SET stock = stock - (SELECT COALESCE(SUM(quantity), 0) FROM order_items WHERE order_id = ? AND book_id = books.id) WHERE id IN (SELECT book_id FROM order_items WHERE order_id = ?)", [$order_id, $order_id]);
+            db_query("UPDATE transactions SET status = ? WHERE order_id = ?", [$new_status === 'Ödeme Bekliyor' ? 'Bekliyor' : 'Onaylandı', $order_id]);
+        } elseif ($old_status === 'Ödeme Bekliyor' && $new_status !== 'Ödeme Bekliyor') {
+            // Ödeme beklenen sipariş ilerletildiyse havale alınmış demektir
+            db_query("UPDATE transactions SET status = 'Onaylandı', gateway_response = 'Havale/EFT ödemesi yönetici tarafından onaylandı' WHERE order_id = ?", [$order_id]);
+        }
+
         db_query("UPDATE orders SET status = ?, tracking_number = ? WHERE id = ?", [$new_status, $tracking_number, $order_id]);
+        $pdo->commit();
         log_action('Sipariş Durumu Güncellendi', 'Orders', $order_id, "Sipariş {$ord['order_number']} durumu '{$new_status}' olarak değiştirildi. Kargo Takip: {$tracking_number}");
         set_flash('success', "Sipariş #{$ord['order_number']} durumu güncellendi.");
     }
@@ -45,18 +70,11 @@ $orders = db_fetch_all("SELECT o.*, u.name as customer_name, u.email as customer
     <li class="nav-item">
         <a class="nav-link <?= empty($status_filter) ? 'active bg-danger text-white' : 'text-secondary' ?> fw-semibold" href="index.php?p=Orders">Tüm Siparişler</a>
     </li>
-    <li class="nav-item">
-        <a class="nav-link <?= $status_filter === 'Hazırlanıyor' ? 'active bg-warning text-dark' : 'text-secondary' ?> fw-semibold" href="index.php?p=Orders&status=Hazırlanıyor">Hazırlanıyor</a>
-    </li>
-    <li class="nav-item">
-        <a class="nav-link <?= $status_filter === 'Kargolandı' ? 'active bg-dark text-white' : 'text-secondary' ?> fw-semibold" href="index.php?p=Orders&status=Kargolandı">Kargolandı</a>
-    </li>
-    <li class="nav-item">
-        <a class="nav-link <?= $status_filter === 'Tamamlandı' ? 'active bg-success text-white' : 'text-secondary' ?> fw-semibold" href="index.php?p=Orders&status=Tamamlandı">Tamamlandı</a>
-    </li>
-    <li class="nav-item">
-        <a class="nav-link <?= $status_filter === 'İptal' ? 'active bg-danger text-white' : 'text-secondary' ?> fw-semibold" href="index.php?p=Orders&status=İptal">İptal Edilenler</a>
-    </li>
+    <?php foreach ($order_statuses as $st => $st_class): ?>
+        <li class="nav-item">
+            <a class="nav-link <?= $status_filter === $st ? 'active ' . $st_class : 'text-secondary' ?> fw-semibold" href="index.php?p=Orders&status=<?= urlencode($st) ?>"><?= e($st) ?></a>
+        </li>
+    <?php endforeach; ?>
 </ul>
 
 <div class="card border-0 shadow-sm rounded-4">
@@ -97,15 +115,7 @@ $orders = db_fetch_all("SELECT o.*, u.name as customer_name, u.email as customer
                                     <div class="fw-extrabold text-danger fs-7"><?= format_price($o['total_amount']) ?></div>
                                 </td>
                                 <td>
-                                    <?php
-                                    $st_badge = [
-                                        'Hazırlanıyor' => 'bg-warning text-dark',
-                                        'Kargolandı' => 'bg-dark text-white',
-                                        'Tamamlandı' => 'bg-success text-white',
-                                        'İptal' => 'bg-danger text-white'
-                                    ];
-                                    ?>
-                                    <span class="badge <?= $st_badge[$o['status']] ?? 'bg-secondary' ?> fs-8">
+                                    <span class="badge <?= $order_statuses[$o['status']] ?? 'bg-secondary' ?> fs-8">
                                         <?= e($o['status']) ?>
                                     </span>
                                 </td>
@@ -137,10 +147,9 @@ $orders = db_fetch_all("SELECT o.*, u.name as customer_name, u.email as customer
                                                 <div class="mb-3">
                                                     <label class="form-label fw-semibold fs-7">Sipariş Durumu</label>
                                                     <select name="status" class="form-select" required>
-                                                        <option value="Hazırlanıyor" <?= $o['status'] === 'Hazırlanıyor' ? 'selected' : '' ?>>Hazırlanıyor</option>
-                                                        <option value="Kargolandı" <?= $o['status'] === 'Kargolandı' ? 'selected' : '' ?>>Kargolandı</option>
-                                                        <option value="Tamamlandı" <?= $o['status'] === 'Tamamlandı' ? 'selected' : '' ?>>Tamamlandı</option>
-                                                        <option value="İptal" <?= $o['status'] === 'İptal' ? 'selected' : '' ?>>İptal</option>
+                                                        <?php foreach (array_keys($order_statuses) as $st): ?>
+                                                            <option value="<?= e($st) ?>" <?= $o['status'] === $st ? 'selected' : '' ?>><?= e($st) ?></option>
+                                                        <?php endforeach; ?>
                                                     </select>
                                                 </div>
 
@@ -148,6 +157,10 @@ $orders = db_fetch_all("SELECT o.*, u.name as customer_name, u.email as customer
                                                     <label class="form-label fw-semibold fs-7">Kargo Takip Numarası</label>
                                                     <input type="text" name="tracking_number" class="form-control" value="<?= e($o['tracking_number'] ?? '') ?>" placeholder="Örn: TR9988776655">
                                                 </div>
+
+                                                <?php if ($o['status'] === 'Ödeme Bekliyor'): ?>
+                                                    <div class="alert alert-info fs-8 py-2">Havale/EFT ödemesi hesabınıza geçtiyse durumu <strong>Hazırlanıyor</strong> yapın; ödeme onaylandı olarak kaydedilir.</div>
+                                                <?php endif; ?>
 
                                                 <div class="p-3 bg-light rounded-3">
                                                     <div class="fw-semibold text-dark fs-7 mb-1">Teslimat Adresi:</div>

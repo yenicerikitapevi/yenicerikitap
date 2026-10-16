@@ -13,12 +13,22 @@ $categories = db_fetch_all("SELECT * FROM categories ORDER BY name ASC");
 $showcases = db_fetch_all("SELECT * FROM showcases ORDER BY id ASC");
 $collections = db_fetch_all("SELECT * FROM collections ORDER BY id ASC");
 
-if ($action === 'delete' && $edit_id > 0) {
+if ($action === 'delete' && $edit_id > 0 && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $book = db_fetch("SELECT title FROM books WHERE id = ?", [$edit_id]);
     if ($book) {
-        db_query("DELETE FROM books WHERE id = ?", [$edit_id]);
-        log_action('Kitap Silindi', 'Products', $edit_id, "Kitap silindi: " . $book['title']);
-        set_flash('success', '"' . $book['title'] . '" kitabı silindi.');
+        $has_orders = db_fetch("SELECT COUNT(*) as cnt FROM order_items WHERE book_id = ?", [$edit_id])['cnt'] ?? 0;
+        if ($has_orders > 0) {
+            // Siparişlerde geçen kitap silinirse eski faturalarda kitap adı kaybolur; bunun yerine satıştan kaldır
+            db_query("UPDATE books SET is_active = 0 WHERE id = ?", [$edit_id]);
+            log_action('Kitap Pasife Alındı', 'Products', $edit_id, "Siparişlerde geçtiği için silinmedi, pasife alındı: " . $book['title']);
+            set_flash('warning', '"' . $book['title'] . '" geçmiş siparişlerde yer aldığı için silinmedi, satıştan kaldırıldı (Pasif).');
+        } else {
+            db_query("DELETE FROM book_showcase WHERE book_id = ?", [$edit_id]);
+            db_query("DELETE FROM book_collection WHERE book_id = ?", [$edit_id]);
+            db_query("DELETE FROM books WHERE id = ?", [$edit_id]);
+            log_action('Kitap Silindi', 'Products', $edit_id, "Kitap silindi: " . $book['title']);
+            set_flash('success', '"' . $book['title'] . '" kitabı silindi.');
+        }
     }
     redirect('index.php?p=Products');
 }
@@ -37,7 +47,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_book'])) {
     $year           = !empty($_POST['year']) ? (int)$_POST['year'] : null;
     $summary        = sanitize($_POST['summary'] ?? '');
     $is_active      = isset($_POST['is_active']) ? 1 : 0;
-    $cover_image    = sanitize($_POST['cover_image'] ?? 'book_placeholder.svg');
+    // Formda kapak alanı yok; düzenlemede mevcut kapak korunur
+    $existing_cover = $edit_id > 0 ? (db_fetch("SELECT cover_image FROM books WHERE id = ?", [$edit_id])['cover_image'] ?? null) : null;
+    $cover_image    = sanitize($_POST['cover_image'] ?? ($existing_cover ?: 'book_placeholder.svg'));
 
     $selected_showcases   = $_POST['showcases'] ?? [];
     $selected_collections = $_POST['collections'] ?? [];
@@ -270,8 +282,8 @@ if (($action === 'add' || $action === 'edit') && $edit_id > 0) {
                                 LEFT JOIN authors a ON b.author_id = a.id 
                                 LEFT JOIN publishers p ON b.publisher_id = p.id 
                                 LEFT JOIN categories c ON b.category_id = c.id 
-                                WHERE {$where_sql} 
-                                ORDER BY b.id DESC");
+                                WHERE {$where_sql}
+                                ORDER BY b.id DESC", $params);
     ?>
 
     <div class="card border-0 shadow-sm rounded-4">
@@ -357,9 +369,9 @@ if (($action === 'add' || $action === 'edit') && $edit_id > 0) {
                                         <a href="index.php?p=Products&action=edit&id=<?= $b['id'] ?>" class="btn btn-sm btn-outline-primary me-1">
                                             <i class="bi bi-pencil-fill"></i>
                                         </a>
-                                        <a href="index.php?p=Products&action=delete&id=<?= $b['id'] ?>" class="btn btn-sm btn-outline-danger" onclick="return confirm('Bu kitabı silmek istediğinize emin misiniz?');">
-                                            <i class="bi bi-trash-fill"></i>
-                                        </a>
+                                        <form method="POST" action="index.php?p=Products&action=delete&id=<?= $b['id'] ?>" class="d-inline" onsubmit="return confirm('Bu kitabı silmek istediğinize emin misiniz?');">
+                                            <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash-fill"></i></button>
+                                        </form>
                                     </td>
                                 </tr>
                             <?php endforeach; ?>

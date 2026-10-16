@@ -5,9 +5,35 @@
 require_once __DIR__ . '/config.php';
 
 $sent = false;
+$error = '';
+$form = ['name' => '', 'email' => '', 'subject' => '', 'message' => ''];
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['send_contact'])) {
-    $sent = true;
+    foreach ($form as $key => $_) {
+        $form[$key] = sanitize($_POST[$key] ?? '');
+    }
+
+    if (!empty($_POST['website'])) {
+        // Gizli alan doldurulmuşsa spam botudur; sessizce başarılı gibi davran
+        $sent = true;
+    } elseif ($form['name'] === '' || $form['subject'] === '' || $form['message'] === '') {
+        $error = 'Lütfen tüm alanları doldurun.';
+    } elseif (!filter_var($form['email'], FILTER_VALIDATE_EMAIL)) {
+        $error = 'Lütfen geçerli bir e-posta adresi girin.';
+    } elseif (mb_strlen($form['message']) > 5000) {
+        $error = 'Mesajınız çok uzun (en fazla 5000 karakter).';
+    } else {
+        db_query("INSERT INTO contact_messages (name, email, subject, message, ip_address) VALUES (?, ?, ?, ?, ?)",
+            [$form['name'], $form['email'], $form['subject'], $form['message'], $_SERVER['REMOTE_ADDR'] ?? '']);
+        $sent = true;
+        $form = array_fill_keys(array_keys($form), '');
+    }
 }
+
+$site_phone    = setting('site_phone', '0312 245 00 00');
+$site_whatsapp = setting('site_whatsapp', '0555 000 00 00');
+$site_email    = setting('site_email', 'iletisim@yenicerikitabevi.com');
+$site_address  = setting('site_address', 'İstasyon Mah. Hikmet Özer Cad. No:48/A Etimesgut / Ankara');
 ?>
 <!DOCTYPE html>
 <html lang="tr">
@@ -41,7 +67,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['send_contact'])) {
                         <i class="bi bi-geo-alt-fill fs-3 text-danger"></i>
                         <div>
                             <h6 class="fw-bold text-dark mb-1">Mağaza Adresi:</h6>
-                            <p class="text-secondary fs-7 mb-0">İstasyon Mah. Hikmet Özer Cad. No:48/A<br>Etimesgut / Ankara</p>
+                            <p class="text-secondary fs-7 mb-0"><?= e($site_address) ?></p>
                         </div>
                     </div>
 
@@ -49,7 +75,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['send_contact'])) {
                         <i class="bi bi-telephone-fill fs-3 text-danger"></i>
                         <div>
                             <h6 class="fw-bold text-dark mb-1">Telefon Numarası:</h6>
-                            <p class="text-secondary fs-7 mb-0">0312 245 00 00 / 0555 000 00 00</p>
+                            <p class="text-secondary fs-7 mb-0"><?= e($site_phone) ?> / <?= e($site_whatsapp) ?></p>
                         </div>
                     </div>
 
@@ -57,12 +83,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['send_contact'])) {
                         <i class="bi bi-envelope-fill fs-3 text-danger"></i>
                         <div>
                             <h6 class="fw-bold text-dark mb-1">E-Posta:</h6>
-                            <p class="text-secondary fs-7 mb-0">iletisim@yenicerikitabevi.com</p>
+                            <p class="text-secondary fs-7 mb-0"><?= e($site_email) ?></p>
                         </div>
                     </div>
                 </div>
 
-                <a href="https://wa.me/905550000000" target="_blank" class="btn btn-danger btn-lg w-100 rounded-3 font-bold py-3">
+                <a href="<?= e(whatsapp_link($site_whatsapp)) ?>" target="_blank" rel="noopener" class="btn btn-danger btn-lg w-100 rounded-3 font-bold py-3">
                     <i class="bi bi-whatsapp me-2"></i> WhatsApp Hattından Bize Yazın
                 </a>
             </div>
@@ -73,28 +99,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['send_contact'])) {
 
                     <?php if ($sent): ?>
                         <div class="alert alert-success">Mesajınız başarıyla iletildi. En kısa sürede sizinle iletişime geçeceğiz.</div>
+                    <?php elseif ($error !== ''): ?>
+                        <div class="alert alert-danger"><?= e($error) ?></div>
                     <?php endif; ?>
 
                     <form method="POST" action="">
                         <input type="hidden" name="send_contact" value="1">
+                        <!-- Spam botları için gizli alan; gerçek kullanıcılar görmez -->
+                        <input type="text" name="website" value="" tabindex="-1" autocomplete="off" style="position:absolute;left:-9999px" aria-hidden="true">
                         <div class="mb-3">
                             <label class="form-label fs-7 fw-semibold">Adınız Soyadınız</label>
-                            <input type="text" class="form-control" required>
+                            <input type="text" name="name" class="form-control" value="<?= e($form['name']) ?>" required>
                         </div>
 
                         <div class="mb-3">
                             <label class="form-label fs-7 fw-semibold">E-Posta Adresiniz</label>
-                            <input type="email" class="form-control" required>
+                            <input type="email" name="email" class="form-control" value="<?= e($form['email']) ?>" required>
                         </div>
 
                         <div class="mb-3">
                             <label class="form-label fs-7 fw-semibold">Konu</label>
-                            <input type="text" class="form-control" required>
+                            <input type="text" name="subject" class="form-control" value="<?= e($form['subject']) ?>" required>
                         </div>
 
                         <div class="mb-3">
                             <label class="form-label fs-7 fw-semibold">Mesajınız</label>
-                            <textarea class="form-control" rows="4" required></textarea>
+                            <textarea name="message" class="form-control" rows="4" maxlength="5000" required><?= e($form['message']) ?></textarea>
                         </div>
 
                         <button type="submit" class="btn btn-danger font-bold w-100 py-2.5 rounded-3">Mesajı Gönder</button>

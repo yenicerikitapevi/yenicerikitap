@@ -298,12 +298,13 @@ foreach ($collections as $col) {
     <footer>
         <div class="container">
             <div class="row g-4 pb-5 border-bottom border-secondary border-opacity-25">
+                <div class="col-lg-4">
                     <div class="bg-white d-inline-block px-3 py-2 rounded-3 mb-3 shadow-sm">
                         <img src="assets/images/logo_horizontal.png" alt="Yeniçeri Kitabevi" style="height: 40px; object-fit: contain;">
                     </div>
                     <p class="fs-7 opacity-75 mb-3">Yeniçeri Kitabevi, binlerce edebi eser, tarih araştırması ve çocuk kitabı ile Ankara Etimesgut merkezli okurlarına hızlı ve güvenli hizmet vermektedir.</p>
                     <div class="d-flex gap-2">
-                        <a href="https://wa.me/<?= preg_replace('/[^0-9]/', '', $site['site_whatsapp'] ?? '05550000000') ?>" target="_blank" class="btn btn-danger btn-sm rounded-pill font-bold px-3">
+                        <a href="<?= e(whatsapp_link($site['site_whatsapp'] ?? '05550000000')) ?>" target="_blank" rel="noopener" class="btn btn-danger btn-sm rounded-pill font-bold px-3">
                             <i class="bi bi-whatsapp me-1"></i> WhatsApp Sipariş
                         </a>
                     </div>

@@ -86,17 +86,25 @@ $img_src = !empty($book['cover_image']) ? 'assets/images/' . $book['cover_image'
                     <?php if ($book['old_price']): ?>
                         <span class="fs-5 text-muted text-decoration-line-through"><?= format_price($book['old_price']) ?></span>
                     <?php endif; ?>
-                    <span class="badge bg-success bg-opacity-10 text-success ms-2"><i class="bi bi-check-circle-fill me-1"></i> Stokta Var (<?= $book['stock'] ?> Adet)</span>
+                    <?php if ((int)$book['stock'] > 0): ?>
+                        <span class="badge bg-success bg-opacity-10 text-success ms-2"><i class="bi bi-check-circle-fill me-1"></i> Stokta Var</span>
+                    <?php else: ?>
+                        <span class="badge bg-secondary ms-2"><i class="bi bi-x-circle-fill me-1"></i> Tükendi</span>
+                    <?php endif; ?>
                 </div>
 
                 <div class="mb-4">
-                    <button class="btn btn-danger btn-lg px-5 py-3 rounded-3 font-bold shadow btn-add-cart" 
-                            data-id="<?= $book['id'] ?>" 
-                            data-title="<?= e($book['title']) ?>" 
-                            data-price="<?= $book['price'] ?>" 
-                            data-image="<?= e($img_src) ?>">
-                        <i class="bi bi-bag-plus-fill me-2 fs-5"></i> Sepete Ekle
-                    </button>
+                    <?php if ((int)$book['stock'] > 0): ?>
+                        <button class="btn btn-danger btn-lg px-5 py-3 rounded-3 font-bold shadow btn-add-cart"
+                                data-id="<?= $book['id'] ?>"
+                                data-title="<?= e($book['title']) ?>"
+                                data-price="<?= $book['price'] ?>"
+                                data-image="<?= e($img_src) ?>">
+                            <i class="bi bi-bag-plus-fill me-2 fs-5"></i> Sepete Ekle
+                        </button>
+                    <?php else: ?>
+                        <button class="btn btn-secondary btn-lg px-5 py-3 rounded-3 font-bold" disabled>Stokta Yok</button>
+                    <?php endif; ?>
                 </div>
 
                 <div class="bg-white p-4 rounded-4 border shadow-sm mb-4">

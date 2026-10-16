@@ -64,7 +64,7 @@ $transactions = db_fetch_all("SELECT t.*, o.order_number, u.name as customer_nam
                                     <?php if ($t['status'] === 'Onaylandı'): ?>
                                         <span class="badge bg-success fs-8">Onaylandı</span>
                                     <?php elseif ($t['status'] === 'Bekliyor'): ?>
-                                        <span class="badge bg-warning text-dark fs-8">Havale Bekliyor</span>
+                                        <span class="badge bg-warning text-dark fs-8">Ödeme Bekliyor</span>
                                     <?php else: ?>
                                         <span class="badge bg-danger fs-8"><?= e($t['status']) ?></span>
                                     <?php endif; ?>
