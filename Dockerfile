@@ -6,6 +6,9 @@ RUN apt-get update && apt-get install -y \
     && docker-php-ext-install pdo pdo_sqlite pdo_mysql \
     && a2enmod rewrite
 
+# Kapak resmi yüklemeleri için PHP dosya boyutu sınırları (uygulama 5 MB'a kadar kabul eder)
+RUN printf "upload_max_filesize=6M\npost_max_size=8M\n" > /usr/local/etc/php/conf.d/uploads.ini
+
 # Copy project files
 COPY . /var/www/html/
 

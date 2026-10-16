@@ -12,3 +12,6 @@ scratch/
 Thumbs.db
 .vscode/
 .idea/
+
+# Yerelde yüklenen kapak resimleri
+uploads/

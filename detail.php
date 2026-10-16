@@ -24,7 +24,7 @@ $related_books = db_fetch_all("SELECT b.*, a.name as author_name, p.name as publ
                                WHERE b.category_id = ? AND b.id != ? AND b.is_active = 1 
                                LIMIT 4", [$book['category_id'], $id]);
 
-$img_src = !empty($book['cover_image']) ? 'assets/images/' . $book['cover_image'] : 'assets/images/book_placeholder.svg';
+$img_src = cover_url($book['cover_image'] ?? '');
 ?>
 <!DOCTYPE html>
 <html lang="tr">

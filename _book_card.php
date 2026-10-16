@@ -8,7 +8,7 @@ $discount_percent = 0;
 if (!empty($b['old_price']) && $b['old_price'] > $b['price']) {
     $discount_percent = round((($b['old_price'] - $b['price']) / $b['old_price']) * 100);
 }
-$img_src = !empty($b['cover_image']) ? 'assets/images/' . $b['cover_image'] : 'assets/images/book_placeholder.svg';
+$img_src = cover_url($b['cover_image'] ?? '');
 ?>
 <div class="book-card">
     <div class="book-cover-wrapper">

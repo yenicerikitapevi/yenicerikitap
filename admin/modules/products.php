@@ -14,7 +14,7 @@ $showcases = db_fetch_all("SELECT * FROM showcases ORDER BY id ASC");
 $collections = db_fetch_all("SELECT * FROM collections ORDER BY id ASC");
 
 if ($action === 'delete' && $edit_id > 0 && $_SERVER['REQUEST_METHOD'] === 'POST') {
-    $book = db_fetch("SELECT title FROM books WHERE id = ?", [$edit_id]);
+    $book = db_fetch("SELECT title, cover_image FROM books WHERE id = ?", [$edit_id]);
     if ($book) {
         $has_orders = db_fetch("SELECT COUNT(*) as cnt FROM order_items WHERE book_id = ?", [$edit_id])['cnt'] ?? 0;
         if ($has_orders > 0) {
@@ -26,6 +26,9 @@ if ($action === 'delete' && $edit_id > 0 && $_SERVER['REQUEST_METHOD'] === 'POST
             db_query("DELETE FROM book_showcase WHERE book_id = ?", [$edit_id]);
             db_query("DELETE FROM book_collection WHERE book_id = ?", [$edit_id]);
             db_query("DELETE FROM books WHERE id = ?", [$edit_id]);
+            if (!empty($book['cover_image']) && strpos($book['cover_image'], 'cover_') === 0) {
+                @unlink(UPLOAD_DIR . '/' . basename($book['cover_image']));
+            }
             log_action('Kitap Silindi', 'Products', $edit_id, "Kitap silindi: " . $book['title']);
             set_flash('success', '"' . $book['title'] . '" kitabı silindi.');
         }
@@ -36,7 +39,7 @@ if ($action === 'delete' && $edit_id > 0 && $_SERVER['REQUEST_METHOD'] === 'POST
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_book'])) {
     $title          = sanitize($_POST['title']);
     $original_title = sanitize($_POST['original_title'] ?? '');
-    $isbn           = sanitize($_POST['isbn'] ?? '');
+    $isbn           = sanitize($_POST['isbn'] ?? '') ?: null; // boş ISBN NULL olmalı, yoksa ikinci ISBN'siz kitapta benzersizlik hatası olur
     $author_id      = (int)$_POST['author_id'];
     $publisher_id   = (int)$_POST['publisher_id'];
     $category_id    = (int)$_POST['category_id'];
@@ -47,9 +50,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_book'])) {
     $year           = !empty($_POST['year']) ? (int)$_POST['year'] : null;
     $summary        = sanitize($_POST['summary'] ?? '');
     $is_active      = isset($_POST['is_active']) ? 1 : 0;
-    // Formda kapak alanı yok; düzenlemede mevcut kapak korunur
+
+    $dup = $isbn !== null ? db_fetch("SELECT id FROM books WHERE isbn = ? AND id != ?", [$isbn, $edit_id]) : null;
+    if ($dup) {
+        set_flash('danger', "Bu ISBN ({$isbn}) başka bir kitapta (#{$dup['id']}) kayıtlı. Kitap kaydedilmedi.");
+        redirect('index.php?p=Products&action=' . ($edit_id > 0 ? 'edit&id=' . $edit_id : 'add'));
+    }
+
+    // Yeni kapak yüklenmediyse mevcut kapak korunur; "kapağı kaldır" seçildiyse varsayılan görsele döner
     $existing_cover = $edit_id > 0 ? (db_fetch("SELECT cover_image FROM books WHERE id = ?", [$edit_id])['cover_image'] ?? null) : null;
-    $cover_image    = sanitize($_POST['cover_image'] ?? ($existing_cover ?: 'book_placeholder.svg'));
+    $cover_image    = $existing_cover ?: 'book_placeholder.svg';
+    if (!empty($_POST['remove_cover'])) {
+        $cover_image = 'book_placeholder.svg';
+    }
+    $upload_error = '';
+    $uploaded = save_cover_upload($_FILES['cover_file'] ?? [], $upload_error);
+    if ($uploaded) {
+        $cover_image = $uploaded;
+    }
+    // Eski yüklenmiş kapak artık kullanılmıyorsa diskten silinir
+    if ($existing_cover && $existing_cover !== $cover_image && strpos($existing_cover, 'cover_') === 0 && is_file(UPLOAD_DIR . '/' . basename($existing_cover))) {
+        @unlink(UPLOAD_DIR . '/' . basename($existing_cover));
+    }
 
     $selected_showcases   = $_POST['showcases'] ?? [];
     $selected_collections = $_POST['collections'] ?? [];
@@ -66,6 +88,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_book'])) {
         $book_id = db_last_id();
         log_action('Yeni Kitap Eklendi', 'Products', $book_id, "Yeni kitap oluşturuldu: {$title}");
         set_flash('success', 'Yeni kitap kataloğa eklendi.');
+    }
+    if ($upload_error !== '') {
+        set_flash('warning', 'Kitap kaydedildi ancak kapak resmi yüklenemedi: ' . $upload_error);
     }
 
     db_query("DELETE FROM book_showcase WHERE book_id = ?", [$book_id]);
@@ -122,10 +147,28 @@ if (($action === 'add' || $action === 'edit') && $edit_id > 0) {
             </h5>
         </div>
         <div class="card-body p-4">
-            <form method="POST" action="">
+            <form method="POST" action="" enctype="multipart/form-data">
                 <input type="hidden" name="save_book" value="1">
 
                 <div class="row g-3">
+                    <div class="col-md-12">
+                        <label class="form-label fw-semibold fs-7">Kapak Resmi</label>
+                        <div class="d-flex align-items-center gap-3 p-3 bg-light rounded-3 border">
+                            <img src="../<?= e(cover_url($book_data['cover_image'] ?? '')) ?>" alt="Kapak" id="coverPreview" style="width: 80px; height: 115px; object-fit: cover;" class="rounded shadow-sm bg-white">
+                            <div class="flex-grow-1">
+                                <input type="file" name="cover_file" class="form-control" accept="image/jpeg,image/png,image/webp"
+                                       onchange="if (this.files[0]) document.getElementById('coverPreview').src = URL.createObjectURL(this.files[0]);">
+                                <small class="text-muted d-block mt-1">JPG, PNG veya WEBP, en fazla 5 MB. Önerilen oran 2:3 (ör. 600×900 piksel).</small>
+                                <?php if (!empty($book_data['cover_image']) && $book_data['cover_image'] !== 'book_placeholder.svg'): ?>
+                                    <div class="form-check mt-2">
+                                        <input class="form-check-input" type="checkbox" name="remove_cover" value="1" id="removeCover">
+                                        <label class="form-check-label fs-7" for="removeCover">Mevcut kapağı kaldır</label>
+                                    </div>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="col-md-6">
                         <label class="form-label fw-semibold fs-7">Kitap Adı *</label>
                         <input type="text" name="title" class="form-control" value="<?= e($book_data['title'] ?? '') ?>" required>
@@ -338,8 +381,13 @@ if (($action === 'add' || $action === 'edit') && $edit_id > 0) {
                                 <tr>
                                     <td class="ps-4 text-muted fs-7">#<?= $b['id'] ?></td>
                                     <td>
-                                        <div class="fw-bold text-dark fs-7"><?= e($b['title']) ?></div>
-                                        <small class="text-muted fs-8">ISBN: <?= e($b['isbn'] ?? '-') ?></small>
+                                        <div class="d-flex align-items-center gap-2">
+                                            <img src="../<?= e(cover_url($b['cover_image'] ?? '')) ?>" alt="" style="width: 36px; height: 52px; object-fit: cover;" class="rounded border bg-white" loading="lazy">
+                                            <div>
+                                                <div class="fw-bold text-dark fs-7"><?= e($b['title']) ?></div>
+                                                <small class="text-muted fs-8">ISBN: <?= e($b['isbn'] ?? '-') ?></small>
+                                            </div>
+                                        </div>
                                     </td>
                                     <td>
                                         <div class="fs-7 font-semibold"><?= e($b['author_name']) ?></div>

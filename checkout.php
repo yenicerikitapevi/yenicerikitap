@@ -24,6 +24,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['complete_checkout']))
     if (!filter_var($form['email'], FILTER_VALIDATE_EMAIL)) {
         $errors[] = 'Lütfen geçerli bir e-posta adresi girin.';
     }
+    if (empty($_POST['accept_terms'])) {
+        $errors[] = 'Siparişi tamamlamak için Ön Bilgilendirme Formu ve Mesafeli Satış Sözleşmesi\'ni onaylamanız gerekir.';
+    }
 
     // Sepetteki fiyatlara güvenilmez: yalnızca kitap ID ve adet alınır, fiyat ve stok veritabanından okunur
     $requested = [];
@@ -216,6 +219,15 @@ $bank_iban    = setting('bank_iban');
                                 <div class="fw-semibold"><i class="bi bi-check-circle-fill text-success me-1"></i> Banka Havalesi / EFT</div>
                                 <div class="fs-7 text-secondary mt-1">Siparişi onayladıktan sonra IBAN bilgilerimiz gösterilir. Ödemeniz ulaştığında siparişiniz kargoya hazırlanır.</div>
                             </div>
+
+                            <div class="form-check mb-3">
+                                <input class="form-check-input" type="checkbox" name="accept_terms" value="1" id="acceptTerms" required>
+                                <label class="form-check-label fs-7" for="acceptTerms">
+                                    <a href="legal.php?p=on-bilgilendirme" target="_blank">Ön Bilgilendirme Formu</a>'nu ve
+                                    <a href="legal.php?p=mesafeli-satis" target="_blank">Mesafeli Satış Sözleşmesi</a>'ni okudum, kabul ediyorum.
+                                </label>
+                            </div>
+                            <p class="fs-8 text-muted mb-3">Kişisel verileriniz <a href="legal.php?p=kvkk" target="_blank">KVKK Aydınlatma Metni</a> kapsamında işlenir.</p>
 
                             <button type="submit" class="btn btn-danger btn-lg w-100 fw-bold py-3 rounded-3 shadow" id="btnSubmitOrder">
                                 <i class="bi bi-lock-fill me-1"></i> Siparişi Onayla

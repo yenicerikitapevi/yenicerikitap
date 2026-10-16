@@ -62,8 +62,8 @@ foreach ($collections as $col) {
                 <span class="d-none d-lg-inline text-warning"><i class="bi bi-truck me-1"></i> <?= format_price($site['shipping_free_limit'] ?? 350) ?> ve Üzeri Ücretsiz Kargo!</span>
             </div>
             <div class="d-flex align-items-center gap-3 fs-7">
-                <a href="contact.php">Teslimat Şartları</a>
-                <a href="contact.php">Gizlilik Politikası</a>
+                <a href="legal.php?p=teslimat-iade">Teslimat Şartları</a>
+                <a href="legal.php?p=gizlilik">Gizlilik Politikası</a>
                 <a href="contact.php">İletişim</a>
                 <a href="admin/login.php" class="text-danger font-semibold"><i class="bi bi-lock-fill"></i> Admin Girişi</a>
             </div>
@@ -323,9 +323,11 @@ foreach ($collections as $col) {
                 <div class="col-lg-3 col-6">
                     <h5>Yasal & Kurumsal</h5>
                     <ul class="list-unstyled fs-7">
-                        <li class="mb-2"><a href="contact.php">Teslimat & İade Şartları</a></li>
-                        <li class="mb-2"><a href="contact.php">Gizlilik & Güvenlik</a></li>
-                        <li class="mb-2"><a href="contact.php">KVKK Aydınlatma Metni</a></li>
+                        <li class="mb-2"><a href="legal.php?p=teslimat-iade">Teslimat & İade Şartları</a></li>
+                        <li class="mb-2"><a href="legal.php?p=mesafeli-satis">Mesafeli Satış Sözleşmesi</a></li>
+                        <li class="mb-2"><a href="legal.php?p=on-bilgilendirme">Ön Bilgilendirme Formu</a></li>
+                        <li class="mb-2"><a href="legal.php?p=gizlilik">Gizlilik & Çerez Politikası</a></li>
+                        <li class="mb-2"><a href="legal.php?p=kvkk">KVKK Aydınlatma Metni</a></li>
                         <li class="mb-2"><a href="admin/login.php">Yönetim Paneli Girişi</a></li>
                     </ul>
                 </div>

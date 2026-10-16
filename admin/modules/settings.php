@@ -8,7 +8,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_settings'])) {
     $settings_keys = [
         'site_title', 'site_description', 'site_email', 'site_phone', 
         'site_whatsapp', 'site_address', 'shipping_free_limit', 
-        'flat_shipping_cost', 'bank_name', 'bank_account_name', 'bank_iban'
+        'flat_shipping_cost', 'bank_name', 'bank_account_name', 'bank_iban',
+        'company_legal_name', 'company_tax_office', 'company_tax_number', 'company_mersis'
     ];
 
     foreach ($settings_keys as $key) {
@@ -117,6 +118,31 @@ foreach ($setting_rows as $row) {
                         <div class="col-md-6">
                             <label class="form-label fw-semibold fs-7">Sabit Kargo Ücreti (TL)</label>
                             <input type="number" step="0.01" name="flat_shipping_cost" class="form-control" value="<?= e($s['flat_shipping_cost'] ?? '29.90') ?>">
+                        </div>
+
+                        <div class="col-md-12 pt-2">
+                            <h6 class="fw-bold text-dark mb-0"><i class="bi bi-building text-danger me-1"></i> Şirket / Satıcı Bilgileri</h6>
+                            <small class="text-muted">Mesafeli Satış Sözleşmesi, Ön Bilgilendirme Formu ve KVKK metninde satıcı olarak gösterilir.</small>
+                        </div>
+
+                        <div class="col-md-12">
+                            <label class="form-label fw-semibold fs-7">Ticari Unvan (veya şahıs şirketi sahibinin adı soyadı)</label>
+                            <input type="text" name="company_legal_name" class="form-control" value="<?= e($s['company_legal_name'] ?? '') ?>" placeholder="Örn: Yeniçeri Kitap Kırtasiye Ltd. Şti.">
+                        </div>
+
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold fs-7">Vergi Dairesi</label>
+                            <input type="text" name="company_tax_office" class="form-control" value="<?= e($s['company_tax_office'] ?? '') ?>">
+                        </div>
+
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold fs-7">Vergi No / TC Kimlik No</label>
+                            <input type="text" name="company_tax_number" class="form-control" value="<?= e($s['company_tax_number'] ?? '') ?>">
+                        </div>
+
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold fs-7">MERSİS No (varsa)</label>
+                            <input type="text" name="company_mersis" class="form-control" value="<?= e($s['company_mersis'] ?? '') ?>">
                         </div>
 
                         <div class="col-md-12 pt-2">

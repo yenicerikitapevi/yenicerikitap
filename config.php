@@ -25,6 +25,8 @@ define('DB_NAME', getenv('DB_NAME') ?: 'yeniceri_db');
 define('DB_USER', getenv('DB_USER') ?: 'root');
 define('DB_PASS', getenv('DB_PASS') ?: '');
 define('SQLITE_PATH', getenv('SQLITE_PATH') ?: __DIR__ . '/yeniceri.db'); // Render'da kalıcı disk: /var/data/yeniceri.db
+// Yüklenen kapak resimleri: Render'da veritabanının yanındaki kalıcı diskte (/var/data/uploads) tutulur, deploy'da silinmez
+define('UPLOAD_DIR', getenv('UPLOAD_DIR') ?: (getenv('SQLITE_PATH') ? dirname(getenv('SQLITE_PATH')) . '/uploads' : __DIR__ . '/uploads'));
 
 // Site Temel Sabitleri - Dinamik Domain Tespiti (Render, Vercel ve Localhost Uyumlu)
 $protocol = $is_https ? 'https://' : 'http://';
@@ -96,6 +98,59 @@ function get_settings() {
 function setting($key, $default = '') {
     $s = get_settings();
     return (isset($s[$key]) && $s[$key] !== '') ? $s[$key] : $default;
+}
+
+/**
+ * Kitap kapağının site köküne göre adresi: önce yüklenen dosyalar, sonra assets/images, yoksa varsayılan görsel
+ */
+function cover_url($cover) {
+    $cover = basename((string)$cover);
+    if ($cover !== '' && is_file(UPLOAD_DIR . '/' . $cover)) {
+        return 'cover.php?f=' . rawurlencode($cover);
+    }
+    if ($cover !== '' && is_file(__DIR__ . '/assets/images/' . $cover)) {
+        return 'assets/images/' . $cover;
+    }
+    return 'assets/images/book_placeholder.svg';
+}
+
+/**
+ * Admin panelinden yüklenen kapak resmini doğrulayıp kaydeder; yeni dosya adını döndürür
+ */
+function save_cover_upload($file, &$error) {
+    $error = '';
+    if (!isset($file['error']) || $file['error'] === UPLOAD_ERR_NO_FILE) {
+        return null;
+    }
+    if ($file['error'] === UPLOAD_ERR_INI_SIZE || $file['error'] === UPLOAD_ERR_FORM_SIZE) {
+        $error = 'Kapak resmi en fazla 5 MB olabilir.';
+        return null;
+    }
+    if ($file['error'] !== UPLOAD_ERR_OK || !is_uploaded_file($file['tmp_name'])) {
+        $error = 'Kapak resmi yüklenemedi, lütfen tekrar deneyin.';
+        return null;
+    }
+    if ($file['size'] > 5 * 1024 * 1024) {
+        $error = 'Kapak resmi en fazla 5 MB olabilir.';
+        return null;
+    }
+    // Dosya uzantısına değil gerçek içeriğine bakılır
+    $info = @getimagesize($file['tmp_name']);
+    $allowed = [IMAGETYPE_JPEG => 'jpg', IMAGETYPE_PNG => 'png', IMAGETYPE_WEBP => 'webp'];
+    if (!$info || !isset($allowed[$info[2]])) {
+        $error = 'Kapak resmi JPG, PNG veya WEBP formatında olmalıdır.';
+        return null;
+    }
+    if (!is_dir(UPLOAD_DIR) && !mkdir(UPLOAD_DIR, 0775, true)) {
+        $error = 'Yükleme klasörü oluşturulamadı.';
+        return null;
+    }
+    $name = 'cover_' . date('Ymd_His') . '_' . bin2hex(random_bytes(4)) . '.' . $allowed[$info[2]];
+    if (!move_uploaded_file($file['tmp_name'], UPLOAD_DIR . '/' . $name)) {
+        $error = 'Kapak resmi kaydedilemedi.';
+        return null;
+    }
+    return $name;
 }
 
 /**
