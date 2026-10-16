@@ -314,6 +314,12 @@ header {
     padding: 2rem;
 }
 
+/* Sitenin genel koyu "header" stili yönetim paneli başlığını ezmesin */
+.admin-content > header {
+    background-color: transparent !important;
+    border-bottom: 1px solid #dee2e6 !important;
+}
+
 .stat-card {
     background: #ffffff;
     border-radius: 16px;

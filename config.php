@@ -166,6 +166,9 @@ function auth_check($role = 'admin') {
 }
 
 function redirect($url) {
+    while (ob_get_level() > 0) {
+        ob_end_clean(); // tamponlanmış sayfa çıktısını at
+    }
     header("Location: " . $url);
     exit;
 }

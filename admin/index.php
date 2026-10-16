@@ -3,6 +3,9 @@ require_once __DIR__ . '/../config.php';
 
 auth_check('admin');
 
+// Modüller sayfa düzeni basıldıktan sonra redirect() çağırıyor; çıktıyı tamponla ki yönlendirme başlığı gönderilebilsin
+ob_start();
+
 $allowed_pages = [
     'FrontPage'    => 'frontpage.php',
     'Products'     => 'products.php',
