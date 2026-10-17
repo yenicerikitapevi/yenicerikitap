@@ -13,7 +13,7 @@ $categories = db_fetch_all("SELECT * FROM categories ORDER BY name ASC");
 $showcases = db_fetch_all("SELECT * FROM showcases ORDER BY id ASC");
 
 /**
- * Formda "+ Yeni ... ekle" seçildiyse yazarı/yayınevini oluşturur (aynı isim varsa onu kullanır); kaydın ID'sini döndürür
+ * Formda "+ Yeni ... ekle" seçildiyse yazarı/yayınevini/kategoriyi oluşturur (aynı isim varsa onu kullanır); kaydın ID'sini döndürür
  */
 function resolve_or_create($table, $selected, $new_name) {
     if ($selected !== '__new') {
@@ -23,26 +23,16 @@ function resolve_or_create($table, $selected, $new_name) {
     if ($name === '') {
         return 0;
     }
-    // Büyük/küçük harf farkı Türkçe kurallarla yok sayılır (İ→i, I→ı); SQLite LOWER() Türkçe harfleri küçültmez
-    $tr_lower = function ($text) {
-        return mb_strtolower(strtr($text, ['İ' => 'i', 'I' => 'ı']), 'UTF-8');
-    };
-    foreach (db_fetch_all("SELECT id, name FROM {$table}") as $row) {
-        if ($tr_lower($row['name']) === $tr_lower($name)) {
-            return (int)$row['id'];
-        }
+    $existing = find_by_name($table, $name);
+    if ($existing) {
+        return (int)$existing['id'];
     }
-
-    $base = strtr($tr_lower($name), ['ç' => 'c', 'ğ' => 'g', 'ı' => 'i', 'ö' => 'o', 'ş' => 's', 'ü' => 'u', 'â' => 'a', 'î' => 'i', 'û' => 'u']);
-    $base = trim(preg_replace('/[^a-z0-9]+/', '-', $base), '-') ?: 'kayit';
-    $slug = $base;
-    for ($i = 2; db_fetch("SELECT id FROM {$table} WHERE slug = ?", [$slug]); $i++) {
-        $slug = $base . '-' . $i;
-    }
+    $slug = unique_slug($table, $name);
 
     db_query("INSERT INTO {$table} (name, slug) VALUES (?, ?)", [$name, $slug]);
     $id = (int)db_last_id();
-    log_action($table === 'authors' ? 'Yeni Yazar Eklendi' : 'Yeni Yayınevi Eklendi', 'Products', $id, $name);
+    $labels = ['authors' => 'Yeni Yazar Eklendi', 'publishers' => 'Yeni Yayınevi Eklendi', 'categories' => 'Yeni Kategori Eklendi'];
+    log_action($labels[$table], 'Catalog', $id, $name);
     return $id;
 }
 $collections = db_fetch_all("SELECT * FROM collections ORDER BY id ASC");
@@ -76,7 +66,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_book'])) {
     $isbn           = sanitize($_POST['isbn'] ?? '') ?: null; // boş ISBN NULL olmalı, yoksa ikinci ISBN'siz kitapta benzersizlik hatası olur
     $author_id      = resolve_or_create('authors', $_POST['author_id'] ?? '', sanitize($_POST['new_author_name'] ?? ''));
     $publisher_id   = resolve_or_create('publishers', $_POST['publisher_id'] ?? '', sanitize($_POST['new_publisher_name'] ?? ''));
-    $category_id    = (int)$_POST['category_id'];
+    $category_id    = resolve_or_create('categories', $_POST['category_id'] ?? '', sanitize($_POST['new_category_name'] ?? ''));
     $price          = (float)$_POST['price'];
     $old_price      = !empty($_POST['old_price']) ? (float)$_POST['old_price'] : null;
     $stock          = (int)$_POST['stock'];
@@ -85,8 +75,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_book'])) {
     $summary        = sanitize($_POST['summary'] ?? '');
     $is_active      = isset($_POST['is_active']) ? 1 : 0;
 
-    if ($author_id <= 0 || $publisher_id <= 0) {
-        set_flash('danger', 'Lütfen bir yazar ve yayınevi seçin ya da yeni adını yazın. Kitap kaydedilmedi.');
+    if ($author_id <= 0 || $publisher_id <= 0 || $category_id <= 0) {
+        set_flash('danger', 'Lütfen yazar, yayınevi ve kategori seçin ya da yeni adını yazın. Kitap kaydedilmedi.');
         redirect('index.php?p=Products&action=' . ($edit_id > 0 ? 'edit&id=' . $edit_id : 'add'));
     }
 
@@ -253,14 +243,17 @@ if (($action === 'add' || $action === 'edit') && $edit_id > 0) {
 
                     <div class="col-md-4">
                         <label class="form-label fw-semibold fs-7">Kategori *</label>
-                        <select name="category_id" class="form-select" required>
+                        <select name="category_id" class="form-select js-new-toggle" data-target="newCategoryName" required>
                             <option value="">-- Kategori Seçiniz --</option>
                             <?php foreach ($categories as $c): ?>
                                 <option value="<?= $c['id'] ?>" <?= ($book_data['category_id'] ?? 0) == $c['id'] ? 'selected' : '' ?>>
                                     <?= e($c['name']) ?>
                                 </option>
                             <?php endforeach; ?>
+                            <option value="__new">+ Yeni kategori ekle…</option>
                         </select>
+                        <input type="text" name="new_category_name" id="newCategoryName" class="form-control mt-2 d-none" placeholder="Yeni kategorinin adı" maxlength="120">
+                        <div class="form-text"><a href="index.php?p=Catalog" target="_blank">Yazar, yayınevi ve kategorileri düzenle</a></div>
                     </div>
 
                     <div class="col-md-4">
@@ -365,9 +358,8 @@ if (($action === 'add' || $action === 'edit') && $edit_id > 0) {
     $params = [];
 
     if (!empty($search)) {
-        $where[] = "(b.title LIKE ? OR b.isbn LIKE ?)";
-        $params[] = "%$search%";
-        $params[] = "%$search%";
+        $where[] = "(b.title LIKE ? OR b.isbn LIKE ? OR a.name LIKE ? OR p.name LIKE ?)";
+        array_push($params, "%$search%", "%$search%", "%$search%", "%$search%");
     }
     if ($cat_filter > 0) {
         $where[] = "b.category_id = ?";
@@ -392,7 +384,7 @@ if (($action === 'add' || $action === 'edit') && $edit_id > 0) {
                 <div class="col-md-5">
                     <div class="input-group">
                         <span class="input-group-text bg-light border-end-0"><i class="bi bi-search"></i></span>
-                        <input type="text" name="q" class="form-control bg-light border-start-0" placeholder="Kitap adı veya ISBN..." value="<?= e($search) ?>">
+                        <input type="text" name="q" class="form-control bg-light border-start-0" placeholder="Kitap adı, ISBN, yazar veya yayınevi..." value="<?= e($search) ?>">
                     </div>
                 </div>
                 <div class="col-md-4">

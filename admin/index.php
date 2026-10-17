@@ -9,6 +9,7 @@ ob_start();
 $allowed_pages = [
     'FrontPage'    => 'frontpage.php',
     'Products'     => 'products.php',
+    'Catalog'      => 'catalog.php',
     'Members'      => 'members.php',
     'Orders'       => 'orders.php',
     'Transactions' => 'transactions.php',
@@ -64,6 +65,10 @@ $unread_messages = db_fetch("SELECT COUNT(*) as cnt FROM contact_messages WHERE 
                 
                 <a href="index.php?p=Products" class="nav-link <?= $current_p === 'Products' ? 'active' : '' ?>">
                     <i class="bi bi-book"></i> Kitap Yönetimi
+                </a>
+
+                <a href="index.php?p=Catalog" class="nav-link <?= $current_p === 'Catalog' ? 'active' : '' ?>">
+                    <i class="bi bi-tags"></i> Yazar & Yayınevi
                 </a>
 
                 <a href="index.php?p=Orders" class="nav-link <?= $current_p === 'Orders' ? 'active' : '' ?>">

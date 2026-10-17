@@ -307,6 +307,38 @@ function format_price($price) {
 }
 
 /**
+ * Türkçe kurallara göre küçük harf (İ→i, I→ı); mb_strtolower ve SQLite LOWER() bunu doğru yapmaz
+ */
+function tr_lower($text) {
+    return mb_strtolower(strtr((string)$text, ['İ' => 'i', 'I' => 'ı']), 'UTF-8');
+}
+
+/**
+ * Yazar / yayınevi / kategori tablolarında aynı isimli kaydı bulur (büyük/küçük harf farkı gözetilmez)
+ */
+function find_by_name($table, $name, $exclude_id = 0) {
+    foreach (db_fetch_all("SELECT id, name FROM {$table} WHERE id != ?", [(int)$exclude_id]) as $row) {
+        if (tr_lower($row['name']) === tr_lower($name)) {
+            return $row;
+        }
+    }
+    return null;
+}
+
+/**
+ * İsimden tabloda benzersiz bir slug üretir: "Yapı Kredi Yayınları" -> "yapi-kredi-yayinlari"
+ */
+function unique_slug($table, $name, $exclude_id = 0) {
+    $base = strtr(tr_lower($name), ['ç' => 'c', 'ğ' => 'g', 'ı' => 'i', 'ö' => 'o', 'ş' => 's', 'ü' => 'u', 'â' => 'a', 'î' => 'i', 'û' => 'u']);
+    $base = trim(preg_replace('/[^a-z0-9]+/', '-', $base), '-') ?: 'kayit';
+    $slug = $base;
+    for ($i = 2; db_fetch("SELECT id FROM {$table} WHERE slug = ? AND id != ?", [$slug, (int)$exclude_id]); $i++) {
+        $slug = $base . '-' . $i;
+    }
+    return $slug;
+}
+
+/**
  * SQLite Veritabanı Otomatik Kurulum Yardımcısı
  */
 function init_sqlite_db($db) {
