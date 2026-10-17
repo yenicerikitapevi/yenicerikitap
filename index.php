@@ -99,7 +99,7 @@ foreach ($collections as $col) {
 
                 <div class="col-6 col-lg-3 text-end order-2 order-lg-3">
                     <div class="d-inline-flex align-items-center gap-2">
-                        <button class="btn btn-outline-light text-white position-relative rounded-pill px-3 py-2 fw-bold d-flex align-items-center gap-2 border-secondary" data-bs-toggle="offcanvas" data-bs-target="#cartDrawer">
+                        <button class="btn btn-outline-dark position-relative rounded-pill px-3 py-2 fw-bold d-flex align-items-center gap-2 border-secondary" data-bs-toggle="offcanvas" data-bs-target="#cartDrawer">
                             <i class="bi bi-bag-handle-fill text-danger fs-5"></i>
                             <span class="d-none d-sm-inline">Sepetim</span>
                             <span class="badge bg-danger rounded-pill cart-count-badge">0</span>
@@ -368,7 +368,7 @@ foreach ($collections as $col) {
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
     <script src="assets/js/app.js"></script>
 </body>
 </html>
