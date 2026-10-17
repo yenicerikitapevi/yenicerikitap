@@ -28,6 +28,7 @@ $tax_office  = setting('company_tax_office');
 $tax_number  = setting('company_tax_number');
 $mersis      = setting('company_mersis');
 $website     = SITE_URL;
+$card_enabled = paytr_enabled();
 $free_limit  = format_price(setting('shipping_free_limit', '350'));
 $flat_cost   = format_price(setting('flat_shipping_cost', '29.90'));
 $updated     = '16.10.2026';
@@ -103,7 +104,10 @@ function seller_block() {
                     <p><?= $free_limit ?> ve üzeri siparişlerde kargo ücretsizdir. Bu tutarın altındaki siparişlerde <?= $flat_cost ?> kargo ücreti uygulanır ve sipariş özetinde ayrıca gösterilir.</p>
 
                     <h2>4. Ödeme Şekli</h2>
-                    <p>Ödeme, sipariş onayından sonra gösterilen banka hesabına Havale/EFT yoluyla yapılır. Havale açıklamasına sipariş numarasının yazılması gerekir. Ödemesi 3 iş günü içinde yapılmayan siparişler Satıcı tarafından iptal edilebilir.</p>
+                    <?php if ($card_enabled): ?>
+                    <p>Ödeme, kredi kartı / banka kartı ile veya Havale/EFT yoluyla yapılabilir. Kartlı ödemeler, lisanslı ödeme kuruluşu PayTR Ödeme ve Elektronik Para Kuruluşu A.Ş. altyapısı üzerinden alınır; kart bilgileri Satıcı tarafından görülmez ve saklanmaz.</p>
+                    <?php endif; ?>
+                    <p><?= $card_enabled ? 'Havale/EFT seçilmesi hâlinde ödeme' : 'Ödeme' ?>, sipariş onayından sonra gösterilen banka hesabına Havale/EFT yoluyla yapılır. Havale açıklamasına sipariş numarasının yazılması gerekir. Ödemesi 3 iş günü içinde yapılmayan siparişler Satıcı tarafından iptal edilebilir.</p>
 
                     <h2>5. Teslimat</h2>
                     <p>Ürünler, ödemenin Satıcı hesabına geçmesinin ardından kargo firması aracılığıyla Alıcı'nın sipariş sırasında belirttiği teslimat adresine gönderilir. Ürünler genellikle ödeme onayından sonra 1-3 iş günü içinde kargoya verilir; teslimat süresi her halükarda yasal azami süre olan 30 günü geçemez.</p>
@@ -128,7 +132,11 @@ function seller_block() {
                     <h2>Madde 3 – Sözleşme Konusu Ürün, Fiyat ve Ödeme</h2>
                     <p>3.1. Ürünlerin cinsi, adedi, KDV dahil satış fiyatı ve kargo ücreti sipariş özetinde ve sipariş sonrasında Alıcı'ya gösterilen sipariş bilgilerinde yer alır. Sipariş özeti bu sözleşmenin ayrılmaz parçasıdır.</p>
                     <p>3.2. <?= $free_limit ?> ve üzeri siparişlerde kargo ücretsizdir; altındaki siparişlerde <?= $flat_cost ?> kargo ücreti Alıcı tarafından ödenir.</p>
+                    <?php if ($card_enabled): ?>
+                    <p>3.3. Ödeme, kredi kartı / banka kartı (PayTR ödeme altyapısı) ile veya Havale/EFT yoluyla yapılır. Kartlı ödemede sipariş, ödemenin onaylanmasıyla işleme alınır. Havale/EFT ile verilen sipariş, ödemenin Satıcı'nın banka hesabına geçmesiyle işleme alınır; ödemesi 3 iş günü içinde yapılmayan siparişleri Satıcı iptal edebilir.</p>
+                    <?php else: ?>
                     <p>3.3. Ödeme Havale/EFT yoluyla yapılır. Sipariş, ödemenin Satıcı'nın banka hesabına geçmesiyle işleme alınır. Ödemesi 3 iş günü içinde yapılmayan siparişleri Satıcı iptal edebilir.</p>
+                    <?php endif; ?>
 
                     <h2>Madde 4 – Teslimat</h2>
                     <p>4.1. Ürün, Alıcı'nın belirttiği teslimat adresine kargo ile teslim edilir. Teslimat, ödeme onayından itibaren yasal 30 günlük süre içinde yapılır.</p>
@@ -161,7 +169,7 @@ function seller_block() {
 <?php elseif ($p === 'teslimat-iade'): ?>
                     <h2>Teslimat</h2>
                     <ul>
-                        <li>Siparişler, Havale/EFT ödemesinin hesabımıza geçmesinin ardından genellikle <strong>1-3 iş günü</strong> içinde kargoya verilir.</li>
+                        <li>Siparişler, <?= $card_enabled ? 'kartla ödemenin onaylanmasının veya ' : '' ?>Havale/EFT ödemesinin hesabımıza geçmesinin ardından genellikle <strong>1-3 iş günü</strong> içinde kargoya verilir.</li>
                         <li>Teslimat süresi yasal azami süre olan 30 günü geçmez.</li>
                         <li><?= $free_limit ?> ve üzeri siparişlerde kargo ücretsizdir; altındaki siparişlerde kargo ücreti <?= $flat_cost ?>'dir.</li>
                         <li>Kargoya verilen siparişlerin takip numarası talep hâlinde tarafınıza iletilir.</li>
@@ -169,14 +177,14 @@ function seller_block() {
                     </ul>
 
                     <h2>Sipariş İptali</h2>
-                    <p>Kargoya verilmemiş siparişlerinizi <?= e($phone) ?> numaralı telefondan veya <?= e($email) ?> adresinden bize ulaşarak iptal edebilirsiniz. Ödemesi yapılmış siparişlerin bedeli en geç 14 gün içinde bildirdiğiniz banka hesabına iade edilir.</p>
+                    <p>Kargoya verilmemiş siparişlerinizi <?= e($phone) ?> numaralı telefondan veya <?= e($email) ?> adresinden bize ulaşarak iptal edebilirsiniz. Ödemesi yapılmış siparişlerin bedeli en geç 14 gün içinde <?= $card_enabled ? 'kartla ödemelerde ödeme yapılan karta, Havale/EFT ödemelerinde ' : '' ?>bildirdiğiniz banka hesabına iade edilir.</p>
 
                     <h2>Cayma Hakkı ve İade</h2>
                     <ul>
                         <li>Ürünü teslim aldığınız tarihten itibaren <strong>14 gün</strong> içinde hiçbir gerekçe göstermeden iade edebilirsiniz.</li>
                         <li>İade talebinizi telefon, e-posta veya <a href="contact.php">iletişim formu</a> ile sipariş numaranızı belirterek bildirmeniz yeterlidir.</li>
                         <li>Ürünü, bildiriminizden itibaren 10 gün içinde faturası/sipariş özeti ile birlikte mağaza adresimize (<?= e($address) ?>) gönderin. İade için size bildirdiğimiz anlaşmalı kargo firması ile yapılan gönderimlerde kargo ücreti tarafımıza aittir.</li>
-                        <li>İade edilen ürün bize ulaştıktan sonra, cayma bildiriminizin bize ulaştığı tarihten itibaren en geç 14 gün içinde ödemeniz bildirdiğiniz IBAN'a iade edilir.</li>
+                        <li>İade edilen ürün bize ulaştıktan sonra, cayma bildiriminizin bize ulaştığı tarihten itibaren en geç 14 gün içinde ödemeniz <?= $card_enabled ? 'kartla ödemelerde ödeme yaptığınız karta, Havale/EFT ödemelerinde ' : '' ?>bildirdiğiniz IBAN'a iade edilir.</li>
                         <li>Ürünün olağan kullanımı dışında kullanılmış, yıpranmış veya zarar görmüş olması hâlinde oluşan değer kaybından alıcı sorumludur.</li>
                         <li>Yönetmelikte sayılan istisnalar (ör. ambalajı açılmış dijital içerikli ürünler, süreli yayınlar) için cayma hakkı kullanılamaz.</li>
                     </ul>
@@ -193,10 +201,10 @@ function seller_block() {
                     <h2>2. İşlenen Kişisel Veriler</h2>
                     <ul>
                         <li><strong>Kimlik ve iletişim:</strong> ad soyad, e-posta adresi, telefon numarası, teslimat adresi</li>
-                        <li><strong>Müşteri işlem:</strong> sipariş bilgileri, sipariş geçmişi, ödeme (havale/EFT) kayıtları, iletişim formu mesajları</li>
+                        <li><strong>Müşteri işlem:</strong> sipariş bilgileri, sipariş geçmişi, ödeme (<?= $card_enabled ? 'kart ödemesi sonucu, ' : '' ?>havale/EFT) kayıtları, iletişim formu mesajları</li>
                         <li><strong>İşlem güvenliği:</strong> IP adresi, işlem tarih ve saatleri</li>
                     </ul>
-                    <p>Sitemizde banka kartı/kredi kartı bilgisi alınmaz ve saklanmaz.</p>
+                    <p><?= $card_enabled ? 'Kartlı ödemelerde kart bilgileriniz doğrudan PayTR ödeme sayfasına girilir; sitemizde banka kartı/kredi kartı bilgisi alınmaz ve saklanmaz.' : 'Sitemizde banka kartı/kredi kartı bilgisi alınmaz ve saklanmaz.' ?></p>
 
                     <h2>3. İşleme Amaçları</h2>
                     <ul>
@@ -211,7 +219,7 @@ function seller_block() {
                     <p>Kişisel verileriniz, internet sitemizdeki sipariş ve iletişim formları aracılığıyla elektronik ortamda toplanır ve KVKK'nın 5/2 maddesindeki şu hukuki sebeplere dayanılarak işlenir: (c) sözleşmenin kurulması veya ifası için gerekli olması, (ç) veri sorumlusunun hukuki yükümlülüğünü yerine getirebilmesi için zorunlu olması, (f) ilgili kişinin temel hak ve özgürlüklerine zarar vermemek kaydıyla veri sorumlusunun meşru menfaatleri için zorunlu olması.</p>
 
                     <h2>5. Kişisel Verilerin Aktarılması</h2>
-                    <p>Kişisel verileriniz, yukarıdaki amaçlarla sınırlı olarak; siparişin teslimi için kargo firmalarına, ödemelerin takibi için bankalara, muhasebe ve vergi yükümlülükleri için mali müşavirimize ve talep hâlinde yetkili kamu kurum ve kuruluşlarına aktarılabilir.</p>
+                    <p>Kişisel verileriniz, yukarıdaki amaçlarla sınırlı olarak; siparişin teslimi için kargo firmalarına, ödemelerin alınması ve takibi için bankalara<?= $card_enabled ? ' ve ödeme kuruluşu PayTR Ödeme ve Elektronik Para Kuruluşu A.Ş.\'ye' : '' ?>, muhasebe ve vergi yükümlülükleri için mali müşavirimize ve talep hâlinde yetkili kamu kurum ve kuruluşlarına aktarılabilir.</p>
                     <p>İnternet sitemiz yurt dışında bulunan bir bulut barındırma (hosting) hizmeti üzerinde çalışmaktadır; bu nedenle sitemize ilettiğiniz veriler bu hizmet sağlayıcının sunucularında saklanır. Bu aktarım KVKK'nın 9. maddesine uygun olarak gerçekleştirilir.</p>
 
                     <h2>6. Saklama Süresi</h2>
@@ -230,7 +238,7 @@ function seller_block() {
                     <h2>Güvenlik</h2>
                     <ul>
                         <li>Sitemizle aranızdaki bağlantı SSL (HTTPS) ile şifrelenir.</li>
-                        <li>Sitemizde kredi kartı veya banka kartı bilgisi alınmaz; ödemeler Havale/EFT ile bankanız üzerinden yapılır.</li>
+                        <li><?= $card_enabled ? 'Sitemizde kredi kartı veya banka kartı bilgisi alınmaz ve saklanmaz; kartlı ödemeler PayTR\'ın güvenli ödeme sayfasında yapılır.' : 'Sitemizde kredi kartı veya banka kartı bilgisi alınmaz; ödemeler Havale/EFT ile bankanız üzerinden yapılır.' ?></li>
                         <li>Kişisel verilerinize yalnızca yetkili personelimiz erişebilir.</li>
                     </ul>
 

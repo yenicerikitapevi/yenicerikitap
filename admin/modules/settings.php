@@ -9,12 +9,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_settings'])) {
         'site_title', 'site_description', 'site_email', 'site_phone', 
         'site_whatsapp', 'site_address', 'shipping_free_limit', 
         'flat_shipping_cost', 'bank_name', 'bank_account_name', 'bank_iban',
-        'company_legal_name', 'company_tax_office', 'company_tax_number', 'company_mersis'
+        'company_legal_name', 'company_tax_office', 'company_tax_number', 'company_mersis',
+        'payment_merchant_id', 'payment_api_key', 'payment_merchant_salt', 'paytr_test_mode'
     ];
+    // Gizli anahtarlar sayfada gösterilmez; alan boş bırakılırsa kayıtlı değer korunur
+    $secret_keys = ['payment_api_key', 'payment_merchant_salt'];
 
     foreach ($settings_keys as $key) {
         if (isset($_POST[$key])) {
             $val = sanitize($_POST[$key]);
+            if (in_array($key, $secret_keys, true) && $val === '') {
+                continue;
+            }
+            if ($key === 'paytr_test_mode') {
+                $val = ($val === '0') ? '0' : '1';
+            }
             if (in_array($key, ['shipping_free_limit', 'flat_shipping_cost'], true)) {
                 $val = number_format(max(0, (float)str_replace(',', '.', $val)), 2, '.', '');
             }
@@ -54,6 +63,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_password'])) {
     }
     redirect('index.php?p=Settings');
 }
+
+// İlk kurulumdan kalan örnek sanal POS değerleri gerçek bilgi sanılmasın
+db_query("UPDATE settings SET setting_value = '' WHERE (setting_key = 'payment_merchant_id' AND setting_value = 'MERCHANT_YENICERI_889') OR (setting_key = 'payment_api_key' AND setting_value = 'test_api_key_yeniceri_sec_99812')");
 
 $setting_rows = db_fetch_all("SELECT * FROM settings");
 $s = [];
@@ -163,6 +175,41 @@ foreach ($setting_rows as $row) {
                         <div class="col-md-12">
                             <label class="form-label fw-semibold fs-7">IBAN</label>
                             <input type="text" name="bank_iban" class="form-control font-monospace" value="<?= e($s['bank_iban'] ?? '') ?>" placeholder="TR00 0000 0000 0000 0000 0000 00">
+                        </div>
+
+                        <div class="col-md-12 pt-2">
+                            <h6 class="fw-bold text-dark mb-0"><i class="bi bi-credit-card text-danger me-1"></i> PayTR Kartla Ödeme</h6>
+                            <small class="text-muted">Bilgiler PayTR Mağaza Paneli &gt; Destek &amp; Kurulum &gt; Entegrasyon Bilgileri sayfasındadır. Üçü de girildiğinde ödeme sayfasında kartla ödeme seçeneği açılır. PayTR panelindeki Bildirim URL: <code><?= e(SITE_URL) ?>/paytr_callback.php</code></small>
+                            <div class="mt-2">
+                                <?php if (paytr_enabled()): ?>
+                                    <span class="badge bg-success">Kartla ödeme açık<?= paytr_config()['test_mode'] === '1' ? ' (Test Modu)' : '' ?></span>
+                                <?php else: ?>
+                                    <span class="badge bg-secondary">Kartla ödeme kapalı</span>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold fs-7">Mağaza No (merchant_id)</label>
+                            <input type="text" name="payment_merchant_id" class="form-control font-monospace" value="<?= e($s['payment_merchant_id'] ?? '') ?>">
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold fs-7">Ödeme Modu</label>
+                            <select name="paytr_test_mode" class="form-select">
+                                <option value="1" <?= ($s['paytr_test_mode'] ?? '1') !== '0' ? 'selected' : '' ?>>Test Modu (gerçek para çekilmez)</option>
+                                <option value="0" <?= ($s['paytr_test_mode'] ?? '1') === '0' ? 'selected' : '' ?>>Canlı Mod</option>
+                            </select>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold fs-7">Mağaza Parola (merchant_key)</label>
+                            <input type="password" name="payment_api_key" class="form-control font-monospace" autocomplete="new-password" placeholder="<?= !empty($s['payment_api_key']) ? 'Kayıtlı - değiştirmek için yazın' : '' ?>">
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold fs-7">Mağaza Gizli Anahtar (merchant_salt)</label>
+                            <input type="password" name="payment_merchant_salt" class="form-control font-monospace" autocomplete="new-password" placeholder="<?= !empty($s['payment_merchant_salt']) ? 'Kayıtlı - değiştirmek için yazın' : '' ?>">
                         </div>
                     </div>
 

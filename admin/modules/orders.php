@@ -43,6 +43,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_order_status']
     redirect('index.php?p=Orders');
 }
 
+paytr_expire_pending_orders();
+
 $status_filter = sanitize($_GET['status'] ?? '');
 $where = "1=1";
 $params = [];
@@ -158,7 +160,9 @@ $orders = db_fetch_all("SELECT o.*, u.name as customer_name, u.email as customer
                                                     <input type="text" name="tracking_number" class="form-control" value="<?= e($o['tracking_number'] ?? '') ?>" placeholder="Örn: TR9988776655">
                                                 </div>
 
-                                                <?php if ($o['status'] === 'Ödeme Bekliyor'): ?>
+                                                <?php if ($o['status'] === 'Ödeme Bekliyor' && $o['payment_method'] === 'Kredi Kartı'): ?>
+                                                    <div class="alert alert-info fs-8 py-2">Müşteri PayTR ödeme sayfasında. Ödeme sonucu otomatik işlenir; <?= PAYTR_EXPIRE_MINUTES ?> dakika içinde ödenmezse sipariş iptal edilip stok geri eklenir.</div>
+                                                <?php elseif ($o['status'] === 'Ödeme Bekliyor'): ?>
                                                     <div class="alert alert-info fs-8 py-2">Havale/EFT ödemesi hesabınıza geçtiyse durumu <strong>Hazırlanıyor</strong> yapın; ödeme onaylandı olarak kaydedilir.</div>
                                                 <?php endif; ?>
 

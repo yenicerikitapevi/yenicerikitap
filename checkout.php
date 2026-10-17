@@ -9,14 +9,20 @@ $new_order_number = '';
 $order_total = 0;
 $errors = [];
 $form = ['name' => '', 'email' => '', 'phone' => '', 'address' => ''];
+$paytr_token = '';
+$payment_result = $_GET['odeme'] ?? '';
 
-// Sanal POS entegrasyonu olmadığı için şimdilik yalnızca Havale/EFT kabul edilir
-$payment_method = 'EFT / Havale';
+// Kartla ödeme yalnızca PayTR mağaza bilgileri girildiyse sunulur
+$card_enabled = paytr_enabled();
+$payment_method = $card_enabled ? 'Kredi Kartı' : 'EFT / Havale';
+
+paytr_expire_pending_orders();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['complete_checkout'])) {
     foreach ($form as $key => $_) {
         $form[$key] = sanitize($_POST[$key] ?? '');
     }
+    $payment_method = ($card_enabled && ($_POST['payment_method'] ?? '') === 'Kredi Kartı') ? 'Kredi Kartı' : 'EFT / Havale';
 
     if ($form['name'] === '' || $form['phone'] === '' || $form['address'] === '') {
         $errors[] = 'Lütfen ad soyad, telefon ve teslimat adresi alanlarını doldurun.';
@@ -62,7 +68,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['complete_checkout']))
                     continue;
                 }
                 $price = (float)$book['price'];
-                $lines[] = ['id' => $b_id, 'qty' => $qty, 'price' => $price, 'total' => $price * $qty];
+                $lines[] = ['id' => $b_id, 'title' => $book['title'], 'qty' => $qty, 'price' => $price, 'total' => $price * $qty];
                 $subtotal += $price * $qty;
             }
 
@@ -106,11 +112,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['complete_checkout']))
                     }
                 }
 
+                $gateway_msg = ($payment_method === 'Kredi Kartı') ? 'PayTR ödemesi bekleniyor (merchant_oid: ' . paytr_merchant_oid($new_order_number) . ')' : 'Havale/EFT bekleniyor';
                 db_query("INSERT INTO transactions (order_id, transaction_type, amount, status, gateway_response) VALUES (?, ?, ?, 'Bekliyor', ?)",
-                    [$order_id, $payment_method, $order_total, 'Havale/EFT bekleniyor']);
+                    [$order_id, $payment_method, $order_total, $gateway_msg]);
 
                 $pdo->commit();
-                $order_created = true;
+
+                if ($payment_method === 'Kredi Kartı') {
+                    // Stok sipariş için ayrıldı; ödeme sonucu PayTR bildirimiyle (paytr_callback.php) kesinleşir
+                    $basket = [];
+                    foreach ($lines as $line) {
+                        $basket[] = [$line['title'], $line['price'], $line['qty']];
+                    }
+                    if ($shipping > 0) {
+                        $basket[] = ['Kargo Ücreti', $shipping, 1];
+                    }
+
+                    $res = paytr_get_token([
+                        'merchant_oid' => paytr_merchant_oid($new_order_number),
+                        'email'        => $form['email'],
+                        'total'        => $order_total,
+                        'user_name'    => $form['name'],
+                        'user_address' => $form['address'],
+                        'user_phone'   => $form['phone'],
+                        'basket'       => $basket,
+                    ]);
+
+                    if ($res['ok']) {
+                        $paytr_token = $res['token'];
+                    } else {
+                        error_log('[PayTR] ' . $res['error']);
+                        $pdo->beginTransaction();
+                        paytr_cancel_order($order_id, $res['error']);
+                        $pdo->commit();
+                        $errors[] = 'Kartla ödeme sayfası şu an açılamadı. Lütfen birkaç dakika sonra tekrar deneyin veya Havale / EFT ile ödeyin.';
+                    }
+                } else {
+                    $order_created = true;
+                }
             }
         } catch (Throwable $ex) {
             if ($pdo->inTransaction()) {
@@ -147,7 +186,26 @@ $bank_iban    = setting('bank_iban');
     </header>
 
     <div class="container py-5">
-        <?php if ($order_created): ?>
+        <?php if ($payment_result === 'basarili'): ?>
+            <div class="max-w-xl mx-auto bg-white p-5 rounded-4 shadow text-center border">
+                <div class="d-inline-flex align-items-center justify-content-center bg-danger text-white rounded-circle mb-3" style="width: 70px; height: 70px;">
+                    <i class="bi bi-check-lg display-4"></i>
+                </div>
+                <h2 class="fw-extrabold text-dark mb-2">Ödemeniz Alındı!</h2>
+                <p class="fs-7 text-secondary mb-4">Siparişiniz kargoya hazırlanacaktır. Sorularınız için bize <strong><?= e(setting('site_phone', '0312 245 00 00')) ?></strong> numarasından ulaşabilirsiniz.</p>
+
+                <a href="index.php" class="btn btn-danger font-bold px-4 py-2 rounded-pill">Alışverişe Devam Et</a>
+                <script>localStorage.removeItem('yeniceri_cart');</script>
+            </div>
+        <?php elseif ($paytr_token !== ''): ?>
+            <h3 class="fw-extrabold text-dark mb-2"><i class="bi bi-credit-card-2-front text-danger me-2"></i> Kart ile Güvenli Ödeme</h3>
+            <p class="text-muted mb-4">Sipariş Numaranız: <strong class="text-danger"><?= e($new_order_number) ?></strong> &middot; Ödenecek Tutar: <strong class="text-danger"><?= format_price($order_total) ?></strong></p>
+            <div class="card border-0 shadow-sm rounded-4 p-2 p-md-4">
+                <script src="https://www.paytr.com/js/iframeResizer.min.js"></script>
+                <iframe src="<?= e(PAYTR_IFRAME_URL . $paytr_token) ?>" id="paytriframe" frameborder="0" scrolling="no" style="width: 100%;"></iframe>
+                <script>iFrameResize({}, '#paytriframe');</script>
+            </div>
+        <?php elseif ($order_created): ?>
             <div class="max-w-xl mx-auto bg-white p-5 rounded-4 shadow text-center border">
                 <div class="d-inline-flex align-items-center justify-content-center bg-danger text-white rounded-circle mb-3" style="width: 70px; height: 70px;">
                     <i class="bi bi-check-lg display-4"></i>
@@ -173,6 +231,10 @@ $bank_iban    = setting('bank_iban');
             </div>
         <?php else: ?>
             <h3 class="fw-extrabold text-dark mb-4"><i class="bi bi-bag-check-fill text-danger me-2"></i> Siparişi Tamamla</h3>
+
+            <?php if ($payment_result === 'basarisiz'): ?>
+                <div class="alert alert-danger">Kartla ödemeniz tamamlanamadı ve kartınızdan ücret çekilmedi. Bilgilerinizi kontrol edip tekrar deneyebilir veya Havale / EFT ile ödeyebilirsiniz.</div>
+            <?php endif; ?>
 
             <?php if (!empty($errors)): ?>
                 <div class="alert alert-danger">
@@ -213,12 +275,29 @@ $bank_iban    = setting('bank_iban');
                                 </div>
                             </div>
 
-                            <h5 class="fw-bold text-dark mt-4 mb-3"><i class="bi bi-bank text-danger me-2"></i> Ödeme Yöntemi</h5>
+                            <h5 class="fw-bold text-dark mt-4 mb-3"><i class="bi bi-wallet2 text-danger me-2"></i> Ödeme Yöntemi</h5>
 
-                            <div class="border rounded-3 p-3 mb-4 bg-light">
-                                <div class="fw-semibold"><i class="bi bi-check-circle-fill text-success me-1"></i> Banka Havalesi / EFT</div>
-                                <div class="fs-7 text-secondary mt-1">Siparişi onayladıktan sonra IBAN bilgilerimiz gösterilir. Ödemeniz ulaştığında siparişiniz kargoya hazırlanır.</div>
-                            </div>
+                            <?php if ($card_enabled): ?>
+                                <label class="d-block border rounded-3 p-3 mb-2 bg-light" for="pmCard">
+                                    <div class="form-check mb-0">
+                                        <input class="form-check-input" type="radio" name="payment_method" id="pmCard" value="Kredi Kartı" <?= $payment_method === 'Kredi Kartı' ? 'checked' : '' ?>>
+                                        <span class="fw-semibold"><i class="bi bi-credit-card me-1"></i> Kredi / Banka Kartı</span>
+                                        <div class="fs-7 text-secondary mt-1">PayTR güvenli ödeme altyapısıyla ödenir; kart bilgileriniz sitemizde saklanmaz.</div>
+                                    </div>
+                                </label>
+                                <label class="d-block border rounded-3 p-3 mb-4 bg-light" for="pmEft">
+                                    <div class="form-check mb-0">
+                                        <input class="form-check-input" type="radio" name="payment_method" id="pmEft" value="EFT / Havale" <?= $payment_method === 'EFT / Havale' ? 'checked' : '' ?>>
+                                        <span class="fw-semibold"><i class="bi bi-bank me-1"></i> Banka Havalesi / EFT</span>
+                                        <div class="fs-7 text-secondary mt-1">Siparişi onayladıktan sonra IBAN bilgilerimiz gösterilir. Ödemeniz ulaştığında siparişiniz kargoya hazırlanır.</div>
+                                    </div>
+                                </label>
+                            <?php else: ?>
+                                <div class="border rounded-3 p-3 mb-4 bg-light">
+                                    <div class="fw-semibold"><i class="bi bi-check-circle-fill text-success me-1"></i> Banka Havalesi / EFT</div>
+                                    <div class="fs-7 text-secondary mt-1">Siparişi onayladıktan sonra IBAN bilgilerimiz gösterilir. Ödemeniz ulaştığında siparişiniz kargoya hazırlanır.</div>
+                                </div>
+                            <?php endif; ?>
 
                             <div class="form-check mb-3">
                                 <input class="form-check-input" type="checkbox" name="accept_terms" value="1" id="acceptTerms" required>

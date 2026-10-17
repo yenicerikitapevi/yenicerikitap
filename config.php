@@ -441,6 +441,10 @@ function init_sqlite_db($db) {
         ('site_address', 'İstasyon Mah. Hikmet Özer Cad. No:48/A Etimesgut / Ankara'),
         ('shipping_free_limit', '350.00'),
         ('flat_shipping_cost', '29.90'),
-        ('payment_merchant_id', 'MERCHANT_YENICERI_889'),
-        ('payment_api_key', 'test_api_key_yeniceri_sec_99812');");
+        ('payment_merchant_id', ''),
+        ('payment_api_key', ''),
+        ('payment_merchant_salt', ''),
+        ('paytr_test_mode', '1');");
 }
+
+require_once __DIR__ . '/_paytr.php';
