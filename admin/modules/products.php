@@ -11,6 +11,40 @@ $authors = db_fetch_all("SELECT * FROM authors ORDER BY name ASC");
 $publishers = db_fetch_all("SELECT * FROM publishers ORDER BY name ASC");
 $categories = db_fetch_all("SELECT * FROM categories ORDER BY name ASC");
 $showcases = db_fetch_all("SELECT * FROM showcases ORDER BY id ASC");
+
+/**
+ * Formda "+ Yeni ... ekle" seçildiyse yazarı/yayınevini oluşturur (aynı isim varsa onu kullanır); kaydın ID'sini döndürür
+ */
+function resolve_or_create($table, $selected, $new_name) {
+    if ($selected !== '__new') {
+        return (int)$selected;
+    }
+    $name = trim(preg_replace('/\s+/u', ' ', $new_name));
+    if ($name === '') {
+        return 0;
+    }
+    // Büyük/küçük harf farkı Türkçe kurallarla yok sayılır (İ→i, I→ı); SQLite LOWER() Türkçe harfleri küçültmez
+    $tr_lower = function ($text) {
+        return mb_strtolower(strtr($text, ['İ' => 'i', 'I' => 'ı']), 'UTF-8');
+    };
+    foreach (db_fetch_all("SELECT id, name FROM {$table}") as $row) {
+        if ($tr_lower($row['name']) === $tr_lower($name)) {
+            return (int)$row['id'];
+        }
+    }
+
+    $base = strtr($tr_lower($name), ['ç' => 'c', 'ğ' => 'g', 'ı' => 'i', 'ö' => 'o', 'ş' => 's', 'ü' => 'u', 'â' => 'a', 'î' => 'i', 'û' => 'u']);
+    $base = trim(preg_replace('/[^a-z0-9]+/', '-', $base), '-') ?: 'kayit';
+    $slug = $base;
+    for ($i = 2; db_fetch("SELECT id FROM {$table} WHERE slug = ?", [$slug]); $i++) {
+        $slug = $base . '-' . $i;
+    }
+
+    db_query("INSERT INTO {$table} (name, slug) VALUES (?, ?)", [$name, $slug]);
+    $id = (int)db_last_id();
+    log_action($table === 'authors' ? 'Yeni Yazar Eklendi' : 'Yeni Yayınevi Eklendi', 'Products', $id, $name);
+    return $id;
+}
 $collections = db_fetch_all("SELECT * FROM collections ORDER BY id ASC");
 
 if ($action === 'delete' && $edit_id > 0 && $_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -40,8 +74,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_book'])) {
     $title          = sanitize($_POST['title']);
     $original_title = sanitize($_POST['original_title'] ?? '');
     $isbn           = sanitize($_POST['isbn'] ?? '') ?: null; // boş ISBN NULL olmalı, yoksa ikinci ISBN'siz kitapta benzersizlik hatası olur
-    $author_id      = (int)$_POST['author_id'];
-    $publisher_id   = (int)$_POST['publisher_id'];
+    $author_id      = resolve_or_create('authors', $_POST['author_id'] ?? '', sanitize($_POST['new_author_name'] ?? ''));
+    $publisher_id   = resolve_or_create('publishers', $_POST['publisher_id'] ?? '', sanitize($_POST['new_publisher_name'] ?? ''));
     $category_id    = (int)$_POST['category_id'];
     $price          = (float)$_POST['price'];
     $old_price      = !empty($_POST['old_price']) ? (float)$_POST['old_price'] : null;
@@ -50,6 +84,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_book'])) {
     $year           = !empty($_POST['year']) ? (int)$_POST['year'] : null;
     $summary        = sanitize($_POST['summary'] ?? '');
     $is_active      = isset($_POST['is_active']) ? 1 : 0;
+
+    if ($author_id <= 0 || $publisher_id <= 0) {
+        set_flash('danger', 'Lütfen bir yazar ve yayınevi seçin ya da yeni adını yazın. Kitap kaydedilmedi.');
+        redirect('index.php?p=Products&action=' . ($edit_id > 0 ? 'edit&id=' . $edit_id : 'add'));
+    }
 
     $dup = $isbn !== null ? db_fetch("SELECT id FROM books WHERE isbn = ? AND id != ?", [$isbn, $edit_id]) : null;
     if ($dup) {
@@ -186,26 +225,30 @@ if (($action === 'add' || $action === 'edit') && $edit_id > 0) {
 
                     <div class="col-md-4">
                         <label class="form-label fw-semibold fs-7">Yazar *</label>
-                        <select name="author_id" class="form-select" required>
+                        <select name="author_id" class="form-select js-new-toggle" data-target="newAuthorName" required>
                             <option value="">-- Yazar Seçiniz --</option>
                             <?php foreach ($authors as $a): ?>
                                 <option value="<?= $a['id'] ?>" <?= ($book_data['author_id'] ?? 0) == $a['id'] ? 'selected' : '' ?>>
                                     <?= e($a['name']) ?>
                                 </option>
                             <?php endforeach; ?>
+                            <option value="__new">+ Yeni yazar ekle…</option>
                         </select>
+                        <input type="text" name="new_author_name" id="newAuthorName" class="form-control mt-2 d-none" placeholder="Yeni yazarın adı soyadı" maxlength="120">
                     </div>
 
                     <div class="col-md-4">
                         <label class="form-label fw-semibold fs-7">Yayınevi *</label>
-                        <select name="publisher_id" class="form-select" required>
+                        <select name="publisher_id" class="form-select js-new-toggle" data-target="newPublisherName" required>
                             <option value="">-- Yayınevi Seçiniz --</option>
                             <?php foreach ($publishers as $p): ?>
                                 <option value="<?= $p['id'] ?>" <?= ($book_data['publisher_id'] ?? 0) == $p['id'] ? 'selected' : '' ?>>
                                     <?= e($p['name']) ?>
                                 </option>
                             <?php endforeach; ?>
+                            <option value="__new">+ Yeni yayınevi ekle…</option>
                         </select>
+                        <input type="text" name="new_publisher_name" id="newPublisherName" class="form-control mt-2 d-none" placeholder="Yeni yayınevinin adı" maxlength="120">
                     </div>
 
                     <div class="col-md-4">
@@ -297,6 +340,19 @@ if (($action === 'add' || $action === 'edit') && $edit_id > 0) {
                     <a href="index.php?p=Products" class="btn btn-light border px-4 py-2">İptal</a>
                 </div>
             </form>
+            <script>
+                // "+ Yeni ... ekle" seçilince isim kutusu açılır ve zorunlu olur
+                document.querySelectorAll('.js-new-toggle').forEach(select => {
+                    const input = document.getElementById(select.dataset.target);
+                    const update = () => {
+                        const isNew = select.value === '__new';
+                        input.classList.toggle('d-none', !isNew);
+                        input.required = isNew;
+                        if (isNew) input.focus();
+                    };
+                    select.addEventListener('change', update);
+                });
+            </script>
         </div>
     </div>
 
