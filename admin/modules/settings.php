@@ -41,6 +41,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_settings'])) {
     redirect('index.php?p=Settings');
 }
 
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_email'])) {
+    $new_email    = trim(sanitize($_POST['new_email'] ?? ''));
+    $current_pass = $_POST['current_password'] ?? '';
+
+    $admin_id = $_SESSION['admin_user']['id'];
+    $admin = db_fetch("SELECT email, password_hash FROM users WHERE id = ?", [$admin_id]);
+    $taken = db_fetch("SELECT id FROM users WHERE LOWER(email) = LOWER(?) AND id != ?", [$new_email, $admin_id]);
+
+    if (!password_verify($current_pass, $admin['password_hash'])) {
+        set_flash('danger', 'Mevcut şifreniz hatalı!');
+    } elseif (!filter_var($new_email, FILTER_VALIDATE_EMAIL)) {
+        set_flash('danger', 'Lütfen geçerli bir e-posta adresi girin.');
+    } elseif ($taken) {
+        set_flash('danger', 'Bu e-posta adresi başka bir hesapta (ör. bir müşteride) kayıtlı.');
+    } else {
+        db_query("UPDATE users SET email = ? WHERE id = ?", [$new_email, $admin_id]);
+        $_SESSION['admin_user']['email'] = $new_email;
+        log_action('Giriş E-postası Değiştirildi', 'Settings', $admin_id, "{$admin['email']} → {$new_email}");
+        set_flash('success', 'Giriş e-postanız güncellendi. Bir sonraki girişte ' . $new_email . ' adresini kullanın.');
+    }
+    redirect('index.php?p=Settings');
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_password'])) {
     $current_pass = $_POST['current_password'] ?? '';
     $new_pass     = $_POST['new_password'] ?? '';
@@ -249,6 +272,40 @@ foreach ($setting_rows as $row) {
 
                     <button type="submit" class="btn btn-dark w-100 font-semibold py-2">
                         <i class="bi bi-key-fill me-1"></i> Şifreyi Güncelle
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <?php $admin_email = db_fetch("SELECT email FROM users WHERE id = ?", [$_SESSION['admin_user']['id']])['email'] ?? ''; ?>
+        <div class="card border-0 shadow-sm rounded-4 mt-4">
+            <div class="card-header bg-white border-bottom p-4">
+                <h5 class="fw-bold mb-0 text-dark"><i class="bi bi-envelope-at text-danger me-2"></i> Giriş E-postası</h5>
+            </div>
+            <div class="card-body p-4">
+                <?php if ($admin_email === 'admin@yeniceri.com'): ?>
+                    <div class="alert alert-warning fs-8 py-2">Hâlâ kurulumdaki varsayılan adresi kullanıyorsunuz. Bu adres herkese açık kaynak kodunda yazdığı için kendi e-postanızla değiştirmeniz önerilir.</div>
+                <?php endif; ?>
+                <form method="POST" action="">
+                    <input type="hidden" name="change_email" value="1">
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold fs-7">Mevcut Giriş E-postası</label>
+                        <input type="text" class="form-control bg-light" value="<?= e($admin_email) ?>" disabled>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold fs-7">Yeni E-posta</label>
+                        <input type="email" name="new_email" class="form-control" required>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold fs-7">Mevcut Şifreniz</label>
+                        <input type="password" name="current_password" class="form-control" autocomplete="current-password" required>
+                    </div>
+
+                    <button type="submit" class="btn btn-dark w-100 font-semibold py-2">
+                        <i class="bi bi-envelope-check me-1"></i> E-postayı Güncelle
                     </button>
                 </form>
             </div>

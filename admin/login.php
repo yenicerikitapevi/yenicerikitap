@@ -12,7 +12,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $password = $_POST['password'] ?? '';
 
     if (!empty($email) && !empty($password)) {
-        $user = db_fetch("SELECT * FROM users WHERE email = ? AND role = 'admin' AND status = 'active'", [$email]);
+        $user = db_fetch("SELECT * FROM users WHERE LOWER(email) = LOWER(?) AND role = 'admin' AND status = 'active'", [$email]);
         
         if ($user && password_verify($password, $user['password_hash'])) {
             session_regenerate_id(true); // oturum sabitleme (session fixation) saldırısına karşı
@@ -78,7 +78,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <label class="form-label fw-semibold fs-7 text-secondary">E-Posta Adresi</label>
                 <div class="input-group">
                     <span class="input-group-text bg-light border-end-0"><i class="bi bi-envelope"></i></span>
-                    <input type="email" name="email" class="form-control bg-light border-start-0" placeholder="admin@yeniceri.com" required>
+                    <input type="email" name="email" class="form-control bg-light border-start-0" placeholder="E-posta adresiniz" autocomplete="username" required>
                 </div>
             </div>
 
