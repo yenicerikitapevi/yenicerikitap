@@ -1,0 +1,6 @@
+# PHP dosyalarına tarayıcıdan doğrudan erişimi kapat (js dosyaları açık kalır)
+<IfModule mod_authz_core.c>
+<FilesMatch "\.php$">
+Require all denied
+</FilesMatch>
+</IfModule>

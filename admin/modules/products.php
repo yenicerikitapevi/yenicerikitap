@@ -402,6 +402,9 @@ if (($action === 'add' || $action === 'edit') && $edit_id > 0) {
                     select.addEventListener('change', update);
                 });
             </script>
+            <?php if ($action === 'add'): ?>
+                <script src="isbn_helper/isbn-helper.js?v=1" defer></script>
+            <?php endif; ?>
         </div>
     </div>
 
