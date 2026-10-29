@@ -2,8 +2,9 @@ FROM php:8.2-apache
 
 # Install SQLite and PDO extensions
 RUN apt-get update && apt-get install -y \
-    libsqlite3-dev \
-    && docker-php-ext-install pdo pdo_sqlite pdo_mysql \
+    libsqlite3-dev libpng-dev libjpeg62-turbo-dev libwebp-dev \
+    && docker-php-ext-configure gd --with-jpeg --with-webp \
+    && docker-php-ext-install pdo pdo_sqlite pdo_mysql gd exif \
     && a2enmod rewrite \
     && sed -i '/<Directory \/var\/www\/>/,/<\/Directory>/ s/AllowOverride None/AllowOverride All/' /etc/apache2/apache2.conf
 
