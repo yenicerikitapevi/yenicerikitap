@@ -6,7 +6,13 @@ require_once __DIR__ . '/config.php';
 
 $name = basename($_GET['f'] ?? '');
 $path = UPLOAD_DIR . '/' . $name;
-$types = ['jpg' => 'image/jpeg', 'png' => 'image/png', 'webp' => 'image/webp'];
+$types = [
+    'jpg'  => 'image/jpeg',
+    'jpeg' => 'image/jpeg',
+    'png'  => 'image/png',
+    'webp' => 'image/webp',
+    'gif'  => 'image/gif'
+];
 $ext = strtolower(pathinfo($name, PATHINFO_EXTENSION));
 
 if ($name === '' || !isset($types[$ext]) || !is_file($path)) {

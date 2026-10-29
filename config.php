@@ -74,11 +74,97 @@ if (DB_DRIVER === 'sqlite') {
     }
 }
 
-// Mevcut veritabanlarına sonradan eklenen tablolar (ilk kurulumdan sonra eklenen özellikler için)
+// Mevcut veritabanlarına sonradan eklenen tablolar ve sahaf/NadirKitap + Alt Dükkan sütunları
 if ($pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite') {
     $pdo->exec("CREATE TABLE IF NOT EXISTS contact_messages (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, email TEXT, subject TEXT, message TEXT, is_read INTEGER DEFAULT 0, ip_address TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP);");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS stores (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, slug TEXT UNIQUE, username TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL, plain_hint TEXT, nadirkitap_code TEXT, nadirkitap_url TEXT, city TEXT, phone TEXT, description TEXT, logo TEXT, is_active INTEGER DEFAULT 1, created_at DATETIME DEFAULT CURRENT_TIMESTAMP);");
+    $existing_cols = array_column($pdo->query("PRAGMA table_info(books)")->fetchAll(), 'name');
+    $nk_cols = [
+        'store_id'        => 'INTEGER DEFAULT NULL',
+        'nadirkitap_code' => 'TEXT',
+        'shelf_code'      => 'TEXT',
+        'condition_text'  => 'TEXT',
+        'cover_type'      => 'TEXT',
+        'dimensions'      => 'TEXT',
+        'language'        => 'TEXT',
+        'translator'      => 'TEXT',
+        'publish_place'   => 'TEXT',
+        'extra_images'    => 'TEXT',
+        'source_url'      => 'TEXT'
+    ];
+    foreach ($nk_cols as $col_name => $col_type) {
+        if (!in_array($col_name, $existing_cols, true)) {
+            $pdo->exec("ALTER TABLE books ADD COLUMN {$col_name} {$col_type};");
+        }
+    }
+    $pdo->exec("CREATE INDEX IF NOT EXISTS idx_books_nk_code ON books(nadirkitap_code);");
+    $pdo->exec("CREATE INDEX IF NOT EXISTS idx_books_store_id ON books(store_id);");
 } else {
     $pdo->exec("CREATE TABLE IF NOT EXISTS contact_messages (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(255), email VARCHAR(255), subject VARCHAR(255), message TEXT, is_read TINYINT DEFAULT 0, ip_address VARCHAR(64), created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS stores (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(180) NOT NULL, slug VARCHAR(180) UNIQUE, username VARCHAR(100) UNIQUE NOT NULL, password_hash VARCHAR(255) NOT NULL, plain_hint VARCHAR(120) NULL, nadirkitap_code VARCHAR(64) NULL, nadirkitap_url VARCHAR(255) NULL, city VARCHAR(100) NULL, phone VARCHAR(60) NULL, description TEXT NULL, logo VARCHAR(255) NULL, is_active TINYINT DEFAULT 1, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;");
+    $existing_cols = array_column($pdo->query("SHOW COLUMNS FROM books")->fetchAll(), 'Field');
+    $nk_cols = [
+        'store_id'        => 'INT NULL',
+        'nadirkitap_code' => 'VARCHAR(64) NULL',
+        'shelf_code'      => 'VARCHAR(100) NULL',
+        'condition_text'  => 'VARCHAR(100) NULL',
+        'cover_type'      => 'VARCHAR(100) NULL',
+        'dimensions'      => 'VARCHAR(60) NULL',
+        'language'        => 'VARCHAR(60) NULL',
+        'translator'      => 'VARCHAR(150) NULL',
+        'publish_place'   => 'VARCHAR(100) NULL',
+        'extra_images'    => 'TEXT NULL',
+        'source_url'      => 'TEXT NULL'
+    ];
+    foreach ($nk_cols as $col_name => $col_type) {
+        if (!in_array($col_name, $existing_cols, true)) {
+            $pdo->exec("ALTER TABLE books ADD COLUMN {$col_name} {$col_type};");
+        }
+    }
+}
+
+// Varsayılan ilk Alt Dükkan (Umay Sahaf) kaydı yoksa otomatik oluştur
+try {
+    $store_cnt = (int)($pdo->query("SELECT COUNT(*) FROM stores")->fetchColumn() ?: 0);
+    if ($store_cnt === 0) {
+        $default_pass_plain = 'umay348635';
+        $default_pass_hash  = password_hash($default_pass_plain, PASSWORD_DEFAULT);
+        $stmt_seed = $pdo->prepare("INSERT INTO stores (name, slug, username, password_hash, plain_hint, nadirkitap_code, nadirkitap_url, city, description, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)");
+        $stmt_seed->execute([
+            'Umay Sahaf',
+            'umay-sahaf',
+            'umaysahaf',
+            $default_pass_hash,
+            $default_pass_plain,
+            '348635',
+            'https://www.nadirkitap.com/umay-sahaf-sahaf348635.html',
+            'Ankara',
+            'Umay Sahaf - Nadir ve İkinci El Kitap Koleksiyonu'
+        ]);
+    }
+} catch (Throwable $ignore_seed) {}
+
+/**
+ * NadirKitap mağaza bağlantısından (URL) veya metinden sayısal mağaza kodunu (ör. 348635) ayıklar
+ */
+function extract_nadirkitap_code($input) {
+    $raw = trim((string)$input);
+    if ($raw === '') {
+        return '';
+    }
+    if (preg_match('/^\d{3,12}$/', $raw)) {
+        return $raw;
+    }
+    if (preg_match('/(?:sahaf|satici=|store[_-]?code=)(\d{3,12})/i', $raw, $m)) {
+        return $m[1];
+    }
+    if (preg_match('/-(\d{4,12})\.html/i', $raw, $m)) {
+        return $m[1];
+    }
+    if (preg_match('/(\d{4,12})/', $raw, $m)) {
+        return $m[1];
+    }
+    return '';
 }
 
 /**
@@ -101,10 +187,14 @@ function setting($key, $default = '') {
 }
 
 /**
- * Kitap kapağının site köküne göre adresi: önce yüklenen dosyalar, sonra assets/images, yoksa varsayılan görsel
+ * Kitap kapağının site köküne göre adresi: önce harici URL, sonra yüklenen dosyalar, sonra assets/images, yoksa varsayılan görsel
  */
 function cover_url($cover) {
-    $cover = basename((string)$cover);
+    $raw = trim((string)$cover);
+    if (preg_match('#^https?://#i', $raw)) {
+        return $raw;
+    }
+    $cover = basename($raw);
     if ($cover !== '' && is_file(UPLOAD_DIR . '/' . $cover)) {
         return 'cover.php?f=' . rawurlencode($cover);
     }

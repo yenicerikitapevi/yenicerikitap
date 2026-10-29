@@ -4,10 +4,11 @@ FROM php:8.2-apache
 RUN apt-get update && apt-get install -y \
     libsqlite3-dev \
     && docker-php-ext-install pdo pdo_sqlite pdo_mysql \
-    && a2enmod rewrite
+    && a2enmod rewrite \
+    && sed -i '/<Directory \/var\/www\/>/,/<\/Directory>/ s/AllowOverride None/AllowOverride All/' /etc/apache2/apache2.conf
 
-# Kapak resmi yüklemeleri için PHP dosya boyutu sınırları (uygulama 5 MB'a kadar kabul eder)
-RUN printf "upload_max_filesize=6M\npost_max_size=8M\n" > /usr/local/etc/php/conf.d/uploads.ini
+# Kapak resmi ve toplu kitap (kitApp) yüklemeleri için PHP boyut sınırları
+RUN printf "upload_max_filesize=64M\npost_max_size=64M\nmemory_limit=256M\nmax_execution_time=180\n" > /usr/local/etc/php/conf.d/uploads.ini
 
 # Copy project files
 COPY . /var/www/html/

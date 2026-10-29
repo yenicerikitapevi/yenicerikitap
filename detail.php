@@ -5,11 +5,12 @@
 require_once __DIR__ . '/config.php';
 
 $id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
-$book = db_fetch("SELECT b.*, a.name as author_name, a.bio as author_bio, p.name as publisher_name, c.name as category_name 
+$book = db_fetch("SELECT b.*, a.name as author_name, a.bio as author_bio, p.name as publisher_name, c.name as category_name, s.name as store_name, s.slug as store_slug 
                   FROM books b 
                   LEFT JOIN authors a ON b.author_id = a.id 
                   LEFT JOIN publishers p ON b.publisher_id = p.id 
                   LEFT JOIN categories c ON b.category_id = c.id 
+                  LEFT JOIN stores s ON b.store_id = s.id 
                   WHERE b.id = ? AND b.is_active = 1", [$id]);
 
 if (!$book) {
@@ -64,10 +65,29 @@ $img_src = cover_url($book['cover_image'] ?? '');
             </ol>
         </nav>
 
+        <?php
+        $gallery_images = [$img_src];
+        if (!empty($book['extra_images'])) {
+            $decoded_imgs = json_decode($book['extra_images'], true);
+            if (is_array($decoded_imgs)) {
+                $gallery_images = [];
+                foreach ($decoded_imgs as $g_img) {
+                    $gallery_images[] = cover_url($g_img);
+                }
+            }
+        }
+        ?>
         <div class="row g-5">
             <div class="col-md-5 col-lg-4">
                 <div class="bg-white p-4 rounded-4 shadow-sm text-center border">
-                    <img src="<?= e($img_src) ?>" alt="<?= e($book['title']) ?>" class="img-fluid rounded-3 shadow" style="max-height: 420px; object-fit: cover;" onerror="this.src='assets/images/book_placeholder.svg'">
+                    <img src="<?= e($img_src) ?>" id="mainBookCover" alt="<?= e($book['title']) ?>" class="img-fluid rounded-3 shadow" style="max-height: 420px; object-fit: cover;" onerror="this.src='assets/images/book_placeholder.svg'">
+                    <?php if (count($gallery_images) > 1): ?>
+                        <div class="d-flex justify-content-center gap-2 mt-3 flex-wrap">
+                            <?php foreach ($gallery_images as $g_url): ?>
+                                <img src="<?= e($g_url) ?>" alt="" class="rounded border p-1 bg-light" style="width: 58px; height: 76px; object-fit: cover; cursor: pointer;" onclick="document.getElementById('mainBookCover').src = this.src;">
+                            <?php endforeach; ?>
+                        </div>
+                    <?php endif; ?>
                 </div>
             </div>
 
@@ -79,6 +99,10 @@ $img_src = cover_url($book['cover_image'] ?? '');
                     Yazar: <a href="category.php?q=<?= urlencode($book['author_name']) ?>&type=author" class="fw-bold text-dark text-decoration-none"><?= e($book['author_name']) ?></a> 
                     <span class="mx-2">•</span> 
                     Yayınevi: <span class="fw-semibold text-secondary"><?= e($book['publisher_name']) ?></span>
+                    <?php if (!empty($book['store_name'])): ?>
+                        <span class="mx-2">•</span>
+                        Satıcı Dükkan: <a href="magaza.php?s=<?= urlencode($book['store_slug'] ?? '') ?>" class="badge bg-dark text-white text-decoration-none px-2 py-1"><i class="bi bi-shop text-danger me-1"></i><?= e($book['store_name']) ?></a>
+                    <?php endif; ?>
                 </div>
 
                 <div class="d-flex align-items-baseline gap-3 my-4 p-3 bg-white rounded-3 border d-inline-flex">
@@ -109,13 +133,35 @@ $img_src = cover_url($book['cover_image'] ?? '');
 
                 <div class="bg-white p-4 rounded-4 border shadow-sm mb-4">
                     <h5 class="fw-bold text-dark mb-3">Kitap Özeti & Künye</h5>
-                    <p class="text-secondary leading-relaxed mb-4"><?= nl2br(e($book['summary'])) ?></p>
+                    <?php if (!empty($book['summary'])): ?>
+                        <p class="text-secondary leading-relaxed mb-4"><?= nl2br(e($book['summary'])) ?></p>
+                    <?php endif; ?>
 
                     <div class="row g-3 fs-7 border-top pt-3">
-                        <div class="col-6 col-sm-3"><strong>ISBN:</strong> <?= e($book['isbn'] ?? '-') ?></div>
-                        <div class="col-6 col-sm-3"><strong>Sayfa Sayısı:</strong> <?= e($book['pages'] ?? '-') ?></div>
-                        <div class="col-6 col-sm-3"><strong>Basım Yılı:</strong> <?= e($book['year'] ?? '-') ?></div>
-                        <div class="col-6 col-sm-3"><strong>Orijinal Adı:</strong> <?= e($book['original_title'] ?? '-') ?></div>
+                        <div class="col-6 col-sm-3"><strong>ISBN:</strong> <?= e($book['isbn'] ?: '-') ?></div>
+                        <div class="col-6 col-sm-3"><strong>Sayfa Sayısı:</strong> <?= e($book['pages'] ?: '-') ?></div>
+                        <div class="col-6 col-sm-3"><strong>Basım Yılı:</strong> <?= e($book['year'] ?: '-') ?></div>
+                        <?php if (!empty($book['condition_text'])): ?>
+                            <div class="col-6 col-sm-3"><strong>Kondisyon:</strong> <?= e($book['condition_text']) ?></div>
+                        <?php endif; ?>
+                        <?php if (!empty($book['cover_type'])): ?>
+                            <div class="col-6 col-sm-3"><strong>Cilt Durumu:</strong> <?= e($book['cover_type']) ?></div>
+                        <?php endif; ?>
+                        <?php if (!empty($book['dimensions'])): ?>
+                            <div class="col-6 col-sm-3"><strong>Ebat:</strong> <?= e($book['dimensions']) ?></div>
+                        <?php endif; ?>
+                        <?php if (!empty($book['language'])): ?>
+                            <div class="col-6 col-sm-3"><strong>Dil:</strong> <?= e($book['language']) ?></div>
+                        <?php endif; ?>
+                        <?php if (!empty($book['translator'])): ?>
+                            <div class="col-6 col-sm-3"><strong>Çeviren / Haz.:</strong> <?= e($book['translator']) ?></div>
+                        <?php endif; ?>
+                        <?php if (!empty($book['publish_place'])): ?>
+                            <div class="col-6 col-sm-3"><strong>Yayın Yeri:</strong> <?= e($book['publish_place']) ?></div>
+                        <?php endif; ?>
+                        <?php if (!empty($book['original_title'])): ?>
+                            <div class="col-6 col-sm-3"><strong>Orijinal Adı:</strong> <?= e($book['original_title']) ?></div>
+                        <?php endif; ?>
                     </div>
                 </div>
 

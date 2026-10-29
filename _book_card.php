@@ -21,6 +21,13 @@ $img_src = cover_url($b['cover_image'] ?? '');
     </div>
 
     <div class="book-card-body">
+        <?php if (!empty($b['store_name'])): ?>
+            <div class="mb-1">
+                <a href="magaza.php?s=<?= urlencode($b['store_slug'] ?? '') ?>" class="badge bg-danger bg-opacity-10 text-danger text-decoration-none fs-8">
+                    <i class="bi bi-shop me-1"></i><?= e($b['store_name']) ?>
+                </a>
+            </div>
+        <?php endif; ?>
         <div class="book-author text-truncate"><?= e($b['author_name'] ?? 'Bilinmeyen Yazar') ?></div>
         <h6 class="book-title">
             <a href="detail.php?id=<?= $b['id'] ?>" class="text-dark text-decoration-none" title="<?= e($b['title']) ?>">

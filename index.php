@@ -15,11 +15,12 @@ $categories = db_fetch_all("SELECT * FROM categories ORDER BY name ASC");
 $showcases = db_fetch_all("SELECT * FROM showcases ORDER BY id ASC");
 $showcase_books = [];
 foreach ($showcases as $sc) {
-    $books = db_fetch_all("SELECT b.*, a.name as author_name, p.name as publisher_name 
+    $books = db_fetch_all("SELECT b.*, a.name as author_name, p.name as publisher_name, s.name as store_name, s.slug as store_slug 
                            FROM books b 
                            JOIN book_showcase bs ON b.id = bs.book_id 
                            LEFT JOIN authors a ON b.author_id = a.id 
                            LEFT JOIN publishers p ON b.publisher_id = p.id 
+                           LEFT JOIN stores s ON b.store_id = s.id 
                            WHERE bs.showcase_id = ? AND b.is_active = 1 
                            ORDER BY b.id DESC LIMIT 8", [$sc['id']]);
     $showcase_books[$sc['id']] = $books;
@@ -116,6 +117,9 @@ foreach ($collections as $col) {
             <ul class="nav">
                 <li class="nav-item">
                     <a class="nav-link active" href="index.php"><i class="bi bi-house-door-fill me-1"></i> Anasayfa</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link fw-bold" href="magaza.php"><i class="bi bi-shop me-1 text-danger"></i> Alt Dükkanlar (Sahaflar)</a>
                 </li>
                 <?php foreach ($categories as $cat): ?>
                     <li class="nav-item">

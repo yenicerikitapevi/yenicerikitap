@@ -10,7 +10,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_settings'])) {
         'site_whatsapp', 'site_address', 'shipping_free_limit', 
         'flat_shipping_cost', 'bank_name', 'bank_account_name', 'bank_iban',
         'company_legal_name', 'company_tax_office', 'company_tax_number', 'company_mersis',
-        'payment_merchant_id', 'payment_api_key', 'payment_merchant_salt', 'paytr_test_mode'
+        'payment_merchant_id', 'payment_api_key', 'payment_merchant_salt', 'paytr_test_mode',
+        'nk_store_code', 'nk_api_key'
     ];
     // Gizli anahtarlar sayfada gösterilmez; alan boş bırakılırsa kayıtlı değer korunur
     $secret_keys = ['payment_api_key', 'payment_merchant_salt'];

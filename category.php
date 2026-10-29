@@ -37,13 +37,26 @@ if (!empty($query)) {
 
 $where_sql = implode(' AND ', $where);
 
-$books = db_fetch_all("SELECT b.*, a.name as author_name, p.name as publisher_name, c.name as category_name 
+$page = max(1, (int)($_GET['page'] ?? 1));
+$per_page = 36;
+$total_books = (int)(db_fetch("SELECT COUNT(*) as cnt 
+                               FROM books b 
+                               LEFT JOIN authors a ON b.author_id = a.id 
+                               LEFT JOIN publishers p ON b.publisher_id = p.id 
+                               WHERE {$where_sql}", $params)['cnt'] ?? 0);
+$total_pages = max(1, (int)ceil($total_books / $per_page));
+if ($page > $total_pages) $page = $total_pages;
+$offset = ($page - 1) * $per_page;
+
+$books = db_fetch_all("SELECT b.*, a.name as author_name, p.name as publisher_name, c.name as category_name, s.name as store_name, s.slug as store_slug 
                        FROM books b 
                        LEFT JOIN authors a ON b.author_id = a.id 
                        LEFT JOIN publishers p ON b.publisher_id = p.id 
                        LEFT JOIN categories c ON b.category_id = c.id 
+                       LEFT JOIN stores s ON b.store_id = s.id 
                        WHERE {$where_sql} 
-                       ORDER BY b.id DESC", $params);
+                       ORDER BY b.id DESC 
+                       LIMIT {$per_page} OFFSET {$offset}", $params);
 
 $all_categories = db_fetch_all("SELECT * FROM categories ORDER BY name ASC");
 ?>
@@ -113,7 +126,7 @@ $all_categories = db_fetch_all("SELECT * FROM categories ORDER BY name ASC");
                             Kitap Kataloğu
                         <?php endif; ?>
                     </h4>
-                    <span class="badge bg-light text-dark border px-3 py-2 fs-7"><?= count($books) ?> Eser Bulundu</span>
+                    <span class="badge bg-light text-dark border px-3 py-2 fs-7"><?= $total_books ?> Eser Bulundu</span>
                 </div>
 
                 <?php if (empty($books)): ?>
@@ -131,6 +144,45 @@ $all_categories = db_fetch_all("SELECT * FROM categories ORDER BY name ASC");
                             </div>
                         <?php endforeach; ?>
                     </div>
+
+                    <?php if ($total_pages > 1): ?>
+                        <?php
+                        $base_params = $_GET;
+                        unset($base_params['page']);
+                        $build_page_url = function($p_num) use ($base_params) {
+                            $base_params['page'] = $p_num;
+                            return 'category.php?' . http_build_query($base_params);
+                        };
+                        ?>
+                        <nav aria-label="Sayfalama" class="mt-4 pt-3">
+                            <ul class="pagination justify-content-center flex-wrap gap-1">
+                                <li class="page-item <?= $page <= 1 ? 'disabled' : '' ?>">
+                                    <a class="page-link rounded-3 text-dark" href="<?= e($build_page_url($page - 1)) ?>">&laquo; Önceki</a>
+                                </li>
+                                <?php
+                                $start_p = max(1, $page - 3);
+                                $end_p = min($total_pages, $page + 3);
+                                if ($start_p > 1) {
+                                    echo '<li class="page-item"><a class="page-link rounded-3 text-dark" href="' . e($build_page_url(1)) . '">1</a></li>';
+                                    if ($start_p > 2) echo '<li class="page-item disabled"><span class="page-link border-0">...</span></li>';
+                                }
+                                for ($i = $start_p; $i <= $end_p; $i++):
+                                ?>
+                                    <li class="page-item <?= $i === $page ? 'active' : '' ?>">
+                                        <a class="page-link rounded-3 <?= $i === $page ? 'bg-danger border-danger text-white' : 'text-dark' ?>" href="<?= e($build_page_url($i)) ?>"><?= $i ?></a>
+                                    </li>
+                                <?php endfor;
+                                if ($end_p < $total_pages) {
+                                    if ($end_p < $total_pages - 1) echo '<li class="page-item disabled"><span class="page-link border-0">...</span></li>';
+                                    echo '<li class="page-item"><a class="page-link rounded-3 text-dark" href="' . e($build_page_url($total_pages)) . '">' . $total_pages . '</a></li>';
+                                }
+                                ?>
+                                <li class="page-item <?= $page >= $total_pages ? 'disabled' : '' ?>">
+                                    <a class="page-link rounded-3 text-dark" href="<?= e($build_page_url($page + 1)) ?>">Sonraki &raquo;</a>
+                                </li>
+                            </ul>
+                        </nav>
+                    <?php endif; ?>
                 <?php endif; ?>
             </div>
         </div>

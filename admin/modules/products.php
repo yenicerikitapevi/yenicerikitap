@@ -11,6 +11,7 @@ $authors = db_fetch_all("SELECT * FROM authors ORDER BY name ASC");
 $publishers = db_fetch_all("SELECT * FROM publishers ORDER BY name ASC");
 $categories = db_fetch_all("SELECT * FROM categories ORDER BY name ASC");
 $showcases = db_fetch_all("SELECT * FROM showcases ORDER BY id ASC");
+$stores_all = db_fetch_all("SELECT id, name FROM stores ORDER BY name ASC");
 
 /**
  * Formda "+ Yeni ... ekle" seçildiyse yazarı/yayınevini/kategoriyi oluşturur (aynı isim varsa onu kullanır); kaydın ID'sini döndürür
@@ -73,6 +74,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_book'])) {
     $pages          = !empty($_POST['pages']) ? (int)$_POST['pages'] : null;
     $year           = !empty($_POST['year']) ? (int)$_POST['year'] : null;
     $summary        = sanitize($_POST['summary'] ?? '');
+    $shelf_code     = sanitize($_POST['shelf_code'] ?? '') ?: null;
+    $condition_text = sanitize($_POST['condition_text'] ?? '') ?: null;
+    $cover_type     = sanitize($_POST['cover_type'] ?? '') ?: null;
+    $dimensions     = sanitize($_POST['dimensions'] ?? '') ?: null;
+    $language       = sanitize($_POST['language'] ?? '') ?: null;
+    $translator     = sanitize($_POST['translator'] ?? '') ?: null;
+    $publish_place  = sanitize($_POST['publish_place'] ?? '') ?: null;
+    $store_id       = !empty($_POST['store_id']) ? (int)$_POST['store_id'] : null;
     $is_active      = isset($_POST['is_active']) ? 1 : 0;
 
     if ($author_id <= 0 || $publisher_id <= 0 || $category_id <= 0) {
@@ -106,14 +115,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_book'])) {
     $selected_collections = $_POST['collections'] ?? [];
 
     if ($edit_id > 0) {
-        $sql = "UPDATE books SET title = ?, original_title = ?, isbn = ?, author_id = ?, publisher_id = ?, category_id = ?, price = ?, old_price = ?, stock = ?, pages = ?, year = ?, summary = ?, cover_image = ?, is_active = ? WHERE id = ?";
-        db_query($sql, [$title, $original_title, $isbn, $author_id, $publisher_id, $category_id, $price, $old_price, $stock, $pages, $year, $summary, $cover_image, $is_active, $edit_id]);
+        $sql = "UPDATE books SET title = ?, original_title = ?, isbn = ?, author_id = ?, publisher_id = ?, category_id = ?, price = ?, old_price = ?, stock = ?, pages = ?, year = ?, summary = ?, cover_image = ?, is_active = ?, store_id = ?, shelf_code = ?, condition_text = ?, cover_type = ?, dimensions = ?, language = ?, translator = ?, publish_place = ? WHERE id = ?";
+        db_query($sql, [$title, $original_title, $isbn, $author_id, $publisher_id, $category_id, $price, $old_price, $stock, $pages, $year, $summary, $cover_image, $is_active, $store_id, $shelf_code, $condition_text, $cover_type, $dimensions, $language, $translator, $publish_place, $edit_id]);
         $book_id = $edit_id;
         log_action('Kitap Düzenlendi', 'Products', $book_id, "Kitap güncellendi: {$title}");
         set_flash('success', 'Kitap bilgileri güncellendi.');
     } else {
-        $sql = "INSERT INTO books (title, original_title, isbn, author_id, publisher_id, category_id, price, old_price, stock, pages, year, summary, cover_image, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
-        db_query($sql, [$title, $original_title, $isbn, $author_id, $publisher_id, $category_id, $price, $old_price, $stock, $pages, $year, $summary, $cover_image, $is_active]);
+        $sql = "INSERT INTO books (title, original_title, isbn, author_id, publisher_id, category_id, price, old_price, stock, pages, year, summary, cover_image, is_active, store_id, shelf_code, condition_text, cover_type, dimensions, language, translator, publish_place) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        db_query($sql, [$title, $original_title, $isbn, $author_id, $publisher_id, $category_id, $price, $old_price, $stock, $pages, $year, $summary, $cover_image, $is_active, $store_id, $shelf_code, $condition_text, $cover_type, $dimensions, $language, $translator, $publish_place]);
         $book_id = db_last_id();
         log_action('Yeni Kitap Eklendi', 'Products', $book_id, "Yeni kitap oluşturuldu: {$title}");
         set_flash('success', 'Yeni kitap kataloğa eklendi.');
@@ -278,11 +287,58 @@ if (($action === 'add' || $action === 'edit') && $edit_id > 0) {
 
                     <div class="col-md-4">
                         <label class="form-label fw-semibold fs-7">Basım Yılı</label>
-                        <input type="number" name="year" class="form-control" value="<?= $book_data['year'] ?? date('Y') ?>">
+                        <input type="number" name="year" class="form-control" value="<?= $book_data['year'] ?? '' ?>">
+                    </div>
+
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold fs-7">Raf Kodu (Sadece Admin Görür)</label>
+                        <input type="text" name="shelf_code" class="form-control" placeholder="Örn: 29/4kara, j6" value="<?= e($book_data['shelf_code'] ?? '') ?>">
+                    </div>
+
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold fs-7">Kondisyon</label>
+                        <input type="text" name="condition_text" class="form-control" placeholder="Örn: Çok İyi, Yeni Gibi" value="<?= e($book_data['condition_text'] ?? '') ?>">
+                    </div>
+
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold fs-7">Cilt Durumu</label>
+                        <input type="text" name="cover_type" class="form-control" placeholder="Örn: Karton Kapak, Ciltli" value="<?= e($book_data['cover_type'] ?? '') ?>">
+                    </div>
+
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold fs-7">Ebat</label>
+                        <input type="text" name="dimensions" class="form-control" placeholder="Örn: 14 x 20 cm" value="<?= e($book_data['dimensions'] ?? '') ?>">
+                    </div>
+
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold fs-7">Dil</label>
+                        <input type="text" name="language" class="form-control" placeholder="Örn: Türkçe" value="<?= e($book_data['language'] ?? '') ?>">
+                    </div>
+
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold fs-7">Çeviren / Hazırlayan</label>
+                        <input type="text" name="translator" class="form-control" value="<?= e($book_data['translator'] ?? '') ?>">
+                    </div>
+
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold fs-7">Yayın Yeri</label>
+                        <input type="text" name="publish_place" class="form-control" value="<?= e($book_data['publish_place'] ?? '') ?>">
+                    </div>
+
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold fs-7">Alt Dükkan (Satıcı)</label>
+                        <select name="store_id" class="form-select">
+                            <option value="">-- Ana Mağaza (Yeniçeri Kitabevi) --</option>
+                            <?php foreach ($stores_all as $st): ?>
+                                <option value="<?= $st['id'] ?>" <?= ($book_data['store_id'] ?? 0) == $st['id'] ? 'selected' : '' ?>>
+                                    <?= e($st['name']) ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
                     </div>
 
                     <div class="col-md-12">
-                        <label class="form-label fw-semibold fs-7">Kitap Özeti</label>
+                        <label class="form-label fw-semibold fs-7">Kitap Özeti / Açıklama</label>
                         <textarea name="summary" class="form-control" rows="4"><?= e($book_data['summary'] ?? '') ?></textarea>
                     </div>
 
@@ -353,51 +409,77 @@ if (($action === 'add' || $action === 'edit') && $edit_id > 0) {
     <?php
     $search = sanitize($_GET['q'] ?? '');
     $cat_filter = isset($_GET['category_id']) ? (int)$_GET['category_id'] : 0;
+    $store_filter = isset($_GET['store_id']) ? (int)$_GET['store_id'] : 0;
 
     $where = ["1=1"];
     $params = [];
 
     if (!empty($search)) {
-        $where[] = "(b.title LIKE ? OR b.isbn LIKE ? OR a.name LIKE ? OR p.name LIKE ?)";
-        array_push($params, "%$search%", "%$search%", "%$search%", "%$search%");
+        $where[] = "(b.title LIKE ? OR b.isbn LIKE ? OR a.name LIKE ? OR p.name LIKE ? OR b.shelf_code LIKE ? OR b.nadirkitap_code LIKE ?)";
+        array_push($params, "%$search%", "%$search%", "%$search%", "%$search%", "%$search%", "%$search%");
     }
     if ($cat_filter > 0) {
         $where[] = "b.category_id = ?";
         $params[] = $cat_filter;
     }
+    if ($store_filter > 0) {
+        $where[] = "b.store_id = ?";
+        $params[] = $store_filter;
+    }
 
     $where_sql = implode(' AND ', $where);
 
-    $books_list = db_fetch_all("SELECT b.*, a.name as author_name, p.name as publisher_name, c.name as category_name 
+    $page = max(1, (int)($_GET['page'] ?? 1));
+    $per_page = 50;
+    $total_books = (int)(db_fetch("SELECT COUNT(*) as cnt 
+                                   FROM books b 
+                                   LEFT JOIN authors a ON b.author_id = a.id 
+                                   LEFT JOIN publishers p ON b.publisher_id = p.id 
+                                   WHERE {$where_sql}", $params)['cnt'] ?? 0);
+    $total_pages = max(1, (int)ceil($total_books / $per_page));
+    if ($page > $total_pages) $page = $total_pages;
+    $offset = ($page - 1) * $per_page;
+
+    $books_list = db_fetch_all("SELECT b.*, a.name as author_name, p.name as publisher_name, c.name as category_name, s.name as store_name, s.slug as store_slug 
                                 FROM books b 
                                 LEFT JOIN authors a ON b.author_id = a.id 
                                 LEFT JOIN publishers p ON b.publisher_id = p.id 
                                 LEFT JOIN categories c ON b.category_id = c.id 
+                                LEFT JOIN stores s ON b.store_id = s.id 
                                 WHERE {$where_sql}
-                                ORDER BY b.id DESC", $params);
+                                ORDER BY b.id DESC
+                                LIMIT {$per_page} OFFSET {$offset}", $params);
     ?>
 
     <div class="card border-0 shadow-sm rounded-4">
         <div class="card-header bg-white border-0 p-4">
             <form method="GET" action="" class="row g-2 align-items-center">
                 <input type="hidden" name="p" value="Products">
-                <div class="col-md-5">
+                <div class="col-md-4">
                     <div class="input-group">
                         <span class="input-group-text bg-light border-end-0"><i class="bi bi-search"></i></span>
-                        <input type="text" name="q" class="form-control bg-light border-start-0" placeholder="Kitap adı, ISBN, yazar veya yayınevi..." value="<?= e($search) ?>">
+                        <input type="text" name="q" class="form-control bg-light border-start-0" placeholder="Kitap adı, Raf Kodu, ISBN, NK kodu..." value="<?= e($search) ?>">
                     </div>
                 </div>
-                <div class="col-md-4">
+                <div class="col-md-3">
+                    <select name="store_id" class="form-select bg-light">
+                        <option value="0">Tüm Dükkanlar</option>
+                        <?php foreach ($stores_all as $st): ?>
+                            <option value="<?= $st['id'] ?>" <?= $store_filter == $st['id'] ? 'selected' : '' ?>>Alt Dükkan: <?= e($st['name']) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="col-md-3">
                     <select name="category_id" class="form-select bg-light">
-                        <option value="0">Tüm Kategoriler</option>
+                        <option value="0">Tüm Kategoriler (<?= $total_books ?> Eser)</option>
                         <?php foreach ($categories as $cat): ?>
                             <option value="<?= $cat['id'] ?>" <?= $cat_filter == $cat['id'] ? 'selected' : '' ?>><?= e($cat['name']) ?></option>
                         <?php endforeach; ?>
                     </select>
                 </div>
-                <div class="col-md-3 d-flex gap-2">
+                <div class="col-md-2 d-flex gap-2">
                     <button type="submit" class="btn btn-dark w-100 fw-semibold">Filtrele</button>
-                    <?php if (!empty($search) || $cat_filter > 0): ?>
+                    <?php if (!empty($search) || $cat_filter > 0 || $store_filter > 0): ?>
                         <a href="index.php?p=Products" class="btn btn-outline-secondary"><i class="bi bi-x-lg"></i></a>
                     <?php endif; ?>
                 </div>
@@ -412,7 +494,7 @@ if (($action === 'add' || $action === 'edit') && $edit_id > 0) {
                             <th class="ps-4">ID</th>
                             <th>Kitap Detayları</th>
                             <th>Yazar / Yayınevi</th>
-                            <th>Kategori</th>
+                            <th>Kategori / Raf</th>
                             <th>Fiyat</th>
                             <th>Stok</th>
                             <th>Durum</th>
@@ -433,7 +515,12 @@ if (($action === 'add' || $action === 'edit') && $edit_id > 0) {
                                             <img src="../<?= e(cover_url($b['cover_image'] ?? '')) ?>" alt="" style="width: 36px; height: 52px; object-fit: cover;" class="rounded border bg-white" loading="lazy">
                                             <div>
                                                 <div class="fw-bold text-dark fs-7"><?= e($b['title']) ?></div>
-                                                <small class="text-muted fs-8">ISBN: <?= e($b['isbn'] ?? '-') ?></small>
+                                                <small class="text-muted fs-8">
+                                                    ISBN: <?= e($b['isbn'] ?: '-') ?>
+                                                    <?php if (!empty($b['nadirkitap_code'])): ?>
+                                                        • NK: #<?= e($b['nadirkitap_code']) ?>
+                                                    <?php endif; ?>
+                                                </small>
                                             </div>
                                         </div>
                                     </td>
@@ -443,6 +530,12 @@ if (($action === 'add' || $action === 'edit') && $edit_id > 0) {
                                     </td>
                                     <td>
                                         <span class="badge bg-light text-dark border fs-8"><?= e($b['category_name']) ?></span>
+                                        <?php if (!empty($b['store_name'])): ?>
+                                            <div class="mt-1"><span class="badge bg-danger bg-opacity-10 text-danger fs-8"><i class="bi bi-shop me-1"></i><?= e($b['store_name']) ?></span></div>
+                                        <?php endif; ?>
+                                        <?php if (!empty($b['shelf_code'])): ?>
+                                            <div class="mt-1"><span class="badge bg-warning text-dark fs-8"><i class="bi bi-archive-fill me-1"></i>Raf: <?= e($b['shelf_code']) ?></span></div>
+                                        <?php endif; ?>
                                     </td>
                                     <td>
                                         <div class="fw-extrabold text-danger fs-7"><?= format_price($b['price']) ?></div>
@@ -475,6 +568,36 @@ if (($action === 'add' || $action === 'edit') && $edit_id > 0) {
                     </tbody>
                 </table>
             </div>
+            <?php if ($total_pages > 1): ?>
+                <?php
+                $base_params = $_GET;
+                unset($base_params['page']);
+                $build_p_url = function($p_num) use ($base_params) {
+                    $base_params['page'] = $p_num;
+                    return 'index.php?' . http_build_query($base_params);
+                };
+                ?>
+                <div class="p-3 border-top bg-light d-flex align-items-center justify-content-between flex-wrap gap-2">
+                    <small class="text-muted">Sayfa <?= $page ?> / <?= $total_pages ?> (Toplam <?= $total_books ?> kitap)</small>
+                    <ul class="pagination pagination-sm mb-0">
+                        <li class="page-item <?= $page <= 1 ? 'disabled' : '' ?>">
+                            <a class="page-link" href="<?= e($build_p_url($page - 1)) ?>">&laquo; Önceki</a>
+                        </li>
+                        <?php
+                        $sp = max(1, $page - 3);
+                        $ep = min($total_pages, $page + 3);
+                        for ($i = $sp; $i <= $ep; $i++):
+                        ?>
+                            <li class="page-item <?= $i === $page ? 'active' : '' ?>">
+                                <a class="page-link" href="<?= e($build_p_url($i)) ?>"><?= $i ?></a>
+                            </li>
+                        <?php endfor; ?>
+                        <li class="page-item <?= $page >= $total_pages ? 'disabled' : '' ?>">
+                            <a class="page-link" href="<?= e($build_p_url($page + 1)) ?>">Sonraki &raquo;</a>
+                        </li>
+                    </ul>
+                </div>
+            <?php endif; ?>
         </div>
     </div>
 <?php endif; ?>

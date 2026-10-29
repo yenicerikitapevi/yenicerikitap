@@ -9,6 +9,7 @@ ob_start();
 $allowed_pages = [
     'FrontPage'    => 'frontpage.php',
     'Products'     => 'products.php',
+    'Stores'       => 'stores.php',
     'Catalog'      => 'catalog.php',
     'Members'      => 'members.php',
     'Orders'       => 'orders.php',
@@ -67,6 +68,10 @@ $unread_messages = db_fetch("SELECT COUNT(*) as cnt FROM contact_messages WHERE 
                     <i class="bi bi-book"></i> Kitap Yönetimi
                 </a>
 
+                <a href="index.php?p=Stores" class="nav-link <?= $current_p === 'Stores' ? 'active' : '' ?>">
+                    <i class="bi bi-shop"></i> Alt Dükkanlar (Sahaflar)
+                </a>
+
                 <a href="index.php?p=Catalog" class="nav-link <?= $current_p === 'Catalog' ? 'active' : '' ?>">
                     <i class="bi bi-tags"></i> Yazar & Yayınevi
                 </a>
@@ -117,6 +122,7 @@ $unread_messages = db_fetch("SELECT COUNT(*) as cnt FROM contact_messages WHERE 
                         $titles = [
                             'FrontPage' => 'Genel Bakış & İstatistikler',
                             'Products' => 'Kitap & Katalog Yönetimi',
+                            'Stores' => 'Alt Dükkanlar & Satıcı Yönetimi',
                             'Members' => 'Müşteri & Üye Yönetimi',
                             'Orders' => 'Sipariş Operasyonları',
                             'Transactions' => 'Ödeme & Finans Takibi',
