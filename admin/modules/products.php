@@ -84,6 +84,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_book'])) {
     $store_id       = !empty($_POST['store_id']) ? (int)$_POST['store_id'] : null;
     $is_active      = isset($_POST['is_active']) ? 1 : 0;
 
+    // Alt dükkan (sahaf) kitaplarının fiyatını satıcı belirler; panelden düzenlenirken mevcut fiyat korunur
+    $locked_book = $edit_id > 0 ? db_fetch("SELECT price, old_price, store_id FROM books WHERE id = ?", [$edit_id]) : null;
+    if ($locked_book && !empty($locked_book['store_id'])) {
+        $price     = (float)$locked_book['price'];
+        $old_price = $locked_book['old_price'] !== null ? (float)$locked_book['old_price'] : null;
+    }
+
     if ($author_id <= 0 || $publisher_id <= 0 || $category_id <= 0) {
         set_flash('danger', 'Lütfen yazar, yayınevi ve kategori seçin ya da yeni adını yazın. Kitap kaydedilmedi.');
         redirect('index.php?p=Products&action=' . ($edit_id > 0 ? 'edit&id=' . $edit_id : 'add'));
@@ -145,12 +152,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_book'])) {
 }
 
 $book_data = null;
+$price_locked = false;
 $current_showcases = [];
 $current_collections = [];
 
 if (($action === 'add' || $action === 'edit') && $edit_id > 0) {
     $book_data = db_fetch("SELECT * FROM books WHERE id = ?", [$edit_id]);
     if ($book_data) {
+        $price_locked = !empty($book_data['store_id']);
         $sc_rows = db_fetch_all("SELECT showcase_id FROM book_showcase WHERE book_id = ?", [$edit_id]);
         $current_showcases = array_column($sc_rows, 'showcase_id');
 
@@ -266,13 +275,16 @@ if (($action === 'add' || $action === 'edit') && $edit_id > 0) {
                     </div>
 
                     <div class="col-md-4">
-                        <label class="form-label fw-semibold fs-7">Satış Fiyatı (TL) *</label>
-                        <input type="number" step="0.01" name="price" class="form-control" value="<?= $book_data['price'] ?? '' ?>" required>
+                        <label class="form-label fw-semibold fs-7">Satış Fiyatı (TL) *<?= $price_locked ? ' <i class="bi bi-lock-fill text-secondary"></i>' : '' ?></label>
+                        <input type="number" step="0.01" name="price" class="form-control" value="<?= $book_data['price'] ?? '' ?>" required <?= $price_locked ? 'readonly' : '' ?>>
+                        <?php if ($price_locked): ?>
+                            <small class="text-muted">Alt dükkan kitabı: fiyatı satıcı belirler, panelden değiştirilemez.</small>
+                        <?php endif; ?>
                     </div>
 
                     <div class="col-md-4">
-                        <label class="form-label fw-semibold fs-7">Eski Fiyat (İndirimsiz - TL)</label>
-                        <input type="number" step="0.01" name="old_price" class="form-control" value="<?= $book_data['old_price'] ?? '' ?>">
+                        <label class="form-label fw-semibold fs-7">Eski Fiyat (İndirimsiz - TL)<?= $price_locked ? ' <i class="bi bi-lock-fill text-secondary"></i>' : '' ?></label>
+                        <input type="number" step="0.01" name="old_price" class="form-control" value="<?= $book_data['old_price'] ?? '' ?>" <?= $price_locked ? 'readonly' : '' ?>>
                     </div>
 
                     <div class="col-md-4">
@@ -541,7 +553,7 @@ if (($action === 'add' || $action === 'edit') && $edit_id > 0) {
                                         <?php endif; ?>
                                     </td>
                                     <td>
-                                        <div class="fw-extrabold text-danger fs-7"><?= format_price($b['price']) ?></div>
+                                        <div class="fw-extrabold text-danger fs-7"><?= format_price($b['price']) ?><?php if (!empty($b['store_id'])): ?> <i class="bi bi-lock-fill text-secondary fs-8" title="Alt dükkan fiyatı, panelden değiştirilemez"></i><?php endif; ?></div>
                                     </td>
                                     <td>
                                         <?php if ($b['stock'] < 10): ?>
