@@ -265,6 +265,9 @@ $stores_list = db_fetch_all("SELECT s.*, (SELECT COUNT(*) FROM books b WHERE b.s
                                         <a href="../magaza.php?s=<?= urlencode($s['slug']) ?>" target="_blank" class="btn btn-sm btn-outline-dark me-1" title="Vitrin Sayfasını Gör">
                                             <i class="bi bi-shop"></i>
                                         </a>
+                                        <a href="index.php?p=Products&store_id=<?= $s['id'] ?>" class="btn btn-sm btn-outline-secondary me-1" title="Kitapları Görüntüle / Düzenle">
+                                            <i class="bi bi-book"></i>
+                                        </a>
                                         <a href="index.php?p=Stores&action=edit&id=<?= $s['id'] ?>" class="btn btn-sm btn-outline-primary me-1" title="Düzenle / Şifre Değiştir">
                                             <i class="bi bi-pencil-fill"></i>
                                         </a>
