@@ -18,6 +18,7 @@ if ($type === 'urun') {
 if ($type === 'sayfa') {
     $s = legacy_clean_slug($path);
     $map = [
+        'siparis-takip' => 'siparis-takip.php', 'kargo-takip' => 'siparis-takip.php', 'siparis-sorgula' => 'siparis-takip.php',
         'iletisim' => 'contact.php', 'bize-ulasin' => 'contact.php', 'adres' => 'contact.php', 'hakkimizda' => 'contact.php', 'hakkinda' => 'contact.php', 'subeler' => 'contact.php',
         'mesafeli' => 'legal.php?p=mesafeli-satis', 'satis-sozlesmesi' => 'legal.php?p=mesafeli-satis', 'sozlesme' => 'legal.php?p=mesafeli-satis',
         'on-bilgilendirme' => 'legal.php?p=on-bilgilendirme',

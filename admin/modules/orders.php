@@ -16,6 +16,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_order_status']
     $order_id = (int)$_POST['order_id'];
     $new_status = sanitize($_POST['status'] ?? '');
     $tracking_number = sanitize($_POST['tracking_number'] ?? '');
+    $carrier = array_key_exists($_POST['shipping_carrier'] ?? '', shipping_carriers()) ? $_POST['shipping_carrier'] : null;
+    $tracking_url = trim((string)($_POST['tracking_url'] ?? ''));
+    $tracking_url = preg_match('#^https://#i', $tracking_url) ? mb_substr($tracking_url, 0, 500, 'UTF-8') : null;
+    $send_ship_mail = !empty($_POST['send_ship_mail']);
 
     $ord = db_fetch("SELECT order_number, status FROM orders WHERE id = ?", [$order_id]);
     if ($ord && isset($order_statuses[$new_status])) {
@@ -35,10 +39,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_order_status']
             db_query("UPDATE transactions SET status = 'Onaylandı', gateway_response = 'Havale/EFT ödemesi yönetici tarafından onaylandı' WHERE order_id = ?", [$order_id]);
         }
 
-        db_query("UPDATE orders SET status = ?, tracking_number = ? WHERE id = ?", [$new_status, $tracking_number, $order_id]);
+        db_query("UPDATE orders SET status = ?, tracking_number = ?, shipping_carrier = ?, tracking_url = ?, shipped_at = CASE WHEN ? = 'Kargolandı' AND shipped_at IS NULL THEN ? ELSE shipped_at END WHERE id = ?",
+            [$new_status, $tracking_number, $carrier, $tracking_url, $new_status, date('Y-m-d H:i:s'), $order_id]);
         $pdo->commit();
-        log_action('Sipariş Durumu Güncellendi', 'Orders', $order_id, "Sipariş {$ord['order_number']} durumu '{$new_status}' olarak değiştirildi. Kargo Takip: {$tracking_number}");
-        set_flash('success', "Sipariş #{$ord['order_number']} durumu güncellendi.");
+        log_action('Sipariş Durumu Güncellendi', 'Orders', $order_id, "Sipariş {$ord['order_number']} durumu '{$new_status}' olarak değiştirildi. Kargo: " . (shipping_carriers()[$carrier]['name'] ?? '-') . " / {$tracking_number}");
+        $msg = "Sipariş #{$ord['order_number']} durumu güncellendi.";
+        // Kargolandı + takip numarası → müşteriye "kargoya verildi" e-postası (işaretliyse)
+        if ($send_ship_mail && $new_status === 'Kargolandı' && $tracking_number !== '') {
+            $sent = send_order_shipped($order_id, true);
+            $msg .= $sent ? ' Müşteriye kargo e-postası gönderildi.' : ' Kargo e-postası gönderilemedi (Site Ayarları → E-posta kaydını kontrol edin).';
+        }
+        if (!empty($_POST['resend_confirm_mail'])) {
+            mail_claim_release($order_id, 'mail_confirm_sent_at');
+            $resent = send_order_confirmation($order_id);
+            $msg .= $resent ? ' Sipariş e-postası müşteriye gönderildi.' : ' Sipariş e-postası gönderilemedi (Site Ayarları → E-posta kaydına bakın).';
+            if (!$resent) $sent = false;
+        }
+        set_flash(($send_ship_mail && $new_status === 'Kargolandı' && $tracking_number !== '' && empty($sent)) || (isset($resent) && !$resent) ? 'warning' : 'success', $msg);
     }
     redirect('index.php?p=Orders');
 }
@@ -122,7 +139,13 @@ $orders = db_fetch_all("SELECT o.*, u.name as customer_name, u.email as customer
                                     </span>
                                 </td>
                                 <td>
-                                    <small class="fw-mono text-secondary"><?= e($o['tracking_number'] ?? 'Girilmedi') ?></small>
+                                    <?php if (!empty($o['tracking_number'])): ?>
+                                        <small class="fw-mono text-secondary d-block"><?= e($o['tracking_number']) ?></small>
+                                        <small class="text-muted fs-8"><?= e(order_carrier_name($o)) ?><?= !empty($o['mail_shipped_sent_at']) ? ' • <i class="bi bi-envelope-check text-success" title="Kargo e-postası gönderildi"></i>' : '' ?></small>
+                                    <?php else: ?>
+                                        <small class="text-muted">Girilmedi</small>
+                                    <?php endif; ?>
+                                    <?php if (!empty($o['mail_confirm_sent_at'])): ?><div class="fs-8 text-success"><i class="bi bi-envelope-check me-1"></i>Sipariş e-postası gitti</div><?php endif; ?>
                                 </td>
                                 <td class="text-end pe-4">
                                     <button class="btn btn-sm btn-outline-danger me-1" data-bs-toggle="modal" data-bs-target="#orderModal_<?= $o['id'] ?>">
@@ -155,9 +178,32 @@ $orders = db_fetch_all("SELECT o.*, u.name as customer_name, u.email as customer
                                                     </select>
                                                 </div>
 
-                                                <div class="mb-3">
-                                                    <label class="form-label fw-semibold fs-7">Kargo Takip Numarası</label>
-                                                    <input type="text" name="tracking_number" class="form-control" value="<?= e($o['tracking_number'] ?? '') ?>" placeholder="Örn: TR9988776655">
+                                                <div class="row g-2 mb-3">
+                                                    <div class="col-sm-5">
+                                                        <label class="form-label fw-semibold fs-7">Kargo Firması</label>
+                                                        <select name="shipping_carrier" class="form-select">
+                                                            <option value="">— Seçin —</option>
+                                                            <?php foreach (shipping_carriers() as $ck => $cv): ?>
+                                                                <option value="<?= $ck ?>" <?= ($o['shipping_carrier'] ?? '') === $ck ? 'selected' : '' ?>><?= e($cv['name']) ?></option>
+                                                            <?php endforeach; ?>
+                                                        </select>
+                                                    </div>
+                                                    <div class="col-sm-7">
+                                                        <label class="form-label fw-semibold fs-7">Kargo Takip Numarası</label>
+                                                        <input type="text" name="tracking_number" class="form-control" value="<?= e($o['tracking_number'] ?? '') ?>" placeholder="Örn: 123456789012">
+                                                    </div>
+                                                    <div class="col-12">
+                                                        <input type="url" name="tracking_url" class="form-control form-control-sm" value="<?= e($o['tracking_url'] ?? '') ?>" placeholder="İsteğe bağlı: kargo firmasının tam takip bağlantısı (https://...)">
+                                                        <div class="form-text fs-8">Boş bırakılırsa firmaya göre otomatik oluşturulur. Müşteri bunu Sipariş Takip sayfasında ve e-postada görür.</div>
+                                                    </div>
+                                                </div>
+                                                <div class="form-check mb-2">
+                                                    <input class="form-check-input" type="checkbox" name="resend_confirm_mail" value="1" id="confMail_<?= $o['id'] ?>">
+                                                    <label class="form-check-label fs-7" for="confMail_<?= $o['id'] ?>">"Siparişiniz alındı" e-postasını <?= !empty($o['mail_confirm_sent_at']) ? 'tekrar ' : '' ?>gönder<?= empty($o['mail_confirm_sent_at']) ? ' <span class="text-danger">(henüz gönderilmedi)</span>' : '' ?></label>
+                                                </div>
+                                                <div class="form-check mb-3">
+                                                    <input class="form-check-input" type="checkbox" name="send_ship_mail" value="1" id="shipMail_<?= $o['id'] ?>" <?= empty($o['mail_shipped_sent_at']) ? 'checked' : '' ?>>
+                                                    <label class="form-check-label fs-7" for="shipMail_<?= $o['id'] ?>">Durum <b>Kargolandı</b> ise müşteriye "kargoya verildi" e-postası gönder<?= !empty($o['mail_shipped_sent_at']) ? ' <span class="text-muted">(daha önce gönderildi: ' . e(date('d.m.Y H:i', strtotime($o['mail_shipped_sent_at']))) . ')</span>' : '' ?></label>
                                                 </div>
 
                                                 <?php if ($o['status'] === 'Ödeme Bekliyor' && $o['payment_method'] === 'Kredi Kartı'): ?>
