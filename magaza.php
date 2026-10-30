@@ -112,6 +112,11 @@ track_view('store', null, $store['id'] ?? null);
             <div class="d-flex gap-3">
                 <a href="magaza.php" class="text-white text-decoration-none"><i class="bi bi-grid me-1"></i> Tüm Alt Dükkanlar</a>
                 <a href="index.php" class="text-white text-decoration-none"><i class="bi bi-house-door me-1"></i> Anasayfa</a>
+                <?php if (isset($_SESSION['store_user'])): ?>
+                    <a href="satici/" class="text-warning text-decoration-none fw-semibold"><i class="bi bi-shop me-1"></i> Sahaf Paneli</a>
+                <?php else: ?>
+                    <a href="satici/login.php" class="text-warning text-decoration-none fw-semibold"><i class="bi bi-person-badge me-1"></i> Sahaf Girişi</a>
+                <?php endif; ?>
             </div>
         </div>
     </div>
