@@ -49,7 +49,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <div class="text-center mb-4">
             <img src="../assets/images/logo_horizontal.png" alt="Yeniçeri Kitabevi" style="height: 44px; object-fit: contain;" class="mb-3">
             <h5 class="fw-bold text-dark mb-1">Satıcı Paneli</h5>
-            <p class="text-muted fs-7 mb-0">Dükkânınızın ziyaret ve satış raporları</p>
+            <p class="text-muted fs-7 mb-0">Dükkânınız, kitaplarınız ve satış raporlarınız</p>
         </div>
         <?php if ($error): ?>
             <div class="alert alert-danger fs-7 py-2"><?= e($error) ?></div>
