@@ -19,6 +19,7 @@ $allowed_pages = [
     'Messages'     => 'messages.php',
     'ActionLogs'   => 'actionlogs.php',
     'DataQuality'  => 'dataquality.php',
+    'Cleanup'      => 'cleanup.php',
     'Settings'     => 'settings.php'
 ];
 
@@ -110,6 +111,10 @@ $unread_messages = db_fetch("SELECT COUNT(*) as cnt FROM contact_messages WHERE 
                     <i class="bi bi-clipboard2-check"></i> Veri Kontrolü
                 </a>
 
+                <a href="index.php?p=Cleanup" class="nav-link <?= $current_p === 'Cleanup' ? 'active' : '' ?>">
+                    <i class="bi bi-trash3"></i> Örnek Veri Temizliği
+                </a>
+
                 <a href="index.php?p=ActionLogs" class="nav-link <?= $current_p === 'ActionLogs' ? 'active' : '' ?>">
                     <i class="bi bi-journal-text"></i> İşlem Logları
                 </a>
@@ -146,6 +151,7 @@ $unread_messages = db_fetch("SELECT COUNT(*) as cnt FROM contact_messages WHERE 
                             'Messages' => 'Gelen Mesajlar',
                             'ActionLogs' => 'Sistem ve Denetim Logları',
                             'DataQuality' => 'Veri Kontrolü (SEO)',
+                            'Cleanup' => 'Örnek Veri Temizliği',
                             'Settings' => 'Genel Site Ayarları'
                         ];
                         echo $titles[$current_p] ?? 'Yönetim Paneli';
