@@ -4,26 +4,45 @@
  */
 require_once __DIR__ . '/config.php';
 
-$id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
-$book = db_fetch("SELECT b.*, a.name as author_name, a.bio as author_bio, p.name as publisher_name, c.name as category_name, s.name as store_name, s.slug as store_slug 
+$book_sql = "SELECT b.*, a.name as author_name, a.bio as author_bio, a.slug as author_slug, p.name as publisher_name, c.name as category_name, c.slug as category_slug, s.name as store_name, s.slug as store_slug 
                   FROM books b 
                   LEFT JOIN authors a ON b.author_id = a.id 
                   LEFT JOIN publishers p ON b.publisher_id = p.id 
                   LEFT JOIN categories c ON b.category_id = c.id 
                   LEFT JOIN stores s ON b.store_id = s.id 
-                  WHERE b.id = ? AND b.is_active = 1", [$id]);
+                  WHERE b.is_active = 1 AND ";
+$slug = trim((string)($_GET['slug'] ?? ''));
+$id   = isset($_GET['id']) ? (int)$_GET['id'] : 0;
+$book = $slug !== '' ? db_fetch($book_sql . "b.slug = ?", [$slug]) : null;
 
+// Eski adresler kalıcı olarak okunabilir adrese gider: detail.php?id=13 ve değişmiş eski slug'lar
 if (!$book) {
-    header("Location: index.php");
+    $target = $slug !== '' ? slug_redirect_target('book', $slug) : ($id > 0 ? $id : null);
+    $old = $target ? db_fetch($book_sql . "b.id = ?", [$target]) : null;
+    if ($old) {
+        header('Location: ' . abs_url(book_path($old)), true, 301);
+        exit;
+    }
+    require __DIR__ . '/404.php';
     exit;
 }
+$id = (int)$book['id'];
 
 $related_books = db_fetch_all("SELECT b.*, a.name as author_name, p.name as publisher_name 
                                FROM books b 
                                LEFT JOIN authors a ON b.author_id = a.id 
                                LEFT JOIN publishers p ON b.publisher_id = p.id 
-                               WHERE b.category_id = ? AND b.id != ? AND b.is_active = 1 
-                               LIMIT 4", [$book['category_id'], $id]);
+                               WHERE b.category_id = ? AND b.id != ? AND b.author_id != ? AND b.is_active = 1 
+                               ORDER BY b.id DESC LIMIT 4", [$book['category_id'], $id, $book['author_id']]);
+// Aynı yazarın diğer kitapları (iç bağlantılar)
+$author_books = db_fetch_all("SELECT b.*, a.name as author_name, p.name as publisher_name 
+                               FROM books b 
+                               LEFT JOIN authors a ON b.author_id = a.id 
+                               LEFT JOIN publishers p ON b.publisher_id = p.id 
+                               WHERE b.author_id = ? AND b.id != ? AND b.is_active = 1 
+                               ORDER BY b.id DESC LIMIT 4", [$book['author_id'], $id]);
+
+$crumbs = [['Ana Sayfa', ''], [$book['category_name'] ?: 'Kitaplar', $book['category_slug'] && !is_numeric_category_name($book['category_name']) ? category_path(['id' => $book['category_id'], 'slug' => $book['category_slug']]) : 'category.php'], [$book['title'], null]];
 
 $img_src = cover_url($book['cover_image'] ?? '');
 track_view('detail', $book['id'], $book['store_id'] ?? null);
@@ -33,10 +52,18 @@ track_view('detail', $book['id'], $book['store_id'] ?? null);
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?= e($book['title']) ?> - <?= e($book['author_name']) ?> | Yeniçeri Kitabevi</title>
+    <?= seo_head([
+        'title'       => seo_title($book['title'], (string)$book['author_name']),
+        'description' => book_meta_description($book),
+        'canonical'   => book_path($book),
+        'image'       => cover_url($book['cover_image'] ?? ''),
+        'image_alt'   => cover_alt($book),
+        'type'        => 'product',
+        'jsonld'      => [jsonld_book($book), jsonld_breadcrumb($crumbs)],
+    ]) ?>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
-    <link rel="stylesheet" href="assets/css/style.css">
+    <link rel="stylesheet" href="<?= asset_v('assets/css/style.css') ?>">
 </head>
 <body>
     <div class="top-bar py-2 border-bottom border-dark">
@@ -58,13 +85,7 @@ track_view('detail', $book['id'], $book['store_id'] ?? null);
     </header>
 
     <div class="container py-5">
-        <nav aria-label="breadcrumb" class="mb-4">
-            <ol class="breadcrumb fs-7">
-                <li class="breadcrumb-item"><a href="index.php">Anasayfa</a></li>
-                <li class="breadcrumb-item"><a href="category.php?id=<?= $book['category_id'] ?>"><?= e($book['category_name']) ?></a></li>
-                <li class="breadcrumb-item active" aria-current="page"><?= e($book['title']) ?></li>
-            </ol>
-        </nav>
+        <div class="mb-4"><?= breadcrumb_html($crumbs) ?></div>
 
         <?php
         $gallery_images = [$img_src];
@@ -81,11 +102,11 @@ track_view('detail', $book['id'], $book['store_id'] ?? null);
         <div class="row g-5">
             <div class="col-md-5 col-lg-4">
                 <div class="bg-white p-4 rounded-4 shadow-sm text-center border">
-                    <img src="<?= e($img_src) ?>" id="mainBookCover" alt="<?= e($book['title']) ?>" class="img-fluid rounded-3 shadow" style="max-height: 420px; object-fit: cover;" onerror="this.src='assets/images/book_placeholder.svg'">
+                    <?= cover_picture($book['cover_image'] ?? '', cover_alt($book), 'img-fluid rounded-3 shadow', 400, 600, false, 'id="mainBookCover" style="max-height: 420px; width: auto; object-fit: cover;" onerror="this.src=\'/assets/images/book_placeholder.svg\'"') ?>
                     <?php if (count($gallery_images) > 1): ?>
                         <div class="d-flex justify-content-center gap-2 mt-3 flex-wrap">
                             <?php foreach ($gallery_images as $g_url): ?>
-                                <img src="<?= e($g_url) ?>" alt="" class="rounded border p-1 bg-light" style="width: 58px; height: 76px; object-fit: cover; cursor: pointer;" onclick="document.getElementById('mainBookCover').src = this.src;">
+                                <img src="<?= e($g_url) ?>" alt="<?= e($book['title']) ?> - ek görsel" width="58" height="76" loading="lazy" class="rounded border p-1 bg-light" style="width: 58px; height: 76px; object-fit: cover; cursor: pointer;" onclick="var m = document.getElementById('mainBookCover'); m.src = this.src; if (m.parentNode.tagName === 'PICTURE') { m.parentNode.querySelector('source').srcset = this.src; }">
                             <?php endforeach; ?>
                         </div>
                     <?php endif; ?>
@@ -97,7 +118,7 @@ track_view('detail', $book['id'], $book['store_id'] ?? null);
                 <h1 class="fw-extrabold text-dark mb-2"><?= e($book['title']) ?></h1>
                 
                 <div class="fs-6 text-muted mb-3">
-                    Yazar: <a href="category.php?q=<?= urlencode($book['author_name']) ?>&type=author" class="fw-bold text-dark text-decoration-none"><?= e($book['author_name']) ?></a> 
+                    Yazar: <a href="<?= e(author_path(['slug' => $book['author_slug'], 'name' => $book['author_name']])) ?>" class="fw-bold text-dark text-decoration-none"><?= e($book['author_name']) ?></a> 
                     <span class="mx-2">•</span> 
                     Yayınevi: <span class="fw-semibold text-secondary"><?= e($book['publisher_name']) ?></span>
                     <?php if (!empty($book['store_name'])): ?>
@@ -178,9 +199,22 @@ track_view('detail', $book['id'], $book['store_id'] ?? null);
             </div>
         </div>
 
+        <?php if (!empty($author_books)): ?>
+            <div class="mt-5 pt-4 border-top">
+                <h2 class="section-title h3">Yazarın Diğer Kitapları: <a href="<?= e(author_path(['slug' => $book['author_slug'], 'name' => $book['author_name']])) ?>" class="text-danger text-decoration-none"><?= e($book['author_name']) ?></a></h2>
+                <div class="row g-3 row-cols-2 row-cols-md-4">
+                    <?php foreach ($author_books as $b): ?>
+                        <div class="col">
+                            <?php include __DIR__ . '/_book_card.php'; ?>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+        <?php endif; ?>
+
         <?php if (!empty($related_books)): ?>
             <div class="mt-5 pt-4 border-top">
-                <h3 class="section-title">Benzer Kitap Önerileri</h3>
+                <h2 class="section-title h3">Aynı Kategoriden Benzer Kitaplar</h2>
                 <div class="row g-3 row-cols-2 row-cols-md-4">
                     <?php foreach ($related_books as $b): ?>
                         <div class="col">
@@ -210,7 +244,7 @@ track_view('detail', $book['id'], $book['store_id'] ?? null);
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="assets/js/app.js"></script>
+    <script src="<?= asset_v('assets/js/app.js') ?>"></script>
     <?= track_script() ?>
 </body>
 </html>

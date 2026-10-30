@@ -5,8 +5,34 @@
 require_once __DIR__ . '/config.php';
 
 $cat_id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
+$slug   = trim((string)($_GET['slug'] ?? ''));
 $query  = sanitize($_GET['q'] ?? '');
 $type   = sanitize($_GET['type'] ?? 'all');
+$category = null;
+
+if ($slug !== '') {
+    $category = db_fetch("SELECT * FROM categories WHERE slug = ?", [$slug]);
+    if (!$category) {
+        // Eski / değişmiş kategori adresi: kategoriye, olmazsa kitaba, o da olmazsa ana sayfaya kalıcı yönlendirme
+        $target = legacy_find_category($slug);
+        if ($target) redirect_301(category_path($target));
+        $book_target = legacy_find_book($slug);
+        if ($book_target) redirect_301(book_path($book_target));
+        redirect_301('');
+    }
+    $cat_id = (int)$category['id'];
+} elseif ($cat_id > 0) {
+    $category = db_fetch("SELECT * FROM categories WHERE id = ?", [$cat_id]);
+    if (!$category) {
+        require __DIR__ . '/404.php';
+        exit;
+    }
+    if ($query === '') {
+        // category.php?id=5 → /kategori/roman (sayfa numarası korunur)
+        $page_q = (int)($_GET['page'] ?? 1) > 1 ? '?page=' . (int)$_GET['page'] : '';
+        redirect_301(category_path($category) . $page_q);
+    }
+}
 
 $where = ["b.is_active = 1"];
 $params = [];
@@ -66,10 +92,33 @@ track_view('category');
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Kitap Kataloğu | Yeniçeri Kitabevi</title>
+    <?php
+    $page_suffix = $page > 1 ? '?page=' . $page : '';
+    if ($query !== '') {
+        $head = ['title' => seo_title('"' . $query . '" Arama Sonuçları'), 'description' => seo_description('"' . $query . '" araması için ' . $total_books . ' kitap bulundu.'), 'canonical' => 'category.php?q=' . rawurlencode($query), 'robots' => 'noindex,follow'];
+        $crumbs = [['Ana Sayfa', ''], ['Arama: ' . $query, null]];
+    } elseif ($category) {
+        $cat_desc = trim((string)$category['meta_description']) !== '' ? $category['meta_description']
+            : (trim((string)$category['description']) !== '' ? $category['description'] : $category['name'] . ' kitapları: ' . $total_books . ' eser, en uygun fiyatlarla.');
+        $head = ['title' => seo_title($category['name'] . ' Kitapları'), 'description' => seo_description($cat_desc), 'canonical' => category_path($category) . $page_suffix];
+        if (is_numeric_category_name($category['name'])) $head['robots'] = 'noindex,follow';
+        $crumbs = [['Ana Sayfa', ''], [$category['name'], null]];
+    } else {
+        $head = ['title' => seo_title('Tüm Kitaplar' . ($page > 1 ? ' - Sayfa ' . $page : '')), 'description' => seo_description('Yeniçeri Kitabevi kitap kataloğu: roman, tarih, felsefe, dünya klasikleri ve çocuk kitapları dahil ' . $total_books . ' eser.'), 'canonical' => 'category.php' . $page_suffix];
+        $crumbs = [['Ana Sayfa', ''], ['Tüm Kitaplar', null]];
+    }
+    if ($category && $page > 1) $head['title'] = seo_title($category['name'] . ' Kitapları - Sayfa ' . $page);
+    $page_base = $query !== '' ? null : ($category ? category_path($category) : 'category.php');
+    if ($page_base !== null) {
+        if ($page > 1) $head['prev'] = $page_base . ($page > 2 ? '?page=' . ($page - 1) : '');
+        if ($page < $total_pages) $head['next'] = $page_base . '?page=' . ($page + 1);
+    }
+    $head['jsonld'] = [jsonld_breadcrumb($crumbs)];
+    echo seo_head($head);
+    ?>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
-    <link rel="stylesheet" href="assets/css/style.css">
+    <link rel="stylesheet" href="<?= asset_v('assets/css/style.css') ?>">
 </head>
 <body>
     <div class="top-bar py-2 border-bottom border-dark">
@@ -109,7 +158,7 @@ track_view('category');
                         <div class="list-group list-group-flush fs-7">
                             <a href="category.php" class="list-group-item px-0 py-1 border-0 text-decoration-none <?= $cat_id === 0 ? 'fw-bold text-danger' : 'text-dark' ?>">Tüm Kategoriler</a>
                             <?php foreach ($all_categories as $c): ?>
-                                <a href="category.php?id=<?= $c['id'] ?>" class="list-group-item px-0 py-1 border-0 text-decoration-none <?= $cat_id === $c['id'] ? 'fw-bold text-danger' : 'text-secondary' ?>">
+                                <a href="<?= e(category_path($c)) ?>" class="list-group-item px-0 py-1 border-0 text-decoration-none <?= $cat_id === $c['id'] ? 'fw-bold text-danger' : 'text-secondary' ?>">
                                     <?= e($c['name']) ?>
                                 </a>
                             <?php endforeach; ?>
@@ -119,16 +168,26 @@ track_view('category');
             </div>
 
             <div class="col-lg-9">
-                <div class="d-flex align-items-center justify-content-between mb-4">
-                    <h4 class="fw-extrabold text-dark mb-0">
+                <div class="mb-2"><?= breadcrumb_html($crumbs) ?></div>
+                <div class="d-flex align-items-center justify-content-between mb-3 gap-2 flex-wrap">
+                    <h1 class="h4 fw-extrabold text-dark mb-0">
                         <?php if (!empty($query)): ?>
                             "<?= e($query) ?>" Arama Sonuçları
+                        <?php elseif ($category): ?>
+                            <?= e($category['name']) ?> Kitapları
                         <?php else: ?>
-                            Kitap Kataloğu
+                            Tüm Kitaplar
                         <?php endif; ?>
-                    </h4>
+                    </h1>
                     <span class="badge bg-light text-dark border px-3 py-2 fs-7"><?= $total_books ?> Eser Bulundu</span>
                 </div>
+                <?php if ($category && trim((string)$category['description']) !== '' && $page === 1 && $query === ''): ?>
+                    <div class="bg-white border rounded-4 p-4 mb-4 fs-7 text-secondary category-intro">
+                        <?php foreach (preg_split('/\n\s*\n/', trim($category['description'])) as $para): ?>
+                            <p class="mb-2"><?= nl2br(e(trim($para))) ?></p>
+                        <?php endforeach; ?>
+                    </div>
+                <?php endif; ?>
 
                 <?php if (empty($books)): ?>
                     <div class="text-center py-5 bg-white rounded-4 border shadow-sm">
@@ -149,10 +208,11 @@ track_view('category');
                     <?php if ($total_pages > 1): ?>
                         <?php
                         $base_params = $_GET;
-                        unset($base_params['page']);
-                        $build_page_url = function($p_num) use ($base_params) {
-                            $base_params['page'] = $p_num;
-                            return 'category.php?' . http_build_query($base_params);
+                        unset($base_params['page'], $base_params['slug'], $base_params['id']);
+                        $page_path = $category && $query === '' ? category_path($category) : 'category.php';
+                        $build_page_url = function($p_num) use ($base_params, $page_path) {
+                            if ($p_num > 1) $base_params['page'] = $p_num;
+                            return $page_path . ($base_params ? '?' . http_build_query($base_params) : '');
                         };
                         ?>
                         <nav aria-label="Sayfalama" class="mt-4 pt-3">
@@ -207,7 +267,7 @@ track_view('category');
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="assets/js/app.js"></script>
+    <script src="<?= asset_v('assets/js/app.js') ?>"></script>
     <?= track_script() ?>
 </body>
 </html>

@@ -1,0 +1,70 @@
+# Yeniçeri Kitabevi — Apache yönlendirme ve önbellek ayarları
+# Geri almak için: bu dosyayı silmeniz yeterli (site eski ?id= adresleriyle çalışmaya devam eder).
+
+Options -Indexes -MultiViews
+DirectoryIndex index.php
+AddDefaultCharset UTF-8
+ErrorDocument 404 /404.php
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # 1) Tek adres: https://yenicerikitabevi.com (www ve http istekleri 301)
+    #    Cloudflare ziyaretçinin protokolünü CF-Visitor başlığında gönderir; yoksa X-Forwarded-Proto kullanılır.
+    #    Yalnızca kendi alan adımızda çalışır (localhost / onrender.com etkilenmez).
+    RewriteCond %{HTTP_HOST} ^www\.yenicerikitabevi\.com$ [NC]
+    RewriteRule ^ https://yenicerikitabevi.com%{REQUEST_URI} [R=301,L,NE]
+
+    RewriteCond %{HTTP_HOST} ^yenicerikitabevi\.com$ [NC]
+    RewriteCond %{HTTP:CF-Visitor} http.\}$
+    RewriteRule ^ https://yenicerikitabevi.com%{REQUEST_URI} [R=301,L,NE]
+
+    RewriteCond %{HTTP_HOST} ^yenicerikitabevi\.com$ [NC]
+    RewriteCond %{HTTP:CF-Visitor} ^$
+    RewriteCond %{HTTP:X-Forwarded-Proto} ^http$ [NC]
+    RewriteRule ^ https://yenicerikitabevi.com%{REQUEST_URI} [R=301,L,NE]
+
+    # 2) Site haritası
+    RewriteRule ^sitemap\.xml$ sitemap.php [L,QSA]
+    RewriteRule ^sitemap-(books|pages|categories|authors)(?:-(\d+))?\.xml$ sitemap.php?part=$1&n=$2 [L,QSA]
+
+    # 3) Okunabilir adresler
+    RewriteRule ^kitap/([^/]+)/?$ detail.php?slug=$1 [L,QSA,B]
+    RewriteRule ^kategori/(.+?)/?$ category.php?slug=$1 [L,QSA,B]
+    RewriteRule ^yazar/([^/]+)/?$ yazar.php?slug=$1 [L,QSA,B]
+
+    # 4) Eski site adresleri (Google'da kalanlar) → eşleştirilip 301
+    RewriteRule ^(urun|sayfa)(?:/(.*))?$ legacy.php?type=$1&path=$2 [L,QSA,B]
+    RewriteRule ^kategori/?$ category.php [L,QSA]
+</IfModule>
+
+# 5) Sıkıştırma
+<IfModule mod_deflate.c>
+    AddOutputFilterByType DEFLATE text/html text/plain text/css text/xml application/xml application/javascript application/json image/svg+xml
+</IfModule>
+
+# 6) Statik dosyalarda tarayıcı önbelleği (vitrin sayfaları CSS/JS'yi ?v= ile sürümler; panel sürümsüz kullandığı için 7 gün)
+<IfModule mod_expires.c>
+    ExpiresActive On
+    ExpiresByType text/css "access plus 7 days"
+    ExpiresByType application/javascript "access plus 7 days"
+    ExpiresByType image/png "access plus 30 days"
+    ExpiresByType image/jpeg "access plus 30 days"
+    ExpiresByType image/webp "access plus 30 days"
+    ExpiresByType image/svg+xml "access plus 30 days"
+    ExpiresByType image/x-icon "access plus 30 days"
+</IfModule>
+<IfModule mod_headers.c>
+    <FilesMatch "\.(css|js)$">
+        Header set Cache-Control "public, max-age=604800"
+    </FilesMatch>
+    <FilesMatch "\.(png|jpe?g|webp|svg|ico)$">
+        Header set Cache-Control "public, max-age=2592000"
+    </FilesMatch>
+    Header always set X-Content-Type-Options "nosniff"
+</IfModule>
+
+# Hassas dosyalar web'den okunamaz
+<FilesMatch "^(schema\.sql|render\.yaml|Dockerfile|vercel\.json|\.gitignore)$">
+    Require all denied
+</FilesMatch>

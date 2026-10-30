@@ -180,7 +180,7 @@ function book_meta_description($b) {
         return seo_description($b['meta_description']);
     }
     $parts = trim($b['title']) . (!empty($b['author_name']) ? ', ' . $b['author_name'] : '')
-        . (!empty($b['publisher_name']) ? ' - ' . $b['publisher_name'] . ' yayınları' : '')
+        . (!empty($b['publisher_name']) ? ' - ' . $b['publisher_name'] . (preg_match('/yay[ıi]n|kitap|press|basım/iu', $b['publisher_name']) ? '' : ' yayınları') : '')
         . ' ' . number_format((float)$b['price'], 2, ',', '.') . ' TL';
     $summary = trim((string)($b['summary'] ?? ''));
     if ($summary !== '') {
@@ -196,9 +196,11 @@ function book_meta_description($b) {
  */
 function seo_head(array $o) {
     $canonical = isset($o['canonical']) ? abs_url($o['canonical']) : null;
-    $image = abs_url($o['image'] ?? 'assets/images/logo_horizontal.png');
+    // Sosyal ağlar SVG göstermez: kapak yoksa (yer tutucu) logo kullanılır
+    $image = abs_url(empty($o['image']) || preg_match('/\.svg$/i', (string)$o['image']) ? 'assets/images/logo_horizontal.png' : $o['image']);
     $out = [];
     $out[] = '<base href="/">';
+    $out[] = '<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>';
     $out[] = '<title>' . e($o['title']) . '</title>';
     $out[] = '<meta name="description" content="' . e($o['description']) . '">';
     if (!empty($o['robots'])) {
@@ -310,4 +312,86 @@ function jsonld_book($b) {
         'seller' => ['@type' => 'Organization', 'name' => !empty($b['store_name']) ? $b['store_name'] : SEO_BRAND],
     ];
     return array_filter($data, function ($v) { return $v !== null && $v !== ''; });
+}
+
+// --- Eski adres eşleştirme (/urun/..., /kategori/..., /sayfa/...) ---
+/** Eski adres parçasından anlamlı slug: uzantı, "urun-123" gibi önek/sonek sayılar ve dolgu kelimeler atılır */
+function legacy_clean_slug($path) {
+    $s = preg_replace('/\.(html?|php|aspx?)$/i', '', rawurldecode((string)$path));
+    $s = slugify_tr(str_replace('/', ' ', $s));
+    $s = preg_replace('/(^|-)(urun|kitap|kategori|sayfa|detay|p|id)(?=-|$)/', '$1', $s);
+    $s = preg_replace('/^\d+-|-\d+$/', '', trim(preg_replace('/-+/', '-', $s), '-'));
+    $s = trim($s, '-');
+    return ctype_digit($s) ? '' : $s; // yalnızca sayı → ad yok (id olarak ayrıca denenir)
+}
+
+/** En benzer kaydı bul (benzerlik oranı ≥ $min); $rows: [id, slug] */
+function legacy_best_match(array $rows, $needle, $min = 0.72) {
+    $best = null;
+    $best_score = 0;
+    foreach ($rows as $r) {
+        $cand = (string)$r['slug'];
+        if ($cand === '') continue;
+        if ($cand === $needle) return $r;
+        similar_text($needle, $cand, $pct);
+        $score = $pct / 100;
+        // "calikusu" ↔ "calikusu-resat-nuri-guntekin": baştan eşleşme güçlü işarettir
+        if (strpos($cand, $needle . '-') === 0 || strpos($needle, $cand . '-') === 0) {
+            $score = max($score, 0.9);
+        }
+        if ($score > $best_score) {
+            $best_score = $score;
+            $best = $r;
+        }
+    }
+    return $best_score >= $min ? $best : null;
+}
+
+function legacy_find_book($path) {
+    $raw = rawurldecode((string)$path);
+    if (preg_match('/(?:^|[^0-9])(\d{1,7})(?:[^0-9]|$)/', $raw, $m) && ($b = db_fetch("SELECT id, slug FROM books WHERE id = ? AND is_active = 1", [(int)$m[1]]))) {
+        // Sayı + ad birlikte varsa adın da tutması beklenir; yalnızca sayıysa id kabul edilir
+        $slug = legacy_clean_slug($raw);
+        if ($slug === '' || legacy_best_match([$b], $slug, 0.5)) return $b;
+    }
+    $slug = legacy_clean_slug($raw);
+    if ($slug === '') return null;
+    if ($t = slug_redirect_target('book', $slug)) {
+        return db_fetch("SELECT id, slug FROM books WHERE id = ? AND is_active = 1", [$t]);
+    }
+    $first = explode('-', $slug)[0];
+    $rows = db_fetch_all("SELECT id, slug FROM books WHERE is_active = 1 AND slug LIKE ?", [$first . '%']);
+    return legacy_best_match($rows, $slug) ?: legacy_best_match(db_fetch_all("SELECT id, slug FROM books WHERE is_active = 1"), $slug, 0.8);
+}
+
+function legacy_find_category($path) {
+    $slug = legacy_clean_slug($path);
+    if ($slug === '') return null;
+    if ($t = slug_redirect_target('category', $slug)) {
+        return db_fetch("SELECT id, name, slug FROM categories WHERE id = ?", [$t]);
+    }
+    $rows = array_values(array_filter(db_fetch_all("SELECT id, name, slug FROM categories"), function ($c) { return !is_numeric_category_name($c['name']); }));
+    // Önce tüm adres, sonra her bölüm ("tarih/osmanli" → "tarih"), en son 4+ harfli kelimeler denenir
+    $tries = [$slug];
+    foreach (explode('/', rawurldecode((string)$path)) as $seg) {
+        $tries[] = legacy_clean_slug($seg);
+    }
+    foreach (explode('-', $slug) as $w) {
+        if (strlen($w) >= 4) $tries[] = $w;
+    }
+    foreach (array_unique(array_filter($tries)) as $try) {
+        foreach ($rows as $c) {
+            // "roman" → "edebiyat-roman": kelime olarak geçiyorsa yeterli
+            if ($c['slug'] === $try || in_array($try, explode('-', $c['slug']), true)) return $c;
+        }
+        if ($m = legacy_best_match($rows, $try, 0.75)) return $m;
+    }
+    return null;
+}
+
+/** Kalıcı yönlendirme ve çıkış */
+function redirect_301($path) {
+    header('Location: ' . abs_url($path), true, 301);
+    header('Cache-Control: public, max-age=86400');
+    exit;
 }

@@ -1,0 +1,16 @@
+# Yeniçeri Kitabevi
+User-agent: *
+Allow: /
+# Sepet, ödeme, hesap ve yönetim
+Disallow: /checkout.php
+Disallow: /cart_quote.php
+Disallow: /paytr_callback.php
+Disallow: /track.php
+Disallow: /admin/
+Disallow: /satici/
+Disallow: /api/
+# Site içi arama sonuçları
+Disallow: /*?q=
+Disallow: /*&q=
+
+Sitemap: https://yenicerikitabevi.com/sitemap.xml
