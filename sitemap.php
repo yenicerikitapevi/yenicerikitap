@@ -27,7 +27,7 @@ function sitemap_parts() {
     foreach (db_fetch_all("SELECT s.slug, MAX(COALESCE(b.updated_at, b.created_at)) as m FROM stores s JOIN books b ON b.store_id = s.id AND b.is_active = 1 WHERE s.is_active = 1 GROUP BY s.id, s.slug") as $s) {
         $parts['pages'][] = ['magaza.php?s=' . rawurlencode($s['slug']), $s['m']];
     }
-    foreach (['blog.php', 'contact.php', 'legal.php?p=teslimat-iade', 'legal.php?p=mesafeli-satis', 'legal.php?p=on-bilgilendirme', 'legal.php?p=kvkk', 'legal.php?p=gizlilik'] as $p) {
+    foreach (['contact.php', 'legal.php?p=teslimat-iade', 'legal.php?p=mesafeli-satis', 'legal.php?p=on-bilgilendirme', 'legal.php?p=kvkk', 'legal.php?p=gizlilik'] as $p) {
         $f = __DIR__ . '/' . strtok($p, '?');
         $parts['pages'][] = [$p, is_file($f) ? gmdate('Y-m-d H:i:s', filemtime($f)) : null];
     }

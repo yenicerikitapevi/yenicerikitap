@@ -37,6 +37,13 @@ foreach ($collections as $col) {
                              LIMIT 4", [$col['id']]);
     $collection_books[$col['id']] = $c_books;
 }
+// Sağdaki öne çıkan kitap: "Seçtiklerimiz" vitrininden, yoksa en yeni indirimli, yoksa en yeni kitap (sabit örnek metin yerine gerçek ürün)
+$featured_sql = "SELECT b.*, a.name as author_name FROM books b LEFT JOIN authors a ON a.id = b.author_id WHERE b.is_active = 1 AND b.stock > 0";
+$featured = db_fetch($featured_sql . " AND b.id IN (SELECT book_id FROM book_showcase WHERE showcase_id = 5) ORDER BY b.id DESC LIMIT 1")
+    ?: db_fetch($featured_sql . " AND b.old_price > b.price ORDER BY b.id DESC LIMIT 1")
+    ?: db_fetch($featured_sql . " ORDER BY b.id DESC LIMIT 1");
+// Kitabı olmayan koleksiyonlar gösterilmez
+$collections = array_values(array_filter($collections, function ($col) use ($collection_books) { return !empty($collection_books[$col['id']]); }));
 track_view('home');
 ?>
 <!DOCTYPE html>
@@ -134,9 +141,6 @@ track_view('home');
                     </li>
                 <?php endforeach; ?>
                 <li class="nav-item">
-                    <a class="nav-link" href="blog.php"><i class="bi bi-journal-text me-1 text-danger"></i> Edebiyat Blogu</a>
-                </li>
-                <li class="nav-item">
                     <a class="nav-link" href="contact.php"><i class="bi bi-envelope-fill me-1"></i> İletişim</a>
                 </li>
             </ul>
@@ -169,12 +173,25 @@ track_view('home');
                                 <span class="badge bg-danger text-white font-bold rounded-pill px-3 py-1">Günün Fırsatı</span>
                                 <i class="bi bi-clock-history fs-4 text-danger"></i>
                             </div>
-                            <h4 class="fw-bold mt-3 mb-2">Haftanın Seçilmiş Eseri</h4>
-                            <p class="fs-7 text-secondary">Nutuk (Özel Ciltli Edisyon) ve Satranç setlerinde kaçırılmayacak fiyat garantisi.</p>
+                            <?php if ($featured): ?>
+                                <h2 class="h4 fw-bold mt-3 mb-1">Haftanın Seçilmiş Eseri</h2>
+                                <a href="<?= e(book_path($featured)) ?>" class="text-white text-decoration-none d-block fw-semibold mb-1"><?= e($featured['title']) ?></a>
+                                <p class="fs-7 text-secondary mb-0"><?= e($featured['author_name'] ?? '') ?></p>
+                            <?php else: ?>
+                                <h2 class="h4 fw-bold mt-3 mb-2">Sahaflarımızı Keşfedin</h2>
+                                <p class="fs-7 text-secondary">İkinci el, nadir ve eski basım kitaplar sahaf vitrinlerinde.</p>
+                            <?php endif; ?>
                         </div>
                         <div class="pt-3 border-top border-secondary">
-                            <span class="fs-4 fw-extrabold text-danger">₺145,00</span>
-                            <span class="fs-7 text-muted text-decoration-line-through ms-2">₺220,00</span>
+                            <?php if ($featured): ?>
+                                <span class="fs-4 fw-extrabold text-danger"><?= format_price($featured['price']) ?></span>
+                                <?php if (!empty($featured['old_price']) && $featured['old_price'] > $featured['price']): ?>
+                                    <span class="fs-7 text-muted text-decoration-line-through ms-2"><?= format_price($featured['old_price']) ?></span>
+                                <?php endif; ?>
+                                <a href="<?= e(book_path($featured)) ?>" class="btn btn-sm btn-danger rounded-pill px-3 ms-2">İncele</a>
+                            <?php else: ?>
+                                <a href="magaza.php" class="btn btn-sm btn-danger rounded-pill px-3">Sahaflar</a>
+                            <?php endif; ?>
                         </div>
                     </div>
                 </div>
@@ -219,6 +236,7 @@ track_view('home');
     <?php endforeach; ?>
 
     <!-- 6. TEMATİK KOLEKSİYONLAR -->
+    <?php if ($collections): ?>
     <section class="py-5 bg-white border-top border-bottom">
         <div class="container">
             <div class="text-center max-w-xl mx-auto mb-5">
@@ -255,53 +273,7 @@ track_view('home');
         </div>
     </section>
 
-    <!-- 7. BLOG PREVIEW -->
-    <section class="py-5">
-        <div class="container">
-            <div class="d-flex align-items-center justify-content-between mb-4">
-                <div>
-                    <h3 class="section-title mb-0">Edebiyat & Kitap Önerileri</h3>
-                    <small class="text-muted">Editörlerimizden okuma listeleri ve yazar incelemeleri</small>
-                </div>
-                <a href="blog.php" class="btn btn-outline-dark rounded-pill px-3 font-semibold">Tüm Blog Yazıları</a>
-            </div>
-
-            <div class="row g-4">
-                <div class="col-md-4">
-                    <div class="card border-0 shadow-sm rounded-4 h-100">
-                        <div class="card-body p-4">
-                            <span class="badge bg-danger bg-opacity-10 text-danger mb-2">Okuma Listesi</span>
-                            <h5 class="fw-bold text-dark">Mustafa Kemal Atatürk’ün Başucundan Ayırmadığı 5 Kitap</h5>
-                            <p class="text-muted fs-7">Gazi’nin fikir dünyasını şekillendiren, Çalıkuşu’ndan Beyaz Zambaklar Ülkesinde’ye tarihi klasikler...</p>
-                            <a href="blog.php" class="fw-bold text-danger fs-7 text-decoration-none">Devamını Oku <i class="bi bi-arrow-right"></i></a>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="col-md-4">
-                    <div class="card border-0 shadow-sm rounded-4 h-100">
-                        <div class="card-body p-4">
-                            <span class="badge bg-dark text-white mb-2">Yazar İncelemesi</span>
-                            <h5 class="fw-bold text-dark">Stefan Zweig Psikolojisi ve İnsan Ruhunun Derinliği</h5>
-                            <p class="text-muted fs-7">Satranç ve Amok Koşucusu novellaları üzerinden Zweig’ın karakter analizleme ustalığı...</p>
-                            <a href="blog.php" class="fw-bold text-danger fs-7 text-decoration-none">Devamını Oku <i class="bi bi-arrow-right"></i></a>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="col-md-4">
-                    <div class="card border-0 shadow-sm rounded-4 h-100">
-                        <div class="card-body p-4">
-                            <span class="badge bg-danger text-white mb-2">Orta Dünya</span>
-                            <h5 class="fw-bold text-dark">J.R.R. Tolkien Kitapları Hangi Sırayla Okunmalı?</h5>
-                            <p class="text-muted fs-7">Hobbit, Yüzüklerin Efendisi ve Silmarillion okuma rehberi ve kronolojik sıra rehberi...</p>
-                            <a href="blog.php" class="fw-bold text-danger fs-7 text-decoration-none">Devamını Oku <i class="bi bi-arrow-right"></i></a>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </section>
+    <?php endif; ?>
 
     <!-- 8. FOOTER -->
     <footer>
@@ -324,7 +296,6 @@ track_view('home');
                     <ul class="list-unstyled fs-7">
                         <li class="mb-2"><a href="index.php">Anasayfa</a></li>
                         <li class="mb-2"><a href="category.php">Tüm Kitaplar</a></li>
-                        <li class="mb-2"><a href="blog.php">Edebiyat Blogu</a></li>
                         <li class="mb-2"><a href="contact.php">İletişim & Konum</a></li>
                     </ul>
                 </div>
