@@ -46,6 +46,19 @@ $book_count      = (int)(db_fetch("SELECT COUNT(*) as cnt FROM books WHERE store
         </div>
     </nav>
     <main class="container-xl pb-5">
+        <?php
+        $my_campaigns = array_filter(campaigns_active(), function ($c) use ($report_store_id) {
+            return in_array($c['scope_type'], ['all', 'store'], true) && campaign_matches($c, ['id' => 0, 'store_id' => $report_store_id, 'category_id' => 0, 'author_id' => 0, 'publisher_id' => 0]);
+        });
+        ?>
+        <?php if ($my_campaigns): ?>
+            <div class="alert alert-warning border rounded-4 fs-7 mb-4">
+                <div class="fw-bold mb-1"><i class="bi bi-gift-fill me-1"></i> Dükkânınızda geçerli kampanyalar</div>
+                <?php foreach ($my_campaigns as $c): ?>
+                    <div>• <b><?= e($c['name']) ?></b><?= $c['description'] ? ' — ' . e($c['description']) : '' ?><?= $c['ends_at'] ? ' <span class="text-muted">(' . date('d.m.Y H:i', strtotime($c['ends_at'])) . ' tarihine kadar)</span>' : '' ?></div>
+                <?php endforeach; ?>
+            </div>
+        <?php endif; ?>
         <h5 class="fw-bold mb-3">Ziyaret ve Satış Raporu</h5>
         <?php include __DIR__ . '/../admin/modules/reports.php'; ?>
     </main>

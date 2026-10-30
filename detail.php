@@ -106,6 +106,9 @@ track_view('detail', $book['id'], $book['store_id'] ?? null);
                     <?php endif; ?>
                 </div>
 
+                <?php $badges = campaign_badges_html($book, 'fs-7 px-3 py-2'); if ($badges !== ''): ?>
+                    <div class="mt-3"><?= $badges ?></div>
+                <?php endif; ?>
                 <div class="d-flex align-items-baseline gap-3 my-4 p-3 bg-white rounded-3 border d-inline-flex">
                     <span class="display-6 fw-extrabold text-danger"><?= format_price($book['price']) ?></span>
                     <?php if ($book['old_price']): ?>

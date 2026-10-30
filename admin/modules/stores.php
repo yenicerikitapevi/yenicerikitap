@@ -38,6 +38,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_store'])) {
     $phone       = sanitize($_POST['phone'] ?? '');
     $description = sanitize($_POST['description'] ?? '');
     $is_active   = isset($_POST['is_active']) ? 1 : 0;
+    // Boş bırakılırsa Kampanyalar sayfasındaki varsayılan komisyon oranı geçerlidir
+    $commission  = trim(str_replace(',', '.', $_POST['commission_rate'] ?? ''));
+    $commission  = $commission === '' ? null : min(100, max(0, (float)$commission));
 
     if ($name === '' || $username === '') {
         set_flash('danger', 'Dükkan Adı ve Kullanıcı Adı alanları zorunludur.');
@@ -67,8 +70,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_store'])) {
             $plain_hint = $password;
         }
         db_query(
-            "UPDATE stores SET name = ?, slug = ?, username = ?, password_hash = ?, plain_hint = ?, nadirkitap_code = ?, nadirkitap_url = ?, city = ?, phone = ?, description = ?, is_active = ? WHERE id = ?",
-            [$name, $slug, $username, $pass_hash, $plain_hint, $nk_code ?: null, $nk_url ?: null, $city, $phone, $description, $is_active, $edit_id]
+            "UPDATE stores SET name = ?, slug = ?, username = ?, password_hash = ?, plain_hint = ?, nadirkitap_code = ?, nadirkitap_url = ?, city = ?, phone = ?, description = ?, is_active = ?, commission_rate = ? WHERE id = ?",
+            [$name, $slug, $username, $pass_hash, $plain_hint, $nk_code ?: null, $nk_url ?: null, $city, $phone, $description, $is_active, $commission, $edit_id]
         );
         log_action('Alt Dükkan Güncellendi', 'Stores', $edit_id, "Alt dükkan güncellendi: {$name} ({$username})");
         set_flash('success', '"' . $name . '" alt dükkan bilgileri güncellendi.');
@@ -79,8 +82,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_store'])) {
         }
         $pass_hash = password_hash($password, PASSWORD_DEFAULT);
         db_query(
-            "INSERT INTO stores (name, slug, username, password_hash, plain_hint, nadirkitap_code, nadirkitap_url, city, phone, description, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            [$name, $slug, $username, $pass_hash, $password, $nk_code ?: null, $nk_url ?: null, $city, $phone, $description, $is_active]
+            "INSERT INTO stores (name, slug, username, password_hash, plain_hint, nadirkitap_code, nadirkitap_url, city, phone, description, is_active, commission_rate) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            [$name, $slug, $username, $pass_hash, $password, $nk_code ?: null, $nk_url ?: null, $city, $phone, $description, $is_active, $commission]
         );
         $new_id = (int)db_last_id();
         log_action('Yeni Alt Dükkan Açıldı', 'Stores', $new_id, "Alt dükkan oluşturuldu: {$name} (Kullanıcı: {$username})");
@@ -169,6 +172,12 @@ $stores_list = db_fetch_all("SELECT s.*, (SELECT COUNT(*) FROM books b WHERE b.s
                         <label class="form-label fw-semibold fs-7">Varsayılan NadirKitap Mağaza Bağlantısı (URL) veya Kodu (Opsiyonel)</label>
                         <input type="text" name="nadirkitap_input" class="form-control" placeholder="Örn: https://www.nadirkitap.com/umay-sahaf-sahaf348635.html veya 348635" value="<?= e($store_data['nadirkitap_url'] ?: ($store_data['nadirkitap_code'] ?? '')) ?>">
                         <small class="text-muted">Buraya yazabilir veya boş bırakabilirsiniz; kullanıcı masaüstü uygulamasında kendi NadirKitap bağlantısını ya da kodunu girdiğinde otomatik güncellenir.</small>
+                    </div>
+
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold fs-7">Komisyon Oranı (%)</label>
+                        <input type="number" step="0.01" min="0" max="100" name="commission_rate" class="form-control" placeholder="Varsayılan: %<?= e(setting('default_commission_rate', '0')) ?>" value="<?= e($store_data['commission_rate'] ?? '') ?>">
+                        <small class="text-muted">Satışın indirim sonrası tutarından alınır. Boş = varsayılan oran (Kampanyalar sayfası).</small>
                     </div>
 
                     <div class="col-md-12">

@@ -8,7 +8,7 @@ $order_created = false;
 $new_order_number = '';
 $order_total = 0;
 $errors = [];
-$form = ['name' => '', 'email' => '', 'phone' => '', 'address' => ''];
+$form = ['name' => '', 'email' => '', 'phone' => '', 'address' => '', 'coupon_code' => ''];
 $paytr_token = '';
 $payment_result = $_GET['odeme'] ?? '';
 
@@ -55,21 +55,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['complete_checkout']))
         try {
             $pdo->beginTransaction();
 
-            $lines = [];
-            $subtotal = 0;
-            foreach ($requested as $b_id => $qty) {
-                $book = db_fetch("SELECT id, title, price, stock FROM books WHERE id = ? AND is_active = 1", [$b_id]);
-                if (!$book) {
-                    $errors[] = 'Sepetinizdeki bir kitap artık satışta değil. Lütfen sepetinizi güncelleyin.';
-                    continue;
-                }
-                if ($qty > (int)$book['stock']) {
-                    $errors[] = '"' . $book['title'] . '" için stokta yalnızca ' . max(0, (int)$book['stock']) . ' adet var.';
-                    continue;
-                }
-                $price = (float)$book['price'];
-                $lines[] = ['id' => $b_id, 'title' => $book['title'], 'qty' => $qty, 'price' => $price, 'total' => $price * $qty];
-                $subtotal += $price * $qty;
+            [$lines, $line_errors] = cart_build_lines($requested);
+            $errors = array_merge($errors, $line_errors);
+            // Kampanyalar (indirim, ücretsiz kargo, kupon) sunucuda, veritabanı fiyatlarıyla hesaplanır
+            $quote = campaign_apply($lines, $form['coupon_code']);
+            if ($form['coupon_code'] !== '' && $quote['coupon_status'] !== 'ok') {
+                $errors[] = $quote['coupon_status'] === 'not_applicable'
+                    ? 'Kupon kodu sepetinizdeki ürünlere uygulanamıyor (kampanya şartlarını kontrol edin) ya da kupon alanını boş bırakın.'
+                    : 'Kupon kodu geçersiz veya süresi dolmuş.';
             }
 
             $user = db_fetch("SELECT id, status FROM users WHERE email = ?", [$form['email']]);
@@ -90,21 +83,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['complete_checkout']))
                     $user_id = $user['id'];
                 }
 
-                $shipping = shipping_cost($subtotal);
-                $order_total = $subtotal + $shipping;
+                $shipping = $quote['shipping'];
+                $order_total = $quote['total'];
+                $applied_campaigns = $quote['applied'];
+                if ($quote['free_shipping']) {
+                    $applied_campaigns[] = $quote['free_shipping'];
+                }
 
                 // Benzersiz sipariş numarası (çakışma ihtimaline karşı kontrol edilir)
                 do {
                     $new_order_number = 'YNC-' . date('Ymd') . '-' . strtoupper(bin2hex(random_bytes(3)));
                 } while (db_fetch("SELECT id FROM orders WHERE order_number = ?", [$new_order_number]));
 
-                db_query("INSERT INTO orders (order_number, user_id, total_amount, shipping_amount, status, payment_method, shipping_address) VALUES (?, ?, ?, ?, 'Ödeme Bekliyor', ?, ?)",
-                    [$new_order_number, $user_id, $order_total, $shipping, $payment_method, $form['address']]);
+                db_query("INSERT INTO orders (order_number, user_id, total_amount, shipping_amount, status, payment_method, shipping_address, discount_amount, coupon_code, campaign_summary) VALUES (?, ?, ?, ?, 'Ödeme Bekliyor', ?, ?, ?, ?, ?)",
+                    [$new_order_number, $user_id, $order_total, $shipping, $payment_method, $form['address'], $quote['discount'], $form['coupon_code'] !== '' ? mb_strtoupper($form['coupon_code'], 'UTF-8') : null, $applied_campaigns ? json_encode($applied_campaigns, JSON_UNESCAPED_UNICODE) : null]);
                 $order_id = db_last_id();
+                foreach ($applied_campaigns as $ac) {
+                    db_query("UPDATE campaigns SET used_count = used_count + 1 WHERE id = ?", [$ac['id']]);
+                }
 
                 foreach ($lines as $line) {
-                    db_query("INSERT INTO order_items (order_id, book_id, quantity, price, total) VALUES (?, ?, ?, ?, ?)",
-                        [$order_id, $line['id'], $line['qty'], $line['price'], $line['total']]);
+                    // Satır tutarı indirim sonrası nettir; sahaf kitaplarında komisyon net tutar üzerinden hesaplanır
+                    $commission_rate = !empty($line['store_id']) ? store_commission_rate($line['store_id']) : null;
+                    $commission_amount = $commission_rate !== null ? round($line['net'] * $commission_rate / 100, 2) : 0;
+                    db_query("INSERT INTO order_items (order_id, book_id, quantity, price, total, discount_amount, commission_rate, commission_amount) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                        [$order_id, $line['id'], $line['qty'], $line['price'], $line['net'], $line['discount'], $commission_rate, $commission_amount]);
                     // Aynı anda gelen siparişlerde stok eksiye düşmesin
                     $updated = db_query("UPDATE books SET stock = stock - ? WHERE id = ? AND stock >= ?", [$line['qty'], $line['id'], $line['qty']]);
                     if ($updated->rowCount() !== 1) {
@@ -122,7 +125,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['complete_checkout']))
                     // Stok sipariş için ayrıldı; ödeme sonucu PayTR bildirimiyle (paytr_callback.php) kesinleşir
                     $basket = [];
                     foreach ($lines as $line) {
-                        $basket[] = [$line['title'], $line['price'], $line['qty']];
+                        // İndirimli satırlar tek kalem olarak net tutarla gönderilir (sepet toplamı ödeme tutarıyla aynı kalsın)
+                        $basket[] = $line['discount'] > 0 ? [$line['title'] . ' (x' . $line['qty'] . ', kampanyalı)', $line['net'], 1] : [$line['title'], $line['price'], $line['qty']];
                     }
                     if ($shipping > 0) {
                         $basket[] = ['Kargo Ücreti', $shipping, 1];
@@ -300,6 +304,13 @@ track_view('checkout');
                                 </div>
                             <?php endif; ?>
 
+                            <h5 class="fw-bold text-dark mt-2 mb-3"><i class="bi bi-ticket-perforated text-danger me-2"></i> Kupon Kodu</h5>
+                            <div class="input-group mb-1">
+                                <input type="text" name="coupon_code" id="couponInput" class="form-control text-uppercase" placeholder="Varsa kupon kodunuz" value="<?= e($form['coupon_code']) ?>" maxlength="50" autocomplete="off">
+                                <button type="button" class="btn btn-outline-dark" id="btnApplyCoupon">Uygula</button>
+                            </div>
+                            <div id="couponMsg" class="fs-8 mb-4"></div>
+
                             <div class="form-check mb-3">
                                 <input class="form-check-input" type="checkbox" name="accept_terms" value="1" id="acceptTerms" required>
                                 <label class="form-check-label fs-7" for="acceptTerms">
@@ -328,9 +339,6 @@ track_view('checkout');
 
     <script src="assets/js/app.js"></script>
     <script>
-        const SHIPPING_FREE_LIMIT = <?= json_encode((float)setting('shipping_free_limit', '350')) ?>;
-        const FLAT_SHIPPING_COST = <?= json_encode((float)setting('flat_shipping_cost', '29.90')) ?>;
-
         // Güncel fiyat ve stoklar: sepette eski fiyat kalmışsa düzeltilir, satıştan kalkan kitaplar çıkarılır
         const CATALOG = <?= json_encode(array_column(db_fetch_all("SELECT id, title, price, stock FROM books WHERE is_active = 1"), null, 'id'), JSON_HEX_TAG | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE) ?>;
 
@@ -348,26 +356,65 @@ track_view('checkout');
             }
 
             const container = document.getElementById('checkoutSummaryList');
-            if (container) {
-                if (cart.length === 0) {
-                    container.innerHTML = '<div class="alert alert-warning">Sepetiniz boş!</div>';
-                    document.getElementById('btnSubmitOrder').disabled = true;
+            if (!container) return;
+            if (cart.length === 0) {
+                container.innerHTML = '<div class="alert alert-warning">Sepetiniz boş!</div>';
+                document.getElementById('btnSubmitOrder').disabled = true;
+                return;
+            }
+            const money = v => '₺' + Number(v).toFixed(2).replace('.', ',');
+            const couponInput = document.getElementById('couponInput');
+            const couponMsg = document.getElementById('couponMsg');
+
+            // Özet sunucudan gelir: kampanyalar, kargo ve kupon siparişteki hesapla birebir aynı olur
+            async function refreshQuote() {
+                const fd = new FormData();
+                fd.append('cart_data', JSON.stringify(cart));
+                fd.append('coupon_code', couponInput ? couponInput.value.trim() : '');
+                let q;
+                try {
+                    const res = await fetch('cart_quote.php', { method: 'POST', body: fd, credentials: 'same-origin' });
+                    q = await res.json();
+                } catch (e) {
+                    container.innerHTML = '<div class="text-muted fs-7">Özet yüklenemedi; tutarlar sipariş onayında hesaplanır.</div>';
                     return;
                 }
                 let html = '';
-                let total = 0;
-                cart.forEach(item => {
-                    total += (item.price * item.qty);
+                q.lines.forEach(l => {
                     html += `<div class="d-flex justify-content-between fs-7 mb-2">
-                                <span>${escapeHtml(item.title)} (x${item.qty})</span>
-                                <span class="fw-bold">₺${(item.price * item.qty).toFixed(2)}</span>
+                                <span>${escapeHtml(l.title)} (x${l.qty})</span>
+                                <span class="fw-bold text-end">${l.discount > 0 ? `<s class="text-muted fw-normal me-1">${money(l.total)}</s>` : ''}${money(l.net)}</span>
                             </div>`;
                 });
-                const shipping = total >= SHIPPING_FREE_LIMIT ? 0 : FLAT_SHIPPING_COST;
-                html += `<hr><div class="d-flex justify-content-between fs-7 mb-1"><span>Kargo Ücreti:</span><span>₺${shipping.toFixed(2)}</span></div>`;
-                html += `<div class="d-flex justify-content-between fs-5 fw-bold text-danger mt-2"><span>Toplam:</span><span>₺${(total + shipping).toFixed(2)}</span></div>`;
+                html += `<hr><div class="d-flex justify-content-between fs-7 mb-1"><span>Ara Toplam:</span><span>${money(q.subtotal)}</span></div>`;
+                q.applied.forEach(a => {
+                    html += `<div class="d-flex justify-content-between fs-7 mb-1 text-success"><span><i class="bi bi-gift-fill me-1"></i>${escapeHtml(a.name)}</span><span>-${money(a.amount)}</span></div>`;
+                });
+                html += `<div class="d-flex justify-content-between fs-7 mb-1"><span>Kargo Ücreti:</span><span>${q.free_shipping ? `<s class="text-muted me-1">${money(q.free_shipping.amount)}</s><span class="text-success fw-semibold">Ücretsiz</span>` : money(q.shipping)}</span></div>`;
+                if (q.free_shipping) {
+                    html += `<div class="fs-8 text-success mb-1"><i class="bi bi-truck me-1"></i>${escapeHtml(q.free_shipping.name)}</div>`;
+                } else if (q.shipping > 0 && q.free_limit > q.net) {
+                    html += `<div class="fs-8 text-muted mb-1">${money(q.free_limit - q.net)} daha ekleyin, kargo bedava olsun.</div>`;
+                }
+                html += `<div class="d-flex justify-content-between fs-5 fw-bold text-danger mt-2"><span>Toplam:</span><span>${money(q.total)}</span></div>`;
+                if (q.discount > 0) {
+                    html += `<div class="fs-7 text-success text-end">Toplam kazancınız: ${money(q.discount + (q.free_shipping ? q.free_shipping.amount : 0))}</div>`;
+                }
+                if (q.offers && q.offers.length) {
+                    html += '<div class="mt-3 p-2 bg-warning bg-opacity-10 border border-warning rounded-3 fs-8"><div class="fw-bold mb-1"><i class="bi bi-megaphone-fill me-1"></i>Geçerli kampanyalar</div>' + q.offers.map(o => '• ' + escapeHtml(o)).join('<br>') + '</div>';
+                }
                 container.innerHTML = html;
+                if (couponMsg) {
+                    const msgs = { ok: ['text-success', 'Kupon uygulandı.'], invalid: ['text-danger', 'Kupon kodu geçersiz veya süresi dolmuş.'], not_applicable: ['text-warning', 'Kupon geçerli ama sepetiniz kampanya şartlarını karşılamıyor.'] };
+                    const m = msgs[q.coupon_status];
+                    couponMsg.className = 'fs-8 mb-4 ' + (m ? m[0] : '');
+                    couponMsg.textContent = m ? m[1] : '';
+                }
             }
+            refreshQuote();
+            const applyBtn = document.getElementById('btnApplyCoupon');
+            if (applyBtn) applyBtn.addEventListener('click', refreshQuote);
+            if (couponInput) couponInput.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); refreshQuote(); } });
         });
     </script>
     <?= track_script() ?>

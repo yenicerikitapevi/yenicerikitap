@@ -35,6 +35,9 @@ $img_src = cover_url($b['cover_image'] ?? '');
             </a>
         </h6>
 
+        <?php $badges = campaign_badges_html($b, 'fs-8'); if ($badges !== ''): ?>
+            <div class="mb-1"><?= $badges ?></div>
+        <?php endif; ?>
         <div class="book-price-box mb-3">
             <span class="current-price"><?= format_price($b['price']) ?></span>
             <?php if (!empty($b['old_price'])): ?>

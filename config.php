@@ -573,3 +573,6 @@ require_once __DIR__ . '/_paytr.php';
 
 // Ziyaret / trafik kaydı (Raporlar ve Satıcı Paneli)
 require_once __DIR__ . '/_analytics.php';
+
+// Sepet kampanyaları ve sahaf komisyonları
+require_once __DIR__ . '/_campaigns.php';

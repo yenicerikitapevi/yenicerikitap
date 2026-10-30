@@ -11,6 +11,7 @@ $allowed_pages = [
     'Reports'      => 'reports.php',
     'Products'     => 'products.php',
     'Stores'       => 'stores.php',
+    'Campaigns'    => 'campaigns.php',
     'Catalog'      => 'catalog.php',
     'Members'      => 'members.php',
     'Orders'       => 'orders.php',
@@ -77,6 +78,10 @@ $unread_messages = db_fetch("SELECT COUNT(*) as cnt FROM contact_messages WHERE 
                     <i class="bi bi-shop"></i> Alt Dükkanlar (Sahaflar)
                 </a>
 
+                <a href="index.php?p=Campaigns" class="nav-link <?= $current_p === 'Campaigns' ? 'active' : '' ?>">
+                    <i class="bi bi-gift"></i> Kampanyalar
+                </a>
+
                 <a href="index.php?p=Catalog" class="nav-link <?= $current_p === 'Catalog' ? 'active' : '' ?>">
                     <i class="bi bi-tags"></i> Yazar & Yayınevi
                 </a>
@@ -129,6 +134,7 @@ $unread_messages = db_fetch("SELECT COUNT(*) as cnt FROM contact_messages WHERE 
                             'Reports' => 'Raporlar & Trafik Analizi',
                             'Products' => 'Kitap & Katalog Yönetimi',
                             'Stores' => 'Alt Dükkanlar & Satıcı Yönetimi',
+                            'Campaigns' => 'Kampanyalar & Kuponlar',
                             'Members' => 'Müşteri & Üye Yönetimi',
                             'Orders' => 'Sipariş Operasyonları',
                             'Transactions' => 'Ödeme & Finans Takibi',

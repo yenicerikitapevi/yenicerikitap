@@ -56,7 +56,8 @@ $summary = db_fetch("SELECT
         AVG(CASE WHEN e.event_type = 'view' AND e.duration_sec > 0 THEN e.duration_sec END) as avg_sec,
         SUM(CASE WHEN e.event_type = 'cart_add' THEN 1 ELSE 0 END) as cart_adds
     FROM analytics_events e WHERE {$ev_where}", $ev_params);
-$sales = db_fetch("SELECT COALESCE(SUM(oi.quantity), 0) as qty, COALESCE(SUM(oi.total), 0) as revenue, COUNT(DISTINCT o.id) as orders
+$sales = db_fetch("SELECT COALESCE(SUM(oi.quantity), 0) as qty, COALESCE(SUM(oi.total), 0) as revenue, COUNT(DISTINCT o.id) as orders,
+        COALESCE(SUM(oi.discount_amount), 0) as discount, COALESCE(SUM(oi.commission_amount), 0) as commission
     FROM order_items oi JOIN orders o ON oi.order_id = o.id JOIN books b ON oi.book_id = b.id
     WHERE {$sale_where}", $sale_params);
 
@@ -171,9 +172,9 @@ $referrers = db_fetch_all("SELECT COALESCE(e.referrer_host, '') as host, COUNT(*
 // --- Alt dükkân karşılaştırması (yalnızca yönetici) ---
 $stores_report = [];
 if (!$is_seller && $scope_store === 0) {
-    $stores_report[0] = ['name' => 'Yeniçeri (Ana Mağaza)', 'views' => 0, 'visitors' => 0, 'cart' => 0, 'qty' => 0, 'revenue' => 0, 'books' => 0];
+    $stores_report[0] = ['name' => 'Yeniçeri (Ana Mağaza)', 'views' => 0, 'visitors' => 0, 'cart' => 0, 'qty' => 0, 'revenue' => 0, 'commission' => 0, 'books' => 0];
     foreach (db_fetch_all("SELECT id, name, (SELECT COUNT(*) FROM books WHERE store_id = stores.id AND is_active = 1) as books FROM stores ORDER BY name") as $s) {
-        $stores_report[$s['id']] = ['name' => $s['name'], 'views' => 0, 'visitors' => 0, 'cart' => 0, 'qty' => 0, 'revenue' => 0, 'books' => (int)$s['books']];
+        $stores_report[$s['id']] = ['name' => $s['name'], 'views' => 0, 'visitors' => 0, 'cart' => 0, 'qty' => 0, 'revenue' => 0, 'commission' => 0, 'books' => (int)$s['books']];
     }
     $stores_report[0]['books'] = (int)(db_fetch("SELECT COUNT(*) as cnt FROM books WHERE store_id IS NULL AND is_active = 1")['cnt'] ?? 0);
     foreach (db_fetch_all("SELECT COALESCE(e.store_id, 0) as sid,
@@ -185,12 +186,13 @@ if (!$is_seller && $scope_store === 0) {
             $stores_report[$r['sid']] = array_merge($stores_report[$r['sid']], ['views' => (int)$r['views'], 'visitors' => (int)$r['visitors'], 'cart' => (int)$r['cart']]);
         }
     }
-    foreach (db_fetch_all("SELECT COALESCE(b.store_id, 0) as sid, SUM(oi.quantity) as qty, SUM(oi.total) as revenue
+    foreach (db_fetch_all("SELECT COALESCE(b.store_id, 0) as sid, SUM(oi.quantity) as qty, SUM(oi.total) as revenue, SUM(oi.commission_amount) as commission
         FROM order_items oi JOIN orders o ON oi.order_id = o.id JOIN books b ON oi.book_id = b.id
         WHERE {$sale_where} GROUP BY sid", $sale_params) as $r) {
         if (isset($stores_report[$r['sid']])) {
             $stores_report[$r['sid']]['qty'] = (int)$r['qty'];
             $stores_report[$r['sid']]['revenue'] = (float)$r['revenue'];
+            $stores_report[$r['sid']]['commission'] = (float)$r['commission'];
         }
     }
 }
@@ -262,8 +264,12 @@ $period_labels = ['1' => 'Bugün', '7' => 'Son 7 gün', '30' => 'Son 30 gün', '
         ['Ort. Kalma Süresi', $fmt_sec($summary['avg_sec'] ?? 0), 'bi-stopwatch', 'Sayfa başına'],
         ['Sepete Ekleme', $num($summary['cart_adds'] ?? 0), 'bi-cart-plus', 'Dönüşüm: ' . $pct($summary['cart_adds'] ?? 0, $summary['views'] ?? 0)],
         ['Satılan Kitap', $num($sales['qty']), 'bi-bag-check', $num($sales['orders']) . ' sipariş'],
-        ['Ciro', format_price($sales['revenue']), 'bi-cash-stack', 'Ödemesi alınan siparişler'],
+        ['Ciro', format_price($sales['revenue']), 'bi-cash-stack', $sales['discount'] > 0 ? 'Kampanya indirimi sonrası (' . format_price($sales['discount']) . ' indirim)' : 'Ödemesi alınan siparişler'],
     ];
+    if ($scope_store > 0) {
+        $cards[] = ['Komisyon', format_price($sales['commission']), 'bi-percent', 'Şu anki oran: %' . rtrim(rtrim(number_format(store_commission_rate($scope_store), 2, ',', ''), '0'), ',')];
+        $cards[] = ['Net Hakediş', format_price($sales['revenue'] - $sales['commission']), 'bi-wallet2', 'Ciro − komisyon'];
+    }
     foreach ($cards as $c): ?>
         <div class="col-6 col-md-4 col-xl">
             <div class="bg-white rounded-4 shadow-sm p-3 h-100">
@@ -395,7 +401,7 @@ $period_labels = ['1' => 'Bugün', '7' => 'Son 7 gün', '30' => 'Son 30 gün', '
         <div class="card-header bg-white border-0 p-3 pb-0"><h6 class="fw-bold mb-0">Alt Dükkân Karşılaştırması</h6></div>
         <div class="card-body p-0">
             <table class="table table-hover align-middle mb-0 fs-7">
-                <thead class="table-light fs-8"><tr><th class="ps-3">Dükkân</th><th class="text-end">Aktif Kitap</th><th class="text-end">Görüntülenme</th><th class="text-end">Tekil</th><th class="text-end">Sepete Ekl.</th><th class="text-end">Satış</th><th class="text-end pe-3">Ciro</th></tr></thead>
+                <thead class="table-light fs-8"><tr><th class="ps-3">Dükkân</th><th class="text-end">Aktif Kitap</th><th class="text-end">Görüntülenme</th><th class="text-end">Tekil</th><th class="text-end">Sepete Ekl.</th><th class="text-end">Satış</th><th class="text-end">Ciro</th><th class="text-end pe-3">Komisyon</th></tr></thead>
                 <tbody>
                     <?php foreach ($stores_report as $sid => $r): ?>
                         <tr>
@@ -407,7 +413,8 @@ $period_labels = ['1' => 'Bugün', '7' => 'Son 7 gün', '30' => 'Son 30 gün', '
                             <td class="text-end"><?= $num($r['visitors']) ?></td>
                             <td class="text-end"><?= $num($r['cart']) ?></td>
                             <td class="text-end fw-bold"><?= $num($r['qty']) ?></td>
-                            <td class="text-end pe-3"><?= $r['revenue'] > 0 ? format_price($r['revenue']) : '-' ?></td>
+                            <td class="text-end"><?= $r['revenue'] > 0 ? format_price($r['revenue']) : '-' ?></td>
+                            <td class="text-end pe-3"><?= $r['commission'] > 0 ? format_price($r['commission']) : '-' ?></td>
                         </tr>
                     <?php endforeach; ?>
                 </tbody>
