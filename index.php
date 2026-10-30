@@ -10,7 +10,7 @@ foreach ($settings_rows as $row) {
     $site[$row['setting_key']] = $row['setting_value'];
 }
 
-$categories = db_fetch_all("SELECT * FROM categories ORDER BY name ASC");
+$categories = nav_categories();
 
 $showcases = db_fetch_all("SELECT * FROM showcases ORDER BY id ASC");
 $showcase_books = [];

@@ -576,3 +576,6 @@ require_once __DIR__ . '/_analytics.php';
 
 // Sepet kampanyaları ve sahaf komisyonları
 require_once __DIR__ . '/_campaigns.php';
+
+// NadirKitap kategori numarası eşleşmesi ve menü kategorileri
+require_once __DIR__ . '/_category_map.php';

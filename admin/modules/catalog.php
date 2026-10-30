@@ -103,6 +103,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $moved = $book_count($id);
         db_query("UPDATE books SET {$column} = ? WHERE {$column} = ?", [$target_id, $id]);
         if ($tab === 'categories') {
+            // NadirKitap numaraları da hedefe taşınır; sonraki aktarımlar birleştirilen kategoriye gider
+            db_query("UPDATE nk_category_map SET category_id = ? WHERE category_id = ?", [$target_id, $id]);
             db_query("UPDATE categories SET parent_id = ? WHERE parent_id = ? AND id != ?", [$target_id, $id, $target_id]);
             db_query("UPDATE categories SET parent_id = NULL WHERE id = ? AND parent_id = ?", [$target_id, $id]);
         }
@@ -154,6 +156,18 @@ $edit_has_children = $edit && $tab === 'categories' && db_fetch("SELECT id FROM 
         </li>
     <?php endforeach; ?>
 </ul>
+
+<?php if ($tab === 'categories'):
+    $numeric_cats = array_filter(db_fetch_all("SELECT id, name FROM categories"), function ($c) { return is_numeric_category_name($c['name']); });
+    if ($numeric_cats): ?>
+    <div class="alert alert-warning rounded-4 fs-7">
+        <i class="bi bi-exclamation-triangle-fill me-1"></i>
+        <b><?= count($numeric_cats) ?> kategori numarayla görünüyor</b> (<?= e(implode(', ', array_slice(array_column($numeric_cats, 'name'), 0, 12))) ?><?= count($numeric_cats) > 12 ? '…' : '' ?>).
+        Bunlar sahaf aktarımında NadirKitap'ın kategori numarasıyla oluştu ve sitenin menüsünde gösterilmiyor.
+        Kitaplarına bakıp ya <b>Düzenle</b> ile doğru adı verin ya da <b>Birleştir</b> ile mevcut bir kategoriye (ör. Tarih & Araştırma) taşıyın.
+        Numara hatırlanır: sonraki aktarımlarda aynı numaralı kitaplar doğrudan seçtiğiniz kategoriye gider.
+    </div>
+<?php endif; endif; ?>
 
 <div class="row g-4">
     <div class="col-lg-4">

@@ -58,7 +58,7 @@ $books = db_fetch_all("SELECT b.*, a.name as author_name, p.name as publisher_na
                        ORDER BY b.id DESC 
                        LIMIT {$per_page} OFFSET {$offset}", $params);
 
-$all_categories = db_fetch_all("SELECT * FROM categories ORDER BY name ASC");
+$all_categories = nav_categories();
 track_view('category');
 ?>
 <!DOCTYPE html>
