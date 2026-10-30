@@ -81,6 +81,7 @@ if ($store) {
                                 WHERE s.is_active = 1 
                                 ORDER BY s.id ASC");
 }
+track_view('store', null, $store['id'] ?? null);
 ?>
 <!DOCTYPE html>
 <html lang="tr">
@@ -337,5 +338,6 @@ if ($store) {
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
     <script src="assets/js/app.js"></script>
+    <?= track_script() ?>
 </body>
 </html>

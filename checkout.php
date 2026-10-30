@@ -164,6 +164,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['complete_checkout']))
 $bank_name    = setting('bank_name');
 $bank_holder  = setting('bank_account_name');
 $bank_iban    = setting('bank_iban');
+track_view('checkout');
 ?>
 <!DOCTYPE html>
 <html lang="tr">
@@ -369,5 +370,6 @@ $bank_iban    = setting('bank_iban');
             }
         });
     </script>
+    <?= track_script() ?>
 </body>
 </html>

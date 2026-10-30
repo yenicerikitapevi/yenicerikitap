@@ -8,6 +8,7 @@ ob_start();
 
 $allowed_pages = [
     'FrontPage'    => 'frontpage.php',
+    'Reports'      => 'reports.php',
     'Products'     => 'products.php',
     'Stores'       => 'stores.php',
     'Catalog'      => 'catalog.php',
@@ -64,6 +65,10 @@ $unread_messages = db_fetch("SELECT COUNT(*) as cnt FROM contact_messages WHERE 
                     <i class="bi bi-speedometer2"></i> Dashboard
                 </a>
                 
+                <a href="index.php?p=Reports" class="nav-link <?= $current_p === 'Reports' ? 'active' : '' ?>">
+                    <i class="bi bi-graph-up-arrow"></i> Raporlar & Trafik
+                </a>
+
                 <a href="index.php?p=Products" class="nav-link <?= $current_p === 'Products' ? 'active' : '' ?>">
                     <i class="bi bi-book"></i> Kitap Yönetimi
                 </a>
@@ -121,6 +126,7 @@ $unread_messages = db_fetch("SELECT COUNT(*) as cnt FROM contact_messages WHERE 
                         <?php
                         $titles = [
                             'FrontPage' => 'Genel Bakış & İstatistikler',
+                            'Reports' => 'Raporlar & Trafik Analizi',
                             'Products' => 'Kitap & Katalog Yönetimi',
                             'Stores' => 'Alt Dükkanlar & Satıcı Yönetimi',
                             'Members' => 'Müşteri & Üye Yönetimi',

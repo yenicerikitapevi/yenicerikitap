@@ -51,6 +51,7 @@ function seller_block() {
     $html .= '</ul>';
     return $html;
 }
+track_view('legal');
 ?>
 <!DOCTYPE html>
 <html lang="tr">
@@ -257,5 +258,6 @@ function seller_block() {
             </div>
         </div>
     </div>
+    <?= track_script() ?>
 </body>
 </html>

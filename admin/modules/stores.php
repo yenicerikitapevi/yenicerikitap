@@ -101,7 +101,7 @@ $stores_list = db_fetch_all("SELECT s.*, (SELECT COUNT(*) FROM books b WHERE b.s
 <div class="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-2">
     <div>
         <h5 class="fw-bold text-dark mb-1"><i class="bi bi-shop text-danger me-2"></i>Alt Dükkanlar (Satıcı & Sahaf Yönetimi)</h5>
-        <p class="text-muted fs-7 mb-0">Kullanıcılara kullanıcı adı ve şifre tanımlayarak alt dükkan açabilir, NadirKitap mağazalarından çekilen kitapların doğrudan kendi alt dükkanlarına eklenmesini sağlayabilirsiniz.</p>
+        <p class="text-muted fs-7 mb-0">Kullanıcılara kullanıcı adı ve şifre tanımlayarak alt dükkan açabilir, NadirKitap mağazalarından çekilen kitapların doğrudan kendi alt dükkanlarına eklenmesini sağlayabilirsiniz. Satıcılar aynı bilgilerle <a href="../satici/" target="_blank">/satici/</a> adresinden kendi ziyaret ve satış raporlarını görür.</p>
     </div>
     <?php if ($action === 'list'): ?>
         <div class="d-flex gap-2">
@@ -236,6 +236,7 @@ $stores_list = db_fetch_all("SELECT s.*, (SELECT COUNT(*) FROM books b WHERE b.s
                                         <div class="fs-7">
                                             <span class="text-muted">Şifre:</span> <code class="fw-bold text-primary"><?= e($s['plain_hint'] ?: 'Belirlendi') ?></code>
                                         </div>
+                                        <a href="../satici/" target="_blank" class="fs-8 text-muted"><i class="bi bi-graph-up me-1"></i>Satıcı paneli: /satici/</a>
                                     </td>
                                     <td>
                                         <?php if (!empty($s['nadirkitap_code'])): ?>

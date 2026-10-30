@@ -570,3 +570,6 @@ function init_sqlite_db($db) {
 }
 
 require_once __DIR__ . '/_paytr.php';
+
+// Ziyaret / trafik kaydı (Raporlar ve Satıcı Paneli)
+require_once __DIR__ . '/_analytics.php';

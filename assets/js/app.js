@@ -60,6 +60,7 @@ function initCart() {
 }
 
 function addToCart(item) {
+    if (window.ykTrackCart) window.ykTrackCart(item.id);
     let cart = getCart();
     const existingIndex = cart.findIndex(i => i.id == item.id);
     if (existingIndex > -1) {

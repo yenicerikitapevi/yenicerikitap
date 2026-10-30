@@ -26,6 +26,7 @@ $related_books = db_fetch_all("SELECT b.*, a.name as author_name, p.name as publ
                                LIMIT 4", [$book['category_id'], $id]);
 
 $img_src = cover_url($book['cover_image'] ?? '');
+track_view('detail', $book['id'], $book['store_id'] ?? null);
 ?>
 <!DOCTYPE html>
 <html lang="tr">
@@ -207,5 +208,6 @@ $img_src = cover_url($book['cover_image'] ?? '');
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
     <script src="assets/js/app.js"></script>
+    <?= track_script() ?>
 </body>
 </html>

@@ -3,6 +3,7 @@
  * STOREFRONT: Blog Page (blog.php)
  */
 require_once __DIR__ . '/config.php';
+track_view('blog');
 ?>
 <!DOCTYPE html>
 <html lang="tr">
@@ -66,5 +67,6 @@ require_once __DIR__ . '/config.php';
             </div>
         </div>
     </div>
+    <?= track_script() ?>
 </body>
 </html>
