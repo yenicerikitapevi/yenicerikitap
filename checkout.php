@@ -153,6 +153,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['complete_checkout']))
                     }
                 } else {
                     $order_created = true;
+                    // Müşteriye "siparişiniz alındı" e-postası (ödeme bilgileriyle); hata siparişi etkilemez
+                    try {
+                        $mail_sent = send_order_confirmation($order_id);
+                    } catch (Throwable $mail_ex) {
+                        error_log('[Yeniceri] Sipariş e-postası: ' . $mail_ex->getMessage());
+                    }
                 }
             }
         } catch (Throwable $ex) {
@@ -197,7 +203,7 @@ track_view('checkout');
                     <i class="bi bi-check-lg display-4"></i>
                 </div>
                 <h2 class="fw-extrabold text-dark mb-2">Ödemeniz Alındı!</h2>
-                <p class="fs-7 text-secondary mb-4">Siparişiniz kargoya hazırlanacaktır. Sorularınız için bize <strong><?= e(setting('site_phone', '0312 245 00 00')) ?></strong> numarasından ulaşabilirsiniz.</p>
+                <p class="fs-7 text-secondary mb-4">Siparişiniz kargoya hazırlanacaktır. Sipariş özetini e-posta adresinize gönderiyoruz; durumunu <a href="siparis-takip.php" class="text-danger">Sipariş Takip</a> sayfasından izleyebilirsiniz. Sorularınız için bize <strong><?= e(setting('site_phone', '0312 245 00 00')) ?></strong> numarasından ulaşabilirsiniz.</p>
 
                 <a href="index.php" class="btn btn-danger font-bold px-4 py-2 rounded-pill">Alışverişe Devam Et</a>
                 <script>localStorage.removeItem('yeniceri_cart');</script>
@@ -217,6 +223,8 @@ track_view('checkout');
                 </div>
                 <h2 class="fw-extrabold text-dark mb-2">Siparişiniz Alındı!</h2>
                 <p class="text-muted">Sipariş Numaranız: <strong class="text-danger"><?= e($new_order_number) ?></strong></p>
+                <p class="fs-7 text-secondary mb-0"><?= !empty($mail_sent) ? '<i class="bi bi-envelope-check text-success me-1"></i>Sipariş özetini <b>' . e($form['email']) . '</b> adresine gönderdik.' : 'Siparişinizin durumunu sipariş numaranız ve e-posta adresinizle takip edebilirsiniz.' ?></p>
+                <a href="siparis-takip.php?no=<?= e(urlencode($new_order_number)) ?>" class="fs-7 text-danger"><i class="bi bi-truck me-1"></i>Sipariş Takip</a>
 
                 <div class="text-start bg-light border rounded-3 p-4 my-4">
                     <h6 class="fw-bold text-dark mb-3"><i class="bi bi-bank me-1 text-danger"></i> Havale / EFT Bilgileri</h6>

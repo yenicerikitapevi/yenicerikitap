@@ -58,4 +58,21 @@ if ($_POST['status'] === 'success') {
 
 $pdo->commit();
 
+// Önce PayTR'a yanıt verilir, sonra (bağlantı kapandıktan sonra) müşteriye e-posta gönderilir
+$confirm_order = ($_POST['status'] === 'success') ? (int)$order['id'] : 0;
+ignore_user_abort(true);
+header('Content-Type: text/plain');
+header('Content-Length: 2');
+header('Connection: close');
 echo 'OK';
+while (ob_get_level() > 0) {
+    ob_end_flush();
+}
+flush();
+if ($confirm_order) {
+    try {
+        send_order_confirmation($confirm_order); // aynı sipariş için ikinci kez gönderilmez
+    } catch (Throwable $e) {
+        error_log('[Yeniceri] Ödeme sonrası e-posta: ' . $e->getMessage());
+    }
+}

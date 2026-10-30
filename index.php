@@ -75,6 +75,7 @@ track_view('home');
                 <span class="d-none d-lg-inline text-warning"><i class="bi bi-truck me-1"></i> <?= format_price($site['shipping_free_limit'] ?? 350) ?> ve Üzeri Ücretsiz Kargo!</span>
             </div>
             <div class="d-flex align-items-center gap-3 fs-7">
+                <a href="siparis-takip.php"><i class="bi bi-truck me-1"></i>Sipariş Takip</a>
                 <a href="legal.php?p=teslimat-iade">Teslimat Şartları</a>
                 <a href="legal.php?p=gizlilik">Gizlilik Politikası</a>
                 <a href="contact.php">İletişim</a>

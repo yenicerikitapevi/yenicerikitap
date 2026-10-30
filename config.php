@@ -582,3 +582,6 @@ require_once __DIR__ . '/_category_map.php';
 
 // SEO: okunabilir adresler, başlık/açıklama/canonical, Open Graph ve yapısal veri
 require_once __DIR__ . '/_seo.php';
+
+// E-posta (SMTP) ve kargo takibi
+require_once __DIR__ . '/_mail.php';

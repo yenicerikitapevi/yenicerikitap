@@ -11,14 +11,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_settings'])) {
         'flat_shipping_cost', 'bank_name', 'bank_account_name', 'bank_iban',
         'company_legal_name', 'company_tax_office', 'company_tax_number', 'company_mersis',
         'payment_merchant_id', 'payment_api_key', 'payment_merchant_salt', 'paytr_test_mode',
-        'nk_store_code', 'nk_api_key'
+        'nk_store_code', 'nk_api_key',
+        'smtp_host', 'smtp_port', 'smtp_secure', 'smtp_user', 'smtp_pass', 'mail_from_email', 'mail_from_name', 'order_notify_email'
     ];
     // Gizli anahtarlar sayfada gösterilmez; alan boş bırakılırsa kayıtlı değer korunur
-    $secret_keys = ['payment_api_key', 'payment_merchant_salt'];
+    $secret_keys = ['payment_api_key', 'payment_merchant_salt', 'smtp_pass'];
 
     foreach ($settings_keys as $key) {
         if (isset($_POST[$key])) {
-            $val = sanitize($_POST[$key]);
+            // Şifrelerde < > gibi karakterler olabilir; yalnızca baştaki/sondaki boşluk atılır
+            $val = $key === 'smtp_pass' ? trim((string)$_POST[$key]) : sanitize($_POST[$key]);
+            if ($key === 'smtp_secure' && !in_array($val, ['tls', 'ssl', 'none'], true)) {
+                $val = 'tls';
+            }
+            if (in_array($key, ['mail_from_email', 'order_notify_email'], true) && $val !== '' && !filter_var($val, FILTER_VALIDATE_EMAIL)) {
+                $val = '';
+            }
             if (in_array($key, $secret_keys, true) && $val === '') {
                 continue;
             }
@@ -43,6 +51,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_settings'])) {
     log_action('Site Ayarları Güncellendi', 'Settings', 1, 'Site genel ayarları güncellendi.');
     set_flash('success', 'Site ayarları kaydedildi.');
     redirect('index.php?p=Settings');
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['send_test_mail'])) {
+    $to = trim(sanitize($_POST['test_mail_to'] ?? ''));
+    $ok = send_mail($to, 'Test e-postası - ' . APP_NAME, mail_layout('Test e-postası', '<h1 style="font-size:20px">E-posta ayarlarınız çalışıyor</h1><p style="font-size:14px">Bu bir test e-postasıdır. Sipariş e-postaları bu ayarlarla gönderilecek.</p>'), "E-posta ayarlarınız çalışıyor. Bu bir test e-postasıdır.", 'test');
+    $last = db_fetch("SELECT error FROM mail_log ORDER BY id DESC LIMIT 1");
+    set_flash($ok ? 'success' : 'danger', $ok ? "Test e-postası {$to} adresine gönderildi. Gelen kutusunu (ve spam klasörünü) kontrol edin." : 'Test e-postası gönderilemedi: ' . ($last['error'] ?? 'bilinmeyen hata'));
+    redirect('index.php?p=Settings#eposta');
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_email'])) {
@@ -248,12 +264,87 @@ foreach ($setting_rows as $row) {
                         </div>
                     </div>
 
+                    <div class="row g-3 mt-1" id="eposta">
+                        <div class="col-md-12 pt-2">
+                            <h6 class="fw-bold text-dark mb-0"><i class="bi bi-envelope-paper text-danger me-1"></i> E-posta (Sipariş Bildirimleri)</h6>
+                            <small class="text-muted">Müşteriye "siparişiniz alındı" ve "kargoya verildi" e-postaları bu SMTP hesabıyla gönderilir. Gmail için: smtp.gmail.com, 587, TLS ve Google hesabında oluşturulan <b>uygulama şifresi</b>. Yandex: smtp.yandex.com.tr, 465, SSL. Hosting e-postası için hosting firmanızın SMTP bilgilerini kullanın.</small>
+                            <div class="mt-2">
+                                <?php if (trim($s['smtp_host'] ?? '') !== ''): ?>
+                                    <span class="badge bg-success">SMTP tanımlı: <?= e($s['smtp_host']) ?></span>
+                                <?php else: ?>
+                                    <span class="badge bg-warning text-dark">SMTP tanımlı değil — e-postalar gönderilemez</span>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+                        <div class="col-md-5">
+                            <label class="form-label fw-semibold fs-7">SMTP Sunucusu</label>
+                            <input type="text" name="smtp_host" class="form-control font-monospace" value="<?= e($s['smtp_host'] ?? '') ?>" placeholder="smtp.gmail.com">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold fs-7">Port</label>
+                            <input type="number" name="smtp_port" class="form-control" value="<?= e($s['smtp_port'] ?? '587') ?>">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold fs-7">Güvenlik</label>
+                            <select name="smtp_secure" class="form-select">
+                                <?php foreach (['tls' => 'TLS / STARTTLS (587)', 'ssl' => 'SSL (465)', 'none' => 'Yok (önerilmez)'] as $k => $l): ?>
+                                    <option value="<?= $k ?>" <?= ($s['smtp_secure'] ?? 'tls') === $k ? 'selected' : '' ?>><?= $l ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold fs-7">SMTP Kullanıcı Adı</label>
+                            <input type="text" name="smtp_user" class="form-control" value="<?= e($s['smtp_user'] ?? '') ?>" autocomplete="off" placeholder="siparis@yenicerikitabevi.com">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold fs-7">SMTP Şifresi</label>
+                            <input type="password" name="smtp_pass" class="form-control" autocomplete="new-password" placeholder="<?= !empty($s['smtp_pass']) ? 'Kayıtlı - değiştirmek için yazın' : '' ?>">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold fs-7">Gönderen Adresi</label>
+                            <input type="email" name="mail_from_email" class="form-control" value="<?= e($s['mail_from_email'] ?? '') ?>" placeholder="Boşsa SMTP kullanıcı adı">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold fs-7">Gönderen Adı</label>
+                            <input type="text" name="mail_from_name" class="form-control" value="<?= e($s['mail_from_name'] ?? 'Yeniçeri Kitabevi') ?>">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold fs-7">Yeni Sipariş Bildirimi (size)</label>
+                            <input type="email" name="order_notify_email" class="form-control" value="<?= e($s['order_notify_email'] ?? '') ?>" placeholder="Boşsa bildirim gönderilmez">
+                        </div>
+                    </div>
+
                     <div class="mt-4 pt-3 border-top">
                         <button type="submit" class="btn btn-danger font-semibold px-4 py-2 shadow">
                             <i class="bi bi-save me-1"></i> Ayarları Kaydet
                         </button>
                     </div>
                 </form>
+
+                <form method="POST" action="" class="border-top mt-4 pt-3">
+                    <input type="hidden" name="send_test_mail" value="1">
+                    <label class="form-label fw-semibold fs-7">Test e-postası gönder <small class="text-muted fw-normal">(önce ayarları kaydedin)</small></label>
+                    <div class="input-group" style="max-width: 460px;">
+                        <input type="email" name="test_mail_to" class="form-control" placeholder="alici@ornek.com" value="<?= e($_SESSION['admin_user']['email'] ?? '') ?>" required>
+                        <button class="btn btn-outline-dark"><i class="bi bi-send me-1"></i> Gönder</button>
+                    </div>
+                </form>
+
+                <?php $mail_logs = db_fetch_all("SELECT * FROM mail_log ORDER BY id DESC LIMIT 15"); ?>
+                <?php if ($mail_logs): ?>
+                    <div class="mt-4">
+                        <div class="fw-semibold fs-7 mb-2">Son gönderilen e-postalar</div>
+                        <div class="table-responsive"><table class="table table-sm fs-8 mb-0">
+                            <thead class="table-light"><tr><th>Tarih</th><th>Alıcı</th><th>Konu</th><th>Durum</th></tr></thead>
+                            <tbody>
+                                <?php foreach ($mail_logs as $ml): ?>
+                                    <tr><td class="text-nowrap"><?= e(date('d.m H:i', strtotime($ml['created_at']))) ?></td><td><?= e($ml['to_email']) ?></td><td><?= e($ml['subject']) ?></td>
+                                    <td><?= $ml['status'] === 'gönderildi' ? '<span class="badge bg-success">Gönderildi</span>' : '<span class="badge bg-danger" title="' . e($ml['error']) . '">Hata</span> <span class="text-danger">' . e(mb_strimwidth((string)$ml['error'], 0, 80, '…', 'UTF-8')) . '</span>' ?></td></tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table></div>
+                    </div>
+                <?php endif; ?>
             </div>
         </div>
     </div>
