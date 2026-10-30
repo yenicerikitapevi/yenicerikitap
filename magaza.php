@@ -141,6 +141,28 @@ track_view('store', null, $store['id'] ?? null);
         </div>
     </header>
 
+    <?php if ($store && isset($_SESSION['store_user']) && (int)$_SESSION['store_user']['id'] === (int)$store['id']): ?>
+        <div class="bg-warning bg-opacity-10 border-bottom border-warning py-2 text-dark fs-7">
+            <div class="container d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <div>
+                    <i class="bi bi-person-check-fill text-warning me-1"></i> Dükkân sahibisiniz: <b><?= e($store['name']) ?></b>
+                    <?php if (!empty($store['last_sync_at'])): ?>
+                        <span class="text-muted ms-2">(Son Eşitleme: <?= date('d.m.Y H:i', strtotime($store['last_sync_at'])) ?>)</span>
+                    <?php endif; ?>
+                </div>
+                <div class="d-flex gap-2">
+                    <form method="POST" action="satici/index.php" class="d-inline" onsubmit="var btn=this.querySelector('button'); btn.disabled=true; btn.innerHTML='<span class=\'spinner-border spinner-border-sm me-1\'></span> Eşitleniyor...';">
+                        <input type="hidden" name="action" value="sync_nk">
+                        <button type="submit" class="btn btn-warning btn-sm fw-bold shadow-sm">
+                            <i class="bi bi-lightning-charge-fill me-1"></i> NadirKitap ile Eşitle & Satılanları Düşür
+                        </button>
+                    </form>
+                    <a href="satici/" class="btn btn-dark btn-sm fw-bold">Sahaf Paneli</a>
+                </div>
+            </div>
+        </div>
+    <?php endif; ?>
+
     <?php if ($store): ?>
         <!-- ALT DÜKKAN VİTRİN BAŞLIĞI -->
         <section class="py-4 bg-dark text-white border-bottom border-danger border-3">

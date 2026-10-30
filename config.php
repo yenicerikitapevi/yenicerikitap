@@ -585,3 +585,6 @@ require_once __DIR__ . '/_seo.php';
 
 // E-posta (SMTP) ve kargo takibi
 require_once __DIR__ . '/_mail.php';
+
+// NadirKitap otomatik senkronizasyon ve satılan kitapları düşürme motoru
+require_once __DIR__ . '/_nk_sync.php';

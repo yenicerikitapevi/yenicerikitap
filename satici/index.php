@@ -19,6 +19,32 @@ if (!$store || !$store['is_active']) {
 $report_store_id = (int)$store['id'];
 $report_base     = 'index.php?tab=rapor&';
 $tab             = ($_GET['tab'] ?? '') === 'rapor' ? 'rapor' : 'dukkan';
+
+// NadirKitap Senkronizasyon İsteği (Tek tıkla satılanları düşür & yeni kitapları çek)
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'sync_nk') {
+    $res = nk_sync_store($report_store_id, 10);
+    if (!empty($res['success'])) {
+        set_flash('success', $res['message']);
+    } else {
+        set_flash('warning', $res['message']);
+    }
+    redirect('index.php');
+}
+
+// NadirKitap Mağaza Kodu / Link Güncelleme
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'update_nk_url') {
+    $new_input = trim(sanitize($_POST['nadirkitap_input'] ?? ''));
+    $extracted_code = extract_nadirkitap_code($new_input);
+    $new_url = (stripos($new_input, 'http') === 0) ? $new_input : ($extracted_code ? "https://www.nadirkitap.com/kitapara.php?satici={$extracted_code}" : '');
+    db_query("UPDATE stores SET nadirkitap_code = ?, nadirkitap_url = ? WHERE id = ?", [
+        $extracted_code ?: null,
+        $new_url ?: null,
+        $report_store_id
+    ]);
+    set_flash('success', 'NadirKitap mağaza bağlantınız güncellendi.');
+    redirect('index.php');
+}
+
 $book_count      = (int)(db_fetch("SELECT COUNT(*) as cnt FROM books WHERE store_id = ? AND is_active = 1", [$report_store_id])['cnt'] ?? 0);
 
 if ($tab === 'dukkan') {
@@ -84,6 +110,7 @@ if ($tab === 'dukkan') {
         </div>
     </nav>
     <main class="container-xl pb-5">
+        <?= get_flash() ?>
         <?php
         $my_campaigns = array_filter(campaigns_active(), function ($c) use ($report_store_id) {
             return in_array($c['scope_type'], ['all', 'store'], true) && campaign_matches($c, ['id' => 0, 'store_id' => $report_store_id, 'category_id' => 0, 'author_id' => 0, 'publisher_id' => 0]);
@@ -105,6 +132,40 @@ if ($tab === 'dukkan') {
         <?php if ($tab === 'rapor'): ?>
             <?php include __DIR__ . '/../admin/modules/reports.php'; ?>
         <?php else: ?>
+            <!-- NADİRKİTAP SENKRONİZASYON VE SATILANLARI DÜŞÜRME KARTI -->
+            <div class="card border-0 shadow-sm rounded-4 mb-4 bg-white overflow-hidden border-start border-danger border-4">
+                <div class="card-body p-4">
+                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
+                        <div style="max-width: 720px;">
+                            <div class="d-flex align-items-center gap-2 mb-1 flex-wrap">
+                                <span class="badge bg-danger text-white rounded-pill px-3 py-1 fs-8"><i class="bi bi-arrow-repeat me-1"></i>NadirKitap Senkronizasyonu</span>
+                                <?php if (!empty($store['nadirkitap_code'])): ?>
+                                    <span class="badge bg-light text-dark border rounded-pill px-2 py-1 fs-8">NK Mağaza No: <?= e($store['nadirkitap_code']) ?></span>
+                                <?php endif; ?>
+                            </div>
+                            <h6 class="fw-bold text-dark mb-1">Satılan Kitapları Düşürme & Yeni Kitapları Çekme</h6>
+                            <p class="text-muted fs-7 mb-0">
+                                NadirKitap'ta satılan kitaplarınız otomatik tespit edilir ve bu sayfadan kaldırılır (stok sıfırlanır). Yeni eklenen kitaplar mağazanıza aktarılır.
+                            </p>
+                            <?php if (!empty($store['last_sync_at'])): ?>
+                                <small class="text-secondary d-block mt-2 fs-8">
+                                    <i class="bi bi-clock-history text-danger me-1"></i>Son Eşitleme: <b><?= date('d.m.Y H:i', strtotime($store['last_sync_at'])) ?></b>
+                                    <?= !empty($store['last_sync_result']) ? ' — ' . e($store['last_sync_result']) : '' ?>
+                                </small>
+                            <?php endif; ?>
+                        </div>
+                        <div>
+                            <form method="POST" action="" onsubmit="var btn=this.querySelector('button'); btn.disabled=true; btn.innerHTML='<span class=\'spinner-border spinner-border-sm me-1\'></span> Eşitleniyor...';">
+                                <input type="hidden" name="action" value="sync_nk">
+                                <button type="submit" class="btn btn-danger font-semibold px-4 py-2 rounded-3 shadow">
+                                    <i class="bi bi-lightning-charge-fill me-1"></i> NadirKitap ile Eşitle & Satılanları Düşür
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <div class="row g-4 mb-4">
                 <div class="col-lg-5">
                     <div class="bg-white rounded-4 shadow-sm p-4 h-100">

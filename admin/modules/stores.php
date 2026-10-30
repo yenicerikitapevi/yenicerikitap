@@ -7,6 +7,16 @@ if (!defined('SITE_URL')) exit;
 $action = sanitize($_GET['action'] ?? 'list');
 $edit_id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 
+if ($action === 'sync' && $edit_id > 0 && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    $res = nk_sync_store($edit_id, 10);
+    if (!empty($res['success'])) {
+        set_flash('success', $res['message']);
+    } else {
+        set_flash('warning', $res['message']);
+    }
+    redirect('index.php?p=Stores');
+}
+
 if ($action === 'delete' && $edit_id > 0 && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $store = db_fetch("SELECT * FROM stores WHERE id = ?", [$edit_id]);
     if ($store) {
@@ -272,6 +282,9 @@ $stores_list = db_fetch_all("SELECT s.*, (SELECT COUNT(*) FROM books b WHERE b.s
                                         <?php endif; ?>
                                     </td>
                                     <td class="text-end pe-4">
+                                        <form method="POST" action="index.php?p=Stores&action=sync&id=<?= $s['id'] ?>" class="d-inline" onsubmit="var btn=this.querySelector('button'); btn.disabled=true; btn.innerHTML='<span class=\'spinner-border spinner-border-sm\'></span>';">
+                                            <button type="submit" class="btn btn-sm btn-outline-warning me-1" title="NadirKitap ile Eşitle & Satılanları Düşür"><i class="bi bi-lightning-charge-fill"></i></button>
+                                        </form>
                                         <a href="../magaza.php?s=<?= urlencode($s['slug']) ?>" target="_blank" class="btn btn-sm btn-outline-dark me-1" title="Vitrin Sayfasını Gör">
                                             <i class="bi bi-shop"></i>
                                         </a>

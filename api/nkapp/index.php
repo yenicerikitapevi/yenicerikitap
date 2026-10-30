@@ -206,6 +206,24 @@ if (preg_match('#^/pbatch/([^/]+)/finish$#i', $route, $m)) {
     nk_json_response(null, true, ["{$auth_store_name} alt dükkanına toplam {$total} ürün başarıyla aktarıldı."]);
 }
 
+// 4b. POST /sync-sold veya POST /pbatch/{storeCode}/sync-sold -> Satılan kitapları tespit edip düşürür
+if ($route === '/sync-sold' || preg_match('#^/pbatch/([^/]+)/sync-sold$#i', $route)) {
+    $active_codes = $body['activeCodes'] ?? $body['activeProductCodes'] ?? [];
+    if (!is_array($active_codes) || empty($active_codes)) {
+        // İstemci kod göndermediyse sunucu tarafı tarayıcı motorunu çalıştır
+        $res = nk_sync_store($auth_store_id, 10);
+        nk_json_response($res, $res['success'], [$res['message'] ?? '']);
+    } else {
+        $dropped = nk_drop_sold_books($auth_store_id, $active_codes);
+        $count = count($dropped);
+        log_action('Satılan Kitapları Düşürme (API)', 'Stores', $auth_store_id, "{$auth_store_name}: {$count} adet satılan kitap düşürüldü.");
+        nk_json_response([
+            'droppedCount' => $count,
+            'droppedBooks' => $dropped
+        ], true, ["{$auth_store_name} alt dükkanından {$count} adet satılan kitap başarıyla düşürüldü."]);
+    }
+}
+
 // 5. POST /pbatch/{storeCode}/error-report
 if (preg_match('#^/pbatch/([^/]+)/error-report$#i', $route, $m)) {
     nk_json_response(null, true);
