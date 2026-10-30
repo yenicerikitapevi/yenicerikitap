@@ -85,7 +85,10 @@ $items = db_fetch_all("SELECT oi.*, b.title, b.isbn
                             <td><?= e($item['isbn'] ?? '-') ?></td>
                             <td class="text-center"><?= $item['quantity'] ?></td>
                             <td class="text-end"><?= format_price($item['price']) ?></td>
-                            <td class="text-end"><?= format_price($item['total']) ?></td>
+                            <td class="text-end">
+                                <?php if ((float)($item['discount_amount'] ?? 0) > 0): ?><s class="text-muted fs-7 me-1"><?= format_price($item['total'] + $item['discount_amount']) ?></s><?php endif; ?>
+                                <?= format_price($item['total']) ?>
+                            </td>
                         </tr>
                     <?php endforeach; ?>
                 </tbody>
@@ -97,6 +100,21 @@ $items = db_fetch_all("SELECT oi.*, b.title, b.isbn
                 </div>
                 <div class="col-6 text-end">
                     <table class="table table-sm table-borderless">
+                        <?php if ((float)($order['discount_amount'] ?? 0) > 0): ?>
+                            <tr>
+                                <td>Ürün Toplamı:</td>
+                                <td class="fw-bold"><?= format_price($order['total_amount'] - $order['shipping_amount'] + $order['discount_amount']) ?></td>
+                            </tr>
+                            <?php foreach ((json_decode((string)($order['campaign_summary'] ?? ''), true) ?: []) as $camp): if (!empty($camp['shipping'])) continue; ?>
+                                <tr class="text-success">
+                                    <td><?= e($camp['name']) ?>:</td>
+                                    <td class="fw-bold">-<?= format_price($camp['amount']) ?></td>
+                                </tr>
+                            <?php endforeach; ?>
+                            <?php if (!empty($order['coupon_code'])): ?>
+                                <tr><td colspan="2" class="text-muted fs-7">Kupon: <?= e($order['coupon_code']) ?></td></tr>
+                            <?php endif; ?>
+                        <?php endif; ?>
                         <tr>
                             <td>Ara Toplam:</td>
                             <td class="fw-bold"><?= format_price($order['total_amount'] - $order['shipping_amount']) ?></td>

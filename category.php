@@ -59,6 +59,7 @@ $books = db_fetch_all("SELECT b.*, a.name as author_name, p.name as publisher_na
                        LIMIT {$per_page} OFFSET {$offset}", $params);
 
 $all_categories = db_fetch_all("SELECT * FROM categories ORDER BY name ASC");
+track_view('category');
 ?>
 <!DOCTYPE html>
 <html lang="tr">
@@ -207,5 +208,6 @@ $all_categories = db_fetch_all("SELECT * FROM categories ORDER BY name ASC");
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
     <script src="assets/js/app.js"></script>
+    <?= track_script() ?>
 </body>
 </html>

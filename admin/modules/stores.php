@@ -38,6 +38,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_store'])) {
     $phone       = sanitize($_POST['phone'] ?? '');
     $description = sanitize($_POST['description'] ?? '');
     $is_active   = isset($_POST['is_active']) ? 1 : 0;
+    // Boş bırakılırsa Kampanyalar sayfasındaki varsayılan komisyon oranı geçerlidir
+    $commission  = trim(str_replace(',', '.', $_POST['commission_rate'] ?? ''));
+    $commission  = $commission === '' ? null : min(100, max(0, (float)$commission));
 
     if ($name === '' || $username === '') {
         set_flash('danger', 'Dükkan Adı ve Kullanıcı Adı alanları zorunludur.');
@@ -67,8 +70,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_store'])) {
             $plain_hint = $password;
         }
         db_query(
-            "UPDATE stores SET name = ?, slug = ?, username = ?, password_hash = ?, plain_hint = ?, nadirkitap_code = ?, nadirkitap_url = ?, city = ?, phone = ?, description = ?, is_active = ? WHERE id = ?",
-            [$name, $slug, $username, $pass_hash, $plain_hint, $nk_code ?: null, $nk_url ?: null, $city, $phone, $description, $is_active, $edit_id]
+            "UPDATE stores SET name = ?, slug = ?, username = ?, password_hash = ?, plain_hint = ?, nadirkitap_code = ?, nadirkitap_url = ?, city = ?, phone = ?, description = ?, is_active = ?, commission_rate = ? WHERE id = ?",
+            [$name, $slug, $username, $pass_hash, $plain_hint, $nk_code ?: null, $nk_url ?: null, $city, $phone, $description, $is_active, $commission, $edit_id]
         );
         log_action('Alt Dükkan Güncellendi', 'Stores', $edit_id, "Alt dükkan güncellendi: {$name} ({$username})");
         set_flash('success', '"' . $name . '" alt dükkan bilgileri güncellendi.');
@@ -79,8 +82,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_store'])) {
         }
         $pass_hash = password_hash($password, PASSWORD_DEFAULT);
         db_query(
-            "INSERT INTO stores (name, slug, username, password_hash, plain_hint, nadirkitap_code, nadirkitap_url, city, phone, description, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            [$name, $slug, $username, $pass_hash, $password, $nk_code ?: null, $nk_url ?: null, $city, $phone, $description, $is_active]
+            "INSERT INTO stores (name, slug, username, password_hash, plain_hint, nadirkitap_code, nadirkitap_url, city, phone, description, is_active, commission_rate) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            [$name, $slug, $username, $pass_hash, $password, $nk_code ?: null, $nk_url ?: null, $city, $phone, $description, $is_active, $commission]
         );
         $new_id = (int)db_last_id();
         log_action('Yeni Alt Dükkan Açıldı', 'Stores', $new_id, "Alt dükkan oluşturuldu: {$name} (Kullanıcı: {$username})");
@@ -101,7 +104,7 @@ $stores_list = db_fetch_all("SELECT s.*, (SELECT COUNT(*) FROM books b WHERE b.s
 <div class="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-2">
     <div>
         <h5 class="fw-bold text-dark mb-1"><i class="bi bi-shop text-danger me-2"></i>Alt Dükkanlar (Satıcı & Sahaf Yönetimi)</h5>
-        <p class="text-muted fs-7 mb-0">Kullanıcılara kullanıcı adı ve şifre tanımlayarak alt dükkan açabilir, NadirKitap mağazalarından çekilen kitapların doğrudan kendi alt dükkanlarına eklenmesini sağlayabilirsiniz.</p>
+        <p class="text-muted fs-7 mb-0">Kullanıcılara kullanıcı adı ve şifre tanımlayarak alt dükkan açabilir, NadirKitap mağazalarından çekilen kitapların doğrudan kendi alt dükkanlarına eklenmesini sağlayabilirsiniz. Satıcılar aynı bilgilerle <a href="../satici/" target="_blank">/satici/</a> adresinden kendi ziyaret ve satış raporlarını görür.</p>
     </div>
     <?php if ($action === 'list'): ?>
         <div class="d-flex gap-2">
@@ -171,6 +174,12 @@ $stores_list = db_fetch_all("SELECT s.*, (SELECT COUNT(*) FROM books b WHERE b.s
                         <small class="text-muted">Buraya yazabilir veya boş bırakabilirsiniz; kullanıcı masaüstü uygulamasında kendi NadirKitap bağlantısını ya da kodunu girdiğinde otomatik güncellenir.</small>
                     </div>
 
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold fs-7">Komisyon Oranı (%)</label>
+                        <input type="number" step="0.01" min="0" max="100" name="commission_rate" class="form-control" placeholder="Varsayılan: %<?= e(setting('default_commission_rate', '0')) ?>" value="<?= e($store_data['commission_rate'] ?? '') ?>">
+                        <small class="text-muted">Satışın indirim sonrası tutarından alınır. Boş = varsayılan oran (Kampanyalar sayfası).</small>
+                    </div>
+
                     <div class="col-md-12">
                         <label class="form-label fw-semibold fs-7">Alt Dükkan Açıklaması / Hakkında Yazısı</label>
                         <textarea name="description" class="form-control" rows="3" placeholder="Dükkan sayfasında üst kısımda yer alacak tanıtım yazısı..."><?= e($store_data['description'] ?? '') ?></textarea>
@@ -236,6 +245,7 @@ $stores_list = db_fetch_all("SELECT s.*, (SELECT COUNT(*) FROM books b WHERE b.s
                                         <div class="fs-7">
                                             <span class="text-muted">Şifre:</span> <code class="fw-bold text-primary"><?= e($s['plain_hint'] ?: 'Belirlendi') ?></code>
                                         </div>
+                                        <a href="../satici/" target="_blank" class="fs-8 text-muted"><i class="bi bi-graph-up me-1"></i>Satıcı paneli: /satici/</a>
                                     </td>
                                     <td>
                                         <?php if (!empty($s['nadirkitap_code'])): ?>

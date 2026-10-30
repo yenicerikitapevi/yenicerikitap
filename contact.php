@@ -34,6 +34,7 @@ $site_phone    = setting('site_phone', '0312 245 00 00');
 $site_whatsapp = setting('site_whatsapp', '0555 000 00 00');
 $site_email    = setting('site_email', 'iletisim@yenicerikitabevi.com');
 $site_address  = setting('site_address', 'İstasyon Mah. Hikmet Özer Cad. No:48/A Etimesgut / Ankara');
+track_view('contact');
 ?>
 <!DOCTYPE html>
 <html lang="tr">
@@ -133,5 +134,6 @@ $site_address  = setting('site_address', 'İstasyon Mah. Hikmet Özer Cad. No:48
             </div>
         </div>
     </div>
+    <?= track_script() ?>
 </body>
 </html>
