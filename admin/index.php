@@ -18,6 +18,7 @@ $allowed_pages = [
     'Transactions' => 'transactions.php',
     'Messages'     => 'messages.php',
     'ActionLogs'   => 'actionlogs.php',
+    'DataQuality'  => 'dataquality.php',
     'Settings'     => 'settings.php'
 ];
 
@@ -105,6 +106,10 @@ $unread_messages = db_fetch("SELECT COUNT(*) as cnt FROM contact_messages WHERE 
 
                 <div class="px-3 mt-4 mb-2 text-uppercase text-secondary fs-8 fw-bold">Sistem & Denetim</div>
 
+                <a href="index.php?p=DataQuality" class="nav-link <?= $current_p === 'DataQuality' ? 'active' : '' ?>">
+                    <i class="bi bi-clipboard2-check"></i> Veri Kontrolü
+                </a>
+
                 <a href="index.php?p=ActionLogs" class="nav-link <?= $current_p === 'ActionLogs' ? 'active' : '' ?>">
                     <i class="bi bi-journal-text"></i> İşlem Logları
                 </a>
@@ -140,6 +145,7 @@ $unread_messages = db_fetch("SELECT COUNT(*) as cnt FROM contact_messages WHERE 
                             'Transactions' => 'Ödeme & Finans Takibi',
                             'Messages' => 'Gelen Mesajlar',
                             'ActionLogs' => 'Sistem ve Denetim Logları',
+                            'DataQuality' => 'Veri Kontrolü (SEO)',
                             'Settings' => 'Genel Site Ayarları'
                         ];
                         echo $titles[$current_p] ?? 'Yönetim Paneli';
