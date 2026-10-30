@@ -175,10 +175,10 @@ track_view('checkout');
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sipariş ve Ödeme | Yeniçeri Kitabevi</title>
+    <?= seo_head(['title' => seo_title('Sipariş ve Ödeme'), 'description' => seo_description('Yeniçeri Kitabevi güvenli ödeme sayfası.'), 'canonical' => 'checkout.php', 'robots' => 'noindex,nofollow']) ?>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
-    <link rel="stylesheet" href="assets/css/style.css">
+    <link rel="stylesheet" href="<?= asset_v('assets/css/style.css') ?>">
 </head>
 <body>
     <header class="bg-white py-3 border-bottom shadow-sm">
@@ -235,7 +235,7 @@ track_view('checkout');
                 <script>localStorage.removeItem('yeniceri_cart');</script>
             </div>
         <?php else: ?>
-            <h3 class="fw-extrabold text-dark mb-4"><i class="bi bi-bag-check-fill text-danger me-2"></i> Siparişi Tamamla</h3>
+            <h1 class="h3 fw-extrabold text-dark mb-4"><i class="bi bi-bag-check-fill text-danger me-2"></i> Siparişi Tamamla</h1>
 
             <?php if ($payment_result === 'basarisiz'): ?>
                 <div class="alert alert-danger">Kartla ödemeniz tamamlanamadı ve kartınızdan ücret çekilmedi. Bilgilerinizi kontrol edip tekrar deneyebilir veya Havale / EFT ile ödeyebilirsiniz.</div>
@@ -337,7 +337,7 @@ track_view('checkout');
         <?php endif; ?>
     </div>
 
-    <script src="assets/js/app.js"></script>
+    <script src="<?= asset_v('assets/js/app.js') ?>"></script>
     <script>
         // Güncel fiyat ve stoklar: sepette eski fiyat kalmışsa düzeltilir, satıştan kalkan kitaplar çıkarılır
         const CATALOG = <?= json_encode(array_column(db_fetch_all("SELECT id, title, price, stock FROM books WHERE is_active = 1"), null, 'id'), JSON_HEX_TAG | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE) ?>;

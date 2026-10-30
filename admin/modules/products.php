@@ -74,6 +74,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_book'])) {
     $pages          = !empty($_POST['pages']) ? (int)$_POST['pages'] : null;
     $year           = !empty($_POST['year']) ? (int)$_POST['year'] : null;
     $summary        = sanitize($_POST['summary'] ?? '');
+    $meta_desc      = mb_substr(sanitize($_POST['meta_description'] ?? ''), 0, 300, 'UTF-8') ?: null;
     $shelf_code     = sanitize($_POST['shelf_code'] ?? '') ?: null;
     $condition_text = sanitize($_POST['condition_text'] ?? '') ?: null;
     $cover_type     = sanitize($_POST['cover_type'] ?? '') ?: null;
@@ -137,6 +138,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_book'])) {
     if ($upload_error !== '') {
         set_flash('warning', 'Kitap kaydedildi ancak kapak resmi yüklenemedi: ' . $upload_error);
     }
+    // SEO: Google açıklaması, adres (slug) ve site haritası için güncelleme zamanı
+    db_query("UPDATE books SET meta_description = ? WHERE id = ?", [$meta_desc, $book_id]);
+    book_refresh_slug($book_id);
+    book_touch($book_id);
 
     db_query("DELETE FROM book_showcase WHERE book_id = ?", [$book_id]);
     foreach ($selected_showcases as $sc_id) {
@@ -204,7 +209,7 @@ if (($action === 'add' || $action === 'edit') && $edit_id > 0) {
                             <img src="../<?= e(cover_url($book_data['cover_image'] ?? '')) ?>" alt="Kapak" id="coverPreview" style="width: 80px; height: 115px; object-fit: cover;" class="rounded shadow-sm bg-white">
                             <div class="flex-grow-1">
                                 <input type="file" name="cover_file" class="form-control" accept="image/jpeg,image/png,image/webp"
-                                       onchange="if (this.files[0]) document.getElementById('coverPreview').src = URL.createObjectURL(this.files[0]);">
+                                       onchange="if (this.files[0]) document.getElementById('coverPreview').src = window.URL.createObjectURL(this.files[0]);">
                                 <small class="text-muted d-block mt-1">JPG, PNG veya WEBP, en fazla 5 MB. Önerilen oran 2:3 (ör. 600×900 piksel).</small>
                                 <?php if (!empty($book_data['cover_image']) && $book_data['cover_image'] !== 'book_placeholder.svg'): ?>
                                     <div class="form-check mt-2">
@@ -352,6 +357,12 @@ if (($action === 'add' || $action === 'edit') && $edit_id > 0) {
                     <div class="col-md-12">
                         <label class="form-label fw-semibold fs-7">Kitap Özeti / Açıklama</label>
                         <textarea name="summary" class="form-control" rows="4"><?= e($book_data['summary'] ?? '') ?></textarea>
+                    </div>
+
+                    <div class="col-md-12">
+                        <label class="form-label fw-semibold fs-7">Google Açıklaması (meta description) <small class="text-muted fw-normal" id="metaDescCount"></small></label>
+                        <textarea name="meta_description" id="metaDescInput" class="form-control" rows="2" maxlength="300" placeholder="Boş bırakılırsa kitap adı, yazar, yayınevi, fiyat ve özetten otomatik üretilir (140–160 karakter önerilir)."><?= e($book_data['meta_description'] ?? '') ?></textarea>
+                        <script>(function () { var t = document.getElementById('metaDescInput'), c = document.getElementById('metaDescCount'); var u = function () { c.textContent = '(' + t.value.trim().length + ' karakter)'; }; t.addEventListener('input', u); u(); })();</script>
                     </div>
 
                     <div class="col-md-6 border-end pr-md-4">

@@ -58,10 +58,10 @@ track_view('legal');
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?= e($pages[$p]) ?> | <?= e($brand) ?></title>
+    <?= seo_head(['title' => seo_title($pages[$p]), 'description' => seo_description($pages[$p] . ': ' . $brand . ' alışverişlerinizde geçerli koşullar, haklarınız ve satıcı bilgileri.'), 'canonical' => 'legal.php?p=' . $p, 'jsonld' => [jsonld_breadcrumb([['Ana Sayfa', ''], [$pages[$p], null]])]]) ?>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
-    <link rel="stylesheet" href="assets/css/style.css">
+    <link rel="stylesheet" href="<?= asset_v('assets/css/style.css') ?>">
     <style>
         .legal-text h2 { font-size: 1.15rem; font-weight: 700; margin-top: 1.75rem; }
         .legal-text p, .legal-text li { color: #374151; line-height: 1.7; }

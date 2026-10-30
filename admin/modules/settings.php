@@ -7,7 +7,7 @@ if (!defined('SITE_URL')) exit;
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_settings'])) {
     $settings_keys = [
         'site_title', 'site_description', 'site_email', 'site_phone', 
-        'site_whatsapp', 'site_address', 'shipping_free_limit', 
+        'site_whatsapp', 'site_address', 'social_instagram', 'social_facebook', 'social_x', 'social_youtube', 'shipping_free_limit', 
         'flat_shipping_cost', 'bank_name', 'bank_account_name', 'bank_iban',
         'company_legal_name', 'company_tax_office', 'company_tax_number', 'company_mersis',
         'payment_merchant_id', 'payment_api_key', 'payment_merchant_salt', 'paytr_test_mode',
@@ -21,6 +21,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_settings'])) {
             $val = sanitize($_POST[$key]);
             if (in_array($key, $secret_keys, true) && $val === '') {
                 continue;
+            }
+            if (strpos($key, 'social_') === 0 && $val !== '' && !preg_match('#^https://#i', $val)) {
+                $val = ''; // yalnızca https:// ile başlayan profil adresleri
             }
             if ($key === 'paytr_test_mode') {
                 $val = ($val === '0') ? '0' : '1';
@@ -145,6 +148,14 @@ foreach ($setting_rows as $row) {
                             <label class="form-label fw-semibold fs-7">Fiziksel Mağaza Adresi</label>
                             <input type="text" name="site_address" class="form-control" value="<?= e($s['site_address'] ?? '') ?>">
                         </div>
+
+                        <?php foreach (['social_instagram' => 'Instagram', 'social_facebook' => 'Facebook', 'social_x' => 'X (Twitter)', 'social_youtube' => 'YouTube'] as $sk => $sl): ?>
+                            <div class="col-md-3">
+                                <label class="form-label fw-semibold fs-7"><?= $sl ?> Adresi</label>
+                                <input type="url" name="<?= $sk ?>" class="form-control" placeholder="https://..." value="<?= e($s[$sk] ?? '') ?>">
+                            </div>
+                        <?php endforeach; ?>
+                        <div class="col-12"><small class="text-muted">Sosyal medya adresleri Google'daki işletme bilgisine (Organization / sameAs) eklenir. Boş bırakılanlar kullanılmaz.</small></div>
 
                         <div class="col-md-6">
                             <label class="form-label fw-semibold fs-7">Ücretsiz Kargo Limiti (TL)</label>

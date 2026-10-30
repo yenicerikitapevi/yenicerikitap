@@ -49,9 +49,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $fields = ['name' => $name, 'slug' => unique_slug($tab, $name, $id)];
         if ($tab === 'authors') {
             $fields['bio'] = sanitize($_POST['bio'] ?? '');
+            $fields['meta_description'] = mb_substr(sanitize($_POST['meta_description'] ?? ''), 0, 300, 'UTF-8');
         } elseif ($tab === 'categories') {
             $icon = $_POST['icon'] ?? 'bi-book';
             $fields['icon'] = isset($category_icons[$icon]) ? $icon : 'bi-book';
+            // Kategori sayfasının üstündeki tanıtım metni (SEO) ve arama sonucu açıklaması
+            $fields['description'] = sanitize($_POST['description'] ?? '');
+            $fields['meta_description'] = mb_substr(sanitize($_POST['meta_description'] ?? ''), 0, 300, 'UTF-8');
             // Yalnızca ana kategoriler üst kategori olabilir; böylece döngü oluşmaz
             $parent_id = (int)($_POST['parent_id'] ?? 0);
             $parent_ok = $parent_id > 0 && $parent_id !== $id && db_fetch("SELECT id FROM categories WHERE id = ? AND parent_id IS NULL", [$parent_id]);
@@ -60,6 +64,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         if ($item) {
+            // Ad değişince adres (slug) değişir; eski adres yeni adrese 301 ile yönlenir
+            if ($tab !== 'publishers' && !empty($item['slug']) && $item['slug'] !== $fields['slug']) {
+                remember_old_slug($tab === 'authors' ? 'author' : 'category', $item['slug'], $id);
+            }
             $set = implode(', ', array_map(fn($k) => "{$k} = ?", array_keys($fields)));
             db_query("UPDATE {$tab} SET {$set} WHERE id = ?", array_merge(array_values($fields), [$id]));
             log_action($type['single'] . ' Güncellendi', 'Catalog', $id, ($item['name'] !== $name ? "{$item['name']} → " : '') . $name);
@@ -112,6 +120,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             db_query("UPDATE authors SET bio = ? WHERE id = ?", [$item['bio'], $target_id]); // biyografi kaybolmasın
         }
         db_query("DELETE FROM {$tab} WHERE id = ?", [$id]);
+        if ($tab !== 'publishers' && !empty($item['slug'])) {
+            // Birleştirilen kaydın adresi hedefin adresine 301 ile yönlenir
+            remember_old_slug($tab === 'authors' ? 'author' : 'category', $item['slug'], $target_id);
+            db_query("UPDATE slug_redirects SET target_id = ? WHERE entity = ? AND target_id = ?", [$target_id, $tab === 'authors' ? 'author' : 'category', $id]);
+        }
         $pdo->commit();
 
         log_action($type['single'] . ' Birleştirildi', 'Catalog', $target_id, "{$item['name']} → {$target['name']} ({$moved} kitap taşındı)");
@@ -191,9 +204,21 @@ $edit_has_children = $edit && $tab === 'categories' && db_fetch("SELECT id FROM 
                     <?php if ($tab === 'authors'): ?>
                         <div class="mb-3">
                             <label class="form-label fw-semibold fs-7">Biyografi</label>
-                            <textarea name="bio" class="form-control" rows="5" placeholder="Kitap sayfasında &quot;Yazar Hakkında&quot; bölümünde gösterilir."><?= e($edit['bio'] ?? '') ?></textarea>
+                            <textarea name="bio" class="form-control" rows="5" placeholder="Kitap sayfasında &quot;Yazar Hakkında&quot; bölümünde ve yazar sayfasında gösterilir."><?= e($edit['bio'] ?? '') ?></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold fs-7">Google Açıklaması (meta description) <small class="text-muted fw-normal js-count" data-for="metaDesc"></small></label>
+                            <textarea name="meta_description" id="metaDesc" class="form-control" rows="2" maxlength="300" placeholder="Boş bırakılırsa biyografiden otomatik üretilir (140–160 karakter önerilir)."><?= e($edit['meta_description'] ?? '') ?></textarea>
                         </div>
                     <?php elseif ($tab === 'categories'): ?>
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold fs-7">Tanıtım Metni <small class="text-muted fw-normal js-count" data-for="catDesc" data-words="1"></small></label>
+                            <textarea name="description" id="catDesc" class="form-control" rows="7" placeholder="Kategori sayfasının üstünde gösterilir. 150–300 kelime önerilir; paragrafları boş satırla ayırın."><?= e($edit['description'] ?? '') ?></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold fs-7">Google Açıklaması (meta description) <small class="text-muted fw-normal js-count" data-for="metaDesc"></small></label>
+                            <textarea name="meta_description" id="metaDesc" class="form-control" rows="2" maxlength="300" placeholder="Boş bırakılırsa tanıtım metninden otomatik üretilir (140–160 karakter önerilir)."><?= e($edit['meta_description'] ?? '') ?></textarea>
+                        </div>
                         <div class="mb-3">
                             <label class="form-label fw-semibold fs-7">Menü Simgesi</label>
                             <select name="icon" class="form-select" id="categoryIcon">
@@ -321,3 +346,17 @@ $edit_has_children = $edit && $tab === 'categories' && db_fetch("SELECT id FROM 
     });
 </script>
 <?php endif; ?>
+
+<script>
+// Karakter / kelime sayacı (SEO alanları)
+document.querySelectorAll('.js-count').forEach(function (el) {
+    var t = document.getElementById(el.dataset.for);
+    if (!t) return;
+    var upd = function () {
+        var v = t.value.trim();
+        el.textContent = el.dataset.words ? '(' + (v ? v.split(/\s+/).length : 0) + ' kelime)' : '(' + v.length + ' karakter)';
+    };
+    t.addEventListener('input', upd);
+    upd();
+});
+</script>

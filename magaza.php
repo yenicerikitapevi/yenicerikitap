@@ -88,13 +88,22 @@ track_view('store', null, $store['id'] ?? null);
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?= $store ? e($store['name']) . ' | Alt Dükkan - Yeniçeri Kitabevi' : 'Alt Dükkanlar & Sahaflar | Yeniçeri Kitabevi' ?></title>
+    <?php
+    if ($store) {
+        $m_head = ['title' => seo_title($store['name'] . ' - Sahaf'), 'description' => seo_description(trim(($store['description'] ?: $store['name'] . ' sahaf kitapları') . ($store['city'] ? ', ' . $store['city'] : '') . '. İkinci el ve nadir kitaplar Yeniçeri Kitabevi\'nde.')), 'canonical' => 'magaza.php?s=' . rawurlencode($store['slug']) . ((int)($_GET['page'] ?? 1) > 1 ? '&page=' . (int)$_GET['page'] : '')];
+        if (($_GET['q'] ?? '') !== '' || !empty($_GET['cat']) || !empty($_GET['sort'])) $m_head['robots'] = 'noindex,follow';
+        $m_head['jsonld'] = [jsonld_breadcrumb([['Ana Sayfa', ''], ['Sahaflar', 'magaza.php'], [$store['name'], null]])];
+    } else {
+        $m_head = ['title' => seo_title('Alt Dükkanlar & Sahaflar'), 'description' => seo_description('Yeniçeri Kitabevi\'ndeki sahaflar: ikinci el, nadir ve eski basım kitaplar tek adreste. Sahaf vitrinlerini keşfedin.'), 'canonical' => 'magaza.php', 'jsonld' => [jsonld_breadcrumb([['Ana Sayfa', ''], ['Sahaflar', null]])]];
+    }
+    echo seo_head($m_head);
+    ?>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
-    <link rel="stylesheet" href="assets/css/style.css">
+    <link rel="stylesheet" href="<?= asset_v('assets/css/style.css') ?>">
 </head>
 <body>
     <div class="top-bar py-2 border-bottom border-dark">
@@ -337,7 +346,7 @@ track_view('store', null, $store['id'] ?? null);
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="assets/js/app.js"></script>
+    <script src="<?= asset_v('assets/js/app.js') ?>"></script>
     <?= track_script() ?>
 </body>
 </html>

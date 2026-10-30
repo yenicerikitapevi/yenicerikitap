@@ -137,7 +137,7 @@ if ($books_report) {
 }
 
 // --- Sayfa türleri (yalnızca yönetici, dükkân seçili değilken) ---
-$page_labels = ['home' => 'Ana Sayfa', 'category' => 'Kategori / Arama', 'detail' => 'Kitap Detay', 'store' => 'Alt Dükkan Vitrini', 'checkout' => 'Sepet / Ödeme', 'blog' => 'Blog', 'contact' => 'İletişim', 'legal' => 'Yasal Sayfalar'];
+$page_labels = ['home' => 'Ana Sayfa', 'category' => 'Kategori / Arama', 'detail' => 'Kitap Detay', 'store' => 'Alt Dükkan Vitrini', 'checkout' => 'Sepet / Ödeme', 'blog' => 'Blog', 'contact' => 'İletişim', 'legal' => 'Yasal Sayfalar', 'author' => 'Yazar Sayfası'];
 $page_report = [];
 if (!$is_seller && $scope_store === 0) {
     foreach (db_fetch_all("SELECT e.page_type, COUNT(*) as views, COUNT(DISTINCT e.visitor_hash) as visitors, AVG(CASE WHEN e.duration_sec > 0 THEN e.duration_sec END) as avg_sec

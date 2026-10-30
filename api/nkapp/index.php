@@ -434,6 +434,8 @@ if (preg_match('#^/pbatch/([^/]+)/([^/]+)/(\d+)$#i', $route, $m)) {
                 }
             }
 
+            book_refresh_slug($book_id); // okunabilir adres (ad değiştiyse eskisi 301 ile yönlenir)
+            book_touch($book_id); // site haritası lastmod
             $saved_count++;
         }
 

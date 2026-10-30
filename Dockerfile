@@ -5,7 +5,7 @@ RUN apt-get update && apt-get install -y \
     libsqlite3-dev libpng-dev libjpeg62-turbo-dev libwebp-dev \
     && docker-php-ext-configure gd --with-jpeg --with-webp \
     && docker-php-ext-install pdo pdo_sqlite pdo_mysql gd exif \
-    && a2enmod rewrite \
+    && a2enmod rewrite headers expires deflate \
     && sed -i '/<Directory \/var\/www\/>/,/<\/Directory>/ s/AllowOverride None/AllowOverride All/' /etc/apache2/apache2.conf
 
 # Kapak resmi ve toplu kitap (kitApp) yüklemeleri için PHP boyut sınırları

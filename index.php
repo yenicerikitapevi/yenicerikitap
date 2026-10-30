@@ -44,14 +44,18 @@ track_view('home');
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?= e($site['site_title'] ?? 'Yeniçeri Kitabevi') ?></title>
-    <meta name="description" content="<?= e($site['site_description'] ?? '') ?>">
+    <?= seo_head([
+        'title'       => mb_strlen($site['site_title'] ?? '', 'UTF-8') > 0 && mb_strlen($site['site_title'], 'UTF-8') <= 60 ? $site['site_title'] : seo_title('Kitabın Güvenli ve Hızlı Adresi'),
+        'description' => seo_description($site['site_description'] ?? 'Roman, tarih, dünya klasikleri, felsefe ve çocuk kitapları uygun fiyatlarla Yeniçeri Kitabevi\'nde.'),
+        'canonical'   => '',
+        'jsonld'      => [jsonld_home()],
+    ]) ?>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
-    <link rel="stylesheet" href="assets/css/style.css">
+    <link rel="stylesheet" href="<?= asset_v('assets/css/style.css') ?>">
 </head>
 <body>
 
@@ -124,7 +128,7 @@ track_view('home');
                 </li>
                 <?php foreach ($categories as $cat): ?>
                     <li class="nav-item">
-                        <a class="nav-link" href="category.php?id=<?= $cat['id'] ?>">
+                        <a class="nav-link" href="<?= e(category_path($cat)) ?>">
                             <i class="bi <?= e($cat['icon']) ?> me-1 text-danger"></i> <?= e($cat['name']) ?>
                         </a>
                     </li>
@@ -374,7 +378,7 @@ track_view('home');
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="assets/js/app.js"></script>
+    <script src="<?= asset_v('assets/js/app.js') ?>"></script>
     <?= track_script() ?>
 </body>
 </html>
