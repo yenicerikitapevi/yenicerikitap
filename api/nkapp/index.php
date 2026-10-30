@@ -298,15 +298,34 @@ if (preg_match('#^/pbatch/([^/]+)/([^/]+)/(\d+)$#i', $route, $m)) {
             $author_id    = nk_resolve_entity('authors', $meta['author'] ?? '', $entity_cache);
             $publisher_id = nk_resolve_entity('publishers', $meta['publisher'] ?? '', $entity_cache);
 
-            $cat_label = trim((string)($meta['category2'] ?? ''));
-            if ($cat_label === '') {
-                $cat_label = trim((string)($meta['category1'] ?? ''));
-            }
-            if ($cat_label === '' && !empty($meta['categoryFullPath'])) {
+            // Uygulama kategori adı yerine NadirKitap kategori numarası gönderebilir: önce ad aranır,
+            // yalnızca numara varsa numaranın eşleştiği kategori kullanılır (yönetici yeniden adlandırsa/birleştirse de)
+            $cat_candidates = [trim((string)($meta['category2'] ?? '')), trim((string)($meta['category1'] ?? ''))];
+            if (!empty($meta['categoryFullPath'])) {
                 $parts = explode('>', (string)$meta['categoryFullPath']);
-                $cat_label = trim((string)end($parts));
+                $cat_candidates[] = trim((string)end($parts));
             }
-            $category_id = nk_resolve_entity('categories', $cat_label, $entity_cache);
+            $cat_label = '';
+            $cat_code = '';
+            foreach ($cat_candidates as $cand) {
+                $cand = trim(html_entity_decode($cand, ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+                if ($cand === '') continue;
+                if (is_numeric_category_name($cand)) {
+                    $cat_code = $cat_code ?: $cand;
+                } elseif ($cat_label === '') {
+                    $cat_label = $cand;
+                }
+            }
+            $category_id = null;
+            if ($cat_code !== '') {
+                $category_id = nk_category_for_code($cat_code);
+            }
+            if (!$category_id) {
+                $category_id = nk_resolve_entity('categories', $cat_label !== '' ? $cat_label : $cat_code, $entity_cache);
+                if ($cat_code !== '') {
+                    nk_category_map_set($cat_code, $category_id);
+                }
+            }
 
             $price = nk_parse_price($meta['price'] ?? '0');
             $stock = max(1, (int)($meta['stockCount'] ?? 1));
@@ -415,6 +434,8 @@ if (preg_match('#^/pbatch/([^/]+)/([^/]+)/(\d+)$#i', $route, $m)) {
                 }
             }
 
+            book_refresh_slug($book_id); // okunabilir adres (ad değiştiyse eskisi 301 ile yönlenir)
+            book_touch($book_id); // site haritası lastmod
             $saved_count++;
         }
 

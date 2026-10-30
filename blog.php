@@ -10,10 +10,10 @@ track_view('blog');
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Edebiyat & Kitap Önerileri Blogu | Yeniçeri Kitabevi</title>
+    <?= seo_head(['title' => seo_title('Edebiyat & Kitap Önerileri Blogu'), 'description' => seo_description('Kitap önerileri, edebiyat yazıları ve okuma listeleri Yeniçeri Kitabevi blogunda. Yeni çıkanlar, klasikler ve yazar incelemeleri.'), 'canonical' => 'blog.php', 'jsonld' => [jsonld_breadcrumb([['Ana Sayfa', ''], ['Blog', null]])]]) ?>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
-    <link rel="stylesheet" href="assets/css/style.css">
+    <link rel="stylesheet" href="<?= asset_v('assets/css/style.css') ?>">
 </head>
 <body>
     <header class="bg-white py-3 border-bottom shadow-sm">
@@ -28,7 +28,7 @@ track_view('blog');
     <div class="container py-5">
         <div class="text-center max-w-xl mx-auto mb-5">
             <span class="badge bg-danger bg-opacity-10 text-danger rounded-pill px-3 py-2 font-bold mb-2">Yeniçeri Edebiyat</span>
-            <h2 class="fw-extrabold text-dark">Kitap Önerileri ve Edebi Yazılar</h2>
+            <h1 class="h2 fw-extrabold text-dark">Kitap Önerileri ve Edebi Yazılar</h1>
             <p class="text-muted">Okuma listeleri, yazar biyografileri ve kitap tahlilleri.</p>
         </div>
 

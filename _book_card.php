@@ -12,8 +12,8 @@ $img_src = cover_url($b['cover_image'] ?? '');
 ?>
 <div class="book-card">
     <div class="book-cover-wrapper">
-        <a href="detail.php?id=<?= $b['id'] ?>">
-            <img src="<?= e($img_src) ?>" alt="<?= e($b['title']) ?>" class="book-cover-img" onerror="this.src='assets/images/book_placeholder.svg'">
+        <a href="<?= e(book_path($b)) ?>">
+            <?= cover_picture($b['cover_image'] ?? '', cover_alt($b), 'book-cover-img', 400, 540, empty($eager_cover), 'onerror="this.src=\'/assets/images/book_placeholder.svg\'"') ?>
         </a>
         <?php if ($discount_percent > 0): ?>
             <span class="discount-badge">-%<?= $discount_percent ?> İndirim</span>
@@ -30,7 +30,7 @@ $img_src = cover_url($b['cover_image'] ?? '');
         <?php endif; ?>
         <div class="book-author text-truncate"><?= e($b['author_name'] ?? 'Bilinmeyen Yazar') ?></div>
         <h6 class="book-title">
-            <a href="detail.php?id=<?= $b['id'] ?>" class="text-dark text-decoration-none" title="<?= e($b['title']) ?>">
+            <a href="<?= e(book_path($b)) ?>" class="text-dark text-decoration-none" title="<?= e($b['title']) ?>">
                 <?= e($b['title']) ?>
             </a>
         </h6>

@@ -41,10 +41,10 @@ track_view('contact');
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>İletişim & Şube Konumu | Yeniçeri Kitabevi</title>
+    <?= seo_head(['title' => seo_title('İletişim & Şube Konumu'), 'description' => seo_description('Yeniçeri Kitabevi iletişim bilgileri ve Etimesgut / Ankara şube adresi: ' . setting('site_address', '') . ' Telefon: ' . setting('site_phone', '') . '.'), 'canonical' => 'contact.php', 'jsonld' => [jsonld_breadcrumb([['Ana Sayfa', ''], ['İletişim', null]])]]) ?>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
-    <link rel="stylesheet" href="assets/css/style.css">
+    <link rel="stylesheet" href="<?= asset_v('assets/css/style.css') ?>">
 </head>
 <body>
     <header class="bg-white py-3 border-bottom shadow-sm">
@@ -60,7 +60,7 @@ track_view('contact');
         <div class="row g-5">
             <div class="col-lg-6">
                 <span class="badge bg-danger bg-opacity-10 text-danger rounded-pill px-3 py-2 font-bold mb-2">Bize Ulaşın</span>
-                <h2 class="fw-extrabold text-dark mb-3">İletişim & Mağaza Adresimiz</h2>
+                <h1 class="h2 fw-extrabold text-dark mb-3">İletişim & Mağaza Adresimiz</h1>
                 <p class="text-muted mb-4">Yeniçeri Kitabevi Ankara Etimesgut şubemiz ve online mağazamızla haftanın 7 günü hizmetinizdedir.</p>
 
                 <div class="card border-0 shadow-sm rounded-4 p-4 mb-4">
