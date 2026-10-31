@@ -11,8 +11,14 @@ RUN apt-get update && apt-get install -y \
 # Kapak resmi ve toplu kitap (kitApp) yüklemeleri için PHP boyut sınırları
 RUN printf "upload_max_filesize=64M\npost_max_size=64M\nmemory_limit=256M\nmax_execution_time=180\n" > /usr/local/etc/php/conf.d/uploads.ini
 
+# Fotoğraftan kitap tanıma (ISBN yardımcısı) için PHP paketleri: Anthropic SDK + Guzzle
+COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
+RUN apt-get update && apt-get install -y --no-install-recommends unzip git && rm -rf /var/lib/apt/lists/*
+
 # Copy project files
 COPY . /var/www/html/
+WORKDIR /var/www/html
+RUN composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader
 
 # Set permissions
 RUN chown -R www-data:www-data /var/www/html

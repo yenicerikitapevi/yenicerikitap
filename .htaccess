@@ -9,6 +9,9 @@ ErrorDocument 404 /404.php
 <IfModule mod_rewrite.c>
     RewriteEngine On
 
+    # 0) Composer paketleri (vendor) web'den açılamaz
+    RewriteRule ^vendor(/|$) - [F,L]
+
     # 1) Tek adres: https://yenicerikitabevi.com (www ve http istekleri 301)
     #    Cloudflare ziyaretçinin protokolünü CF-Visitor başlığında gönderir; yoksa X-Forwarded-Proto kullanılır.
     #    Yalnızca kendi alan adımızda çalışır (localhost / onrender.com etkilenmez).
@@ -66,6 +69,6 @@ ErrorDocument 404 /404.php
 </IfModule>
 
 # Hassas dosyalar web'den okunamaz
-<FilesMatch "^(schema\.sql|render\.yaml|Dockerfile|vercel\.json|\.gitignore)$">
+<FilesMatch "^(schema\.sql|render\.yaml|Dockerfile|vercel\.json|\.gitignore|composer\.(json|lock)|KURULUM\.md)$">
     Require all denied
 </FilesMatch>

@@ -71,7 +71,7 @@ function nk_sync_curl_get($url, $cookie_file = null) {
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_FOLLOWLOCATION => true,
         CURLOPT_MAXREDIRS      => 5,
-        CURLOPT_TIMEOUT        => 25,
+        CURLOPT_TIMEOUT        => 15,
         CURLOPT_CONNECTTIMEOUT => 10,
         CURLOPT_HTTPHEADER     => $headers,
         CURLOPT_SSL_VERIFYPEER => false,
@@ -260,10 +260,15 @@ function nk_sync_store($store_id, $max_pages = 5) {
     $hit_cloudflare = false;
     $complete = false;      // mağazanın son sayfasına kadar okundu mu? (satılan düşürme yalnızca o zaman güvenli)
     $fetch_error = '';
-    @set_time_limit(300);
+    $started = microtime(true);
+    $time_budget = 45; // saniye: web isteği sunucu/Render zaman aşımına (502) takılmasın
+    @set_time_limit(120);
 
     // Sayfaları gez
     for ($page = 1; $page <= $max_pages; $page++) {
+        if ($page > 1 && microtime(true) - $started > $time_budget) {
+            break; // süre doldu: tarama yarım kalır, satılan düşürme yapılmaz
+        }
         $page_url = $base_target_url;
         if ($page > 1) {
             $sep = (strpos($page_url, '?') !== false) ? '&' : '?';

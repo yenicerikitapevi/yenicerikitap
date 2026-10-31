@@ -127,6 +127,11 @@ function ih_fetch_many(array $reqs)
     $out = [];
     $pending = array_keys($reqs);
     for ($attempt = 0; $attempt < 3 && $pending; $attempt++) {
+        // Genel süre sınırı (ih_set_deadline): kalan süre azsa yeniden deneme yapılmaz
+        $left = ih_time_left();
+        if ($attempt > 0 && $left !== null && $left < 6) {
+            break;
+        }
         if ($attempt > 0) {
             usleep(600000 * $attempt);
         }
@@ -141,6 +146,10 @@ function ih_fetch_many(array $reqs)
                 CURLOPT_MAXREDIRS      => 5,
                 CURLOPT_HTTPHEADER     => $hdr,
             ]);
+            $left = ih_time_left();
+            if ($left !== null) {
+                curl_setopt($ch, CURLOPT_TIMEOUT, max(2, min((int)$cfg['timeout'], (int)floor($left) - 1)));
+            }
             curl_multi_add_handle($mh, $ch);
             $hs[$k] = $ch;
         }
@@ -172,6 +181,17 @@ function ih_fetch_many(array $reqs)
         $pending = $next;
     }
     return $out;
+}
+
+/** Tüm isteğin bitmesi gereken an (PHP 60 sn sınırının altında kalmak için) */
+function ih_set_deadline($seconds)
+{
+    $GLOBALS['ih_deadline'] = microtime(true) + $seconds;
+}
+
+function ih_time_left()
+{
+    return isset($GLOBALS['ih_deadline']) ? $GLOBALS['ih_deadline'] - microtime(true) : null;
 }
 
 function ih_fetch($url, $headers = [])
@@ -804,6 +824,201 @@ function ih_googlebooks_parse($isbn, $resp)
     return $r;
 }
 
+/* ===================== İKİNCİ EL İLANLAR (Nadir Kitap, Kitantik) ===================== */
+
+/** Ürün bağlantısı mı? (ilan sitesine göre) */
+function ih_listing_href_ok($key, $href)
+{
+    if ($key === 'nadirkitap') {
+        return (bool)preg_match('#-(?:kitap|urun)\d+\.html#i', $href);
+    }
+    return (bool)preg_match('#/(?:urun|kitap|product|ilan)[/-]#i', $href) || (bool)preg_match('#-p-\d+#i', $href);
+}
+
+/** Kart metninden durum (yeni / ikinci el) */
+function ih_listing_condition($text)
+{
+    $t = mb_strtolower((string)$text, 'UTF-8');
+    if (preg_match('/ikinci el|2\. ?el|kullanılmış|sahaf|çok iyi|orta|yıpranmış|eski baskı/u', $t)) {
+        return 'İkinci el';
+    }
+    if (preg_match('/sıfır|yeni ürün|yeni kitap|\byeni\b|ambalajında/u', $t)) {
+        return 'Yeni';
+    }
+    return '';
+}
+
+/**
+ * İlan sitesi arama sayfasını ayrıştırır → ['listings' => [title, url, seller, condition, price, shipping]]
+ * Önce JSON-LD (ItemList/Product/Offer), olmazsa ürün bağlantısı çevresindeki metin.
+ * $hint varsa (ad/yazar ile arama) başlığı uyuşmayan ilanlar elenir.
+ */
+function ih_listing_parse($key, $store, $resp, $hint = null)
+{
+    $r = ih_res($key, $store, isset($resp['url']) ? $resp['url'] : null);
+    $r['listings'] = [];
+    if (!$resp || $resp['code'] !== 200) {
+        $r['error'] = 'HTTP ' . ($resp ? $resp['code'] : 0);
+        return $r;
+    }
+    $html = $resp['body'];
+    if (stripos($html, 'cf-chl') !== false || stripos($html, 'Just a moment') !== false) {
+        $r['error'] = 'site sunucuyu engelledi (bot koruması)';
+        return $r;
+    }
+    $port = parse_url($resp['url'], PHP_URL_PORT);
+    $host = parse_url($resp['url'], PHP_URL_SCHEME) . '://' . parse_url($resp['url'], PHP_URL_HOST) . ($port ? ':' . $port : '');
+    $abs = function ($u) use ($host) {
+        $u = html_entity_decode(trim((string)$u), ENT_QUOTES, 'UTF-8');
+        if ($u === '') return '';
+        if (strpos($u, '//') === 0) return 'https:' . $u;
+        if (!preg_match('#^https?://#i', $u)) return $host . '/' . ltrim($u, '/');
+        return $u;
+    };
+    $list = [];
+    // 1) JSON-LD
+    foreach (ih_jsonld_all($html) as $g) {
+        $items = [];
+        if (in_array('ItemList', ih_types($g), true) && !empty($g['itemListElement'])) {
+            foreach ((array)$g['itemListElement'] as $el) {
+                $items[] = isset($el['item']) && is_array($el['item']) ? $el['item'] : $el;
+            }
+        } elseif (in_array('Product', ih_types($g), true) || in_array('Book', ih_types($g), true)) {
+            $items[] = $g;
+        }
+        foreach ($items as $it) {
+            $offers = isset($it['offers']) ? $it['offers'] : null;
+            if (!$offers) continue;
+            $offs = isset($offers['@type']) || isset($offers['price']) || isset($offers['lowPrice']) ? [$offers] : (array)$offers;
+            foreach ($offs as $o) {
+                $price = ih_parse_tl(isset($o['price']) ? $o['price'] : (isset($o['lowPrice']) ? $o['lowPrice'] : null));
+                if (!$price) continue;
+                $cond = '';
+                if (!empty($o['itemCondition'])) {
+                    $cond = stripos($o['itemCondition'], 'Used') !== false ? 'İkinci el' : (stripos($o['itemCondition'], 'New') !== false ? 'Yeni' : '');
+                }
+                $ship = null;
+                if (isset($o['shippingDetails']['shippingRate']['value'])) {
+                    $ship = ih_parse_tl($o['shippingDetails']['shippingRate']['value']);
+                }
+                $list[] = [
+                    'title' => ih_clean_text(isset($it['name']) ? $it['name'] : ''),
+                    'url' => $abs(isset($o['url']) ? $o['url'] : (isset($it['url']) ? $it['url'] : '')),
+                    'seller' => ih_clean_text(isset($o['seller']['name']) ? $o['seller']['name'] : ''),
+                    'condition' => $cond, 'price' => $price, 'shipping' => $ship,
+                ];
+            }
+        }
+    }
+    // 2) HTML kartları
+    if (!$list && class_exists('DOMDocument')) {
+        $xp = ih_dom($html);
+        if ($xp) {
+            $seen = [];
+            foreach ($xp->query('//a[@href]') as $a) {
+                $href = $a->getAttribute('href');
+                if (!ih_listing_href_ok($key, $href)) continue;
+                $url = $abs($href);
+                if (isset($seen[$url])) continue;
+                // Fiyat içeren en yakın kapsayıcı blok
+                $node = $a;
+                $block = null;
+                for ($up = 0; $up < 6 && $node && $node->parentNode; $up++) {
+                    $node = $node->parentNode;
+                    $txt = isset($node->textContent) ? $node->textContent : '';
+                    if (preg_match('/\d[\d.,]*\s*(?:TL|₺)/u', $txt)) {
+                        $block = $node;
+                        break;
+                    }
+                }
+                if (!$block) continue;
+                // Metin parçalarını satır satır al (bitişik yazılmasın)
+                $parts = [];
+                foreach ($xp->query('.//text()', $block) as $tn) {
+                    $t = trim(preg_replace('/\s+/u', ' ', $tn->nodeValue));
+                    if ($t !== '') $parts[] = $t;
+                }
+                $txt = implode("\n", $parts);
+                if (mb_strlen($txt, 'UTF-8') > 1500) continue; // tüm sayfayı kapsayan blok: güvenilmez
+                if (!preg_match('/(\d{1,3}(?:[.\s]\d{3})*(?:,\d{1,2})?|\d+(?:[.,]\d{1,2})?)\s*(?:TL|₺)/u', $txt, $pm)) continue;
+                $price = ih_parse_tl($pm[1]);
+                if (!$price) continue;
+                $ship = null;
+                if (preg_match('/kargo[^0-9₺]{0,25}(\d+(?:[.,]\d{1,2})?)\s*(?:TL|₺)/iu', $txt, $sm)) {
+                    $ship = ih_parse_tl($sm[1]);
+                } elseif (preg_match('/(?:ücretsiz|bedava)\s*kargo|kargo\s*(?:ücretsiz|bedava)/iu', $txt)) {
+                    $ship = 0.0;
+                }
+                $seller = '';
+                if (preg_match('/(?:satıcı|mağaza)\s*:\s*([^\n|•]{2,40})/iu', $txt, $sl)) {
+                    $seller = trim($sl[1]);
+                }
+                $title = ih_clean_text($a->getAttribute('title') ?: $a->textContent);
+                if (mb_strlen($title, 'UTF-8') < 2) continue;
+                $seen[$url] = 1;
+                $list[] = ['title' => $title, 'url' => $url, 'seller' => $seller, 'condition' => ih_listing_condition($txt), 'price' => $price, 'shipping' => $ship];
+            }
+        }
+    }
+    // Ad/yazar ile aramada başlığı tutmayanları ele
+    if ($hint && !empty($hint['title'])) {
+        $want = array_filter(explode(' ', ih_norm($hint['title'])), function ($w) { return strlen($w) > 2; });
+        $list = array_values(array_filter($list, function ($l) use ($want) {
+            if (!$want) return true;
+            $have = ' ' . ih_norm($l['title']) . ' ';
+            $hit = 0;
+            foreach ($want as $w) {
+                if (strpos($have, ' ' . $w . ' ') !== false) $hit++;
+            }
+            return $hit / count($want) >= 0.7;
+        }));
+    }
+    usort($list, function ($a, $b) { return $a['price'] <=> $b['price']; });
+    foreach ($list as $i => $l) {
+        $list[$i]['store'] = $store;
+    }
+    $r['listings'] = array_slice($list, 0, 15);
+    if (!$r['listings'] && !$r['error']) {
+        $r['error'] = 'ilan bulunamadı';
+    }
+    return $r;
+}
+
+/** Ayarlardaki ilan siteleri için arama istekleri */
+function ih_listing_requests($q, $suffix = '')
+{
+    $reqs = [];
+    foreach ((array)(ih_config()['listing_sites'] ?? []) as $k => $site) {
+        if (!empty($site['search'])) {
+            $reqs[$k . $suffix] = str_replace('{q}', rawurlencode($q), $site['search']);
+        }
+    }
+    return $reqs;
+}
+
+/** Seçilen alan değerini kaç kaynak doğruluyor? (sarı işaret için) */
+function ih_field_meta(array $results, array $book, array $src)
+{
+    $meta = [];
+    $names = [];
+    foreach ($results as $r) {
+        $names[$r['key']] = $r['store'];
+    }
+    foreach (['title', 'original_title', 'author', 'publisher', 'pages', 'year', 'category', 'summary'] as $f) {
+        if (empty($book[$f])) continue;
+        $agree = [];
+        foreach ($results as $r) {
+            if (empty($r['meta'][$f])) continue;
+            $same = in_array($f, ['pages', 'year'], true)
+                ? (int)$r['meta'][$f] === (int)$book[$f]
+                : ($f === 'summary' ? $r['key'] === $src[$f] : ih_norm($r['meta'][$f]) === ih_norm($book[$f]));
+            if ($same) $agree[] = $r['store'];
+        }
+        $meta[$f] = ['source' => isset($names[$src[$f]]) ? $names[$src[$f]] : (string)$src[$f], 'agree' => count(array_unique($agree)), 'sources' => array_values(array_unique($agree))];
+    }
+    return $meta;
+}
+
 /* ===================== BİRLEŞTİRME ===================== */
 
 const IH_PRIORITY = ['bkm', 'kitapsepeti', 'dr', 'kitapambari', 'kitapyurdu', 'googlebooks', 'openlibrary'];
@@ -879,7 +1094,10 @@ function ih_lookup($isbn)
 {
     $cfg = ih_config();
     $t0 = microtime(true);
-    // --- Aşama 1: tüm kaynaklar paralel
+    if (ih_time_left() === null) {
+        ih_set_deadline((int)($cfg['request_budget'] ?? 50));
+    }
+    // --- Aşama 1: tüm kaynaklar paralel (ikinci el ilan siteleri dahil)
     $gb = 'https://www.googleapis.com/books/v1/volumes?q=isbn:' . $isbn . '&maxResults=3';
     if (!empty($cfg['google_books_key'])) {
         $gb .= '&key=' . urlencode($cfg['google_books_key']);
@@ -892,7 +1110,7 @@ function ih_lookup($isbn)
         'ol'   => 'https://openlibrary.org/api/books?bibkeys=ISBN:' . $isbn . '&format=json&jscmd=data',
         'oled' => 'https://openlibrary.org/isbn/' . $isbn . '.json',
         'gb'   => $gb,
-    ]);
+    ] + ih_listing_requests($isbn));
     // --- Aşama 2: ürün sayfaları
     $stage2 = [];
     $ctx = [];
@@ -927,7 +1145,15 @@ function ih_lookup($isbn)
     $results[] = ih_openlibrary_parse($isbn, $s1['ol'], $s1['oled'], isset($s2['olw']) ? $s2['olw'] : null);
     $results[] = ih_googlebooks_parse($isbn, $s1['gb']);
 
-    // --- Aşama 3: Kitapyurdu (ISBN ile aranamaz → başlık ipucu)
+    // İlan siteleri (ISBN ile)
+    $listing_res = [];
+    foreach ((array)($cfg['listing_sites'] ?? []) as $lk => $site) {
+        if (isset($s1[$lk])) {
+            $listing_res[$lk] = ih_listing_parse($lk, $site['name'], $s1[$lk]);
+        }
+    }
+
+    // --- Aşama 3: Kitapyurdu (ISBN ile aranamaz → başlık ipucu) + ISBN'le ilan bulunamayan sitelerde ad/yazar araması
     $hint = [
         'title' => ih_pick($results, 'title')[0], 'author' => ih_pick($results, 'author')[0],
         'publisher' => ih_pick($results, 'publisher')[0],
@@ -936,7 +1162,21 @@ function ih_lookup($isbn)
         $q1 = trim($hint['title'] . ' ' . ($hint['publisher'] ?: ''));
         $q2 = trim($hint['title'] . ' ' . ($hint['author'] ?: ''));
         $base = 'https://www.kitapyurdu.com/index.php?route=product/search&filter_name=';
-        $s3 = ih_fetch_many(['a' => $base . rawurlencode($q1), 'b' => $base . rawurlencode($q2)]);
+        $text_q = [];
+        foreach (ih_listing_requests($q2, '_t') as $lk_t => $u) {
+            if (empty($listing_res[substr($lk_t, 0, -2)]['listings'])) {
+                $text_q[$lk_t] = $u;
+            }
+        }
+        $s3 = ih_fetch_many(['a' => $base . rawurlencode($q1), 'b' => $base . rawurlencode($q2)] + $text_q);
+        foreach ($text_q as $lk_t => $u) {
+            $lk = substr($lk_t, 0, -2);
+            $alt = ih_listing_parse($lk, $cfg['listing_sites'][$lk]['name'], $s3[$lk_t], $hint);
+            if ($alt['listings']) {
+                $alt['matched_by'] = 'ad + yazar';
+                $listing_res[$lk] = $alt;
+            }
+        }
         $hrefs = ih_kitapyurdu_cards($hint, [$s3['a'], $s3['b']]);
         $ky = ih_res('kitapyurdu', 'Kitapyurdu');
         if (!$hrefs) {
@@ -997,10 +1237,43 @@ function ih_lookup($isbn)
         }
     }
     $prices = ih_build_prices($results);
+    // Fiyat önceliği: önce Nadir Kitap / Kitantik ilanları, yoksa yeni kitap mağazaları
+    $listings = [];
+    foreach ($listing_res as $lr) {
+        foreach ($lr['listings'] as $l) {
+            $l['matched_by'] = isset($lr['matched_by']) ? $lr['matched_by'] : 'ISBN';
+            $listings[] = $l;
+        }
+    }
+    usort($listings, function ($a, $b) { return $a['price'] <=> $b['price']; });
+    $suggested_source = $prices['cheapest'] ? $prices['cheapest']['store'] : null;
+    if ($listings) {
+        $best = $listings[0];
+        $prices['suggested_price'] = $best['price'];
+        $suggested_source = $best['store'] . ($best['seller'] ? ' · ' . $best['seller'] : '') . ($best['condition'] ? ' (' . $best['condition'] . ')' : '');
+        if ($prices['suggested_old_price'] !== null && $prices['suggested_old_price'] <= $best['price']) {
+            $prices['suggested_old_price'] = null;
+        }
+    }
+    // Mağazalarda hiç kaydı olmayan (eski/nadir) kitap: ISBN ile bulunan ilanın adı kullanılır (sarı işaretlenir)
+    if (empty($book['title'])) {
+        foreach ($listings as $l) {
+            if ($l['matched_by'] === 'ISBN' && $l['title'] !== '') {
+                $book['title'] = $l['title'];
+                foreach ($listing_res as $lk => $lr) {
+                    if ($lr['store'] === $l['store']) $src['title'] = $lk;
+                }
+                break;
+            }
+        }
+    }
+    foreach ($listing_res as $lr) {
+        $results[] = $lr; // kaynak durumu listesinde görünsün
+    }
     $srcs = [];
     foreach ($results as $r) {
         $srcs[] = ['key' => $r['key'], 'store' => $r['store'], 'url' => $r['url'],
-                   'ok' => !empty($r['meta']) || !empty($r['offer']), 'error' => $r['error'],
+                   'ok' => !empty($r['meta']) || !empty($r['offer']) || !empty($r['listings']), 'error' => $r['error'],
                    'price' => isset($r['offer']['price']) ? $r['offer']['price'] : null];
     }
     $found = !empty($book['title']);
@@ -1017,7 +1290,11 @@ function ih_lookup($isbn)
         'cheapest' => $prices['cheapest'],
         'suggested_price' => $prices['suggested_price'],
         'suggested_old_price' => $prices['suggested_old_price'],
+        'suggested_source' => $suggested_source,
+        'old_price_source' => $prices['suggested_old_price'] !== null ? 'mağazaların liste (etiket) fiyatı' : null,
+        'listings' => $listings,
         'field_sources' => array_filter($src),
+        'field_meta' => ih_field_meta($results, $book, $src),
         'sources' => $srcs,
         'took_ms' => (int)((microtime(true) - $t0) * 1000),
     ];

@@ -15,3 +15,6 @@ Thumbs.db
 
 # Yerelde yüklenen kapak resimleri
 uploads/
+
+# Composer paketleri (Docker içinde kurulur)
+vendor/
