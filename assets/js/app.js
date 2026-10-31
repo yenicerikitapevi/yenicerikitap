@@ -10,9 +10,18 @@ document.addEventListener('DOMContentLoaded', () => {
             const title = btn.getAttribute('data-title');
             const price = parseFloat(btn.getAttribute('data-price'));
             const image = btn.getAttribute('data-image');
-            
-            addToCart({ id, title, price, image, qty: 1 });
-            showToast(`${title} sepetinize eklendi!`, 'success');
+            // Ürün sayfasında adet kutusu varsa o adet eklenir
+            const qtyInput = btn.dataset.qtyInput ? document.querySelector(btn.dataset.qtyInput) : null;
+            const qty = Math.max(1, Math.min(parseInt(qtyInput ? qtyInput.value : 1, 10) || 1, qtyInput && qtyInput.max ? parseInt(qtyInput.max, 10) : 999));
+
+            addToCart({ id, title, price, image, qty });
+            if (btn.dataset.go === 'checkout') {
+                window.location.href = 'checkout.php'; // "Hemen Al"
+                return;
+            }
+            if (!showAddedModal({ id, title, price, image, qty })) {
+                showToast(`${title} sepetinize eklendi!`, 'success');
+            }
         }
     });
 });
@@ -172,4 +181,65 @@ function showToast(message, type = 'info') {
     const toastElement = document.getElementById(toastId);
     const toast = new bootstrap.Toast(toastElement, { delay: 3000 });
     toast.show();
+}
+
+// "Sepete eklendi" penceresi + "Bunlara da bakın" önerileri (Bootstrap yoksa false döner, yerine bildirim gösterilir)
+function showAddedModal(item) {
+    if (typeof bootstrap === 'undefined' || !bootstrap.Modal) return false;
+    let el = document.getElementById('addedModal');
+    if (!el) {
+        document.body.insertAdjacentHTML('beforeend', `
+        <div class="modal fade" id="addedModal" tabindex="-1" aria-labelledby="addedModalTitle" aria-hidden="true">
+            <div class="modal-dialog modal-lg modal-dialog-centered">
+                <div class="modal-content rounded-4 border-0">
+                    <div class="modal-header border-0 pb-0">
+                        <h5 class="modal-title fw-bold" id="addedModalTitle"><i class="bi bi-check-circle-fill text-success me-2"></i>Sepetinize eklendi</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Kapat"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="d-flex align-items-center gap-3 p-3 bg-light rounded-3 mb-3" id="addedItem"></div>
+                        <div class="d-flex gap-2 mb-3">
+                            <button type="button" class="btn btn-outline-dark flex-fill fw-semibold" data-bs-dismiss="modal">Alışverişe Devam Et</button>
+                            <a href="checkout.php" class="btn btn-danger flex-fill fw-bold">Sepete Git ve Öde <i class="bi bi-arrow-right ms-1"></i></a>
+                        </div>
+                        <div id="addedRecWrap" class="d-none">
+                            <h6 class="fw-bold mb-3">Bunlara da bakın</h6>
+                            <div class="row g-3 row-cols-2 row-cols-md-4" id="addedRec"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>`);
+        el = document.getElementById('addedModal');
+    }
+    const money = v => '₺' + Number(v).toFixed(2).replace('.', ',');
+    document.getElementById('addedItem').innerHTML = `
+        <img src="${escapeHtml(item.image || 'assets/images/book_placeholder.svg')}" alt="" style="width: 54px; height: 78px; object-fit: cover;" class="rounded border bg-white" onerror="this.src='assets/images/book_placeholder.svg'">
+        <div class="flex-grow-1"><div class="fw-semibold">${escapeHtml(item.title)}</div><div class="fs-7 text-muted">${parseInt(item.qty, 10) || 1} adet • ${money(item.price * (parseInt(item.qty, 10) || 1))}</div></div>`;
+    const wrap = document.getElementById('addedRecWrap'), rec = document.getElementById('addedRec');
+    wrap.classList.add('d-none');
+    rec.innerHTML = '';
+    const inCart = getCart().map(i => parseInt(i.id, 10)).filter(Boolean).join(',');
+    fetch('recommend.php?id=' + encodeURIComponent(item.id) + '&exclude=' + inCart, { credentials: 'same-origin' })
+        .then(r => r.json())
+        .then(list => {
+            if (!Array.isArray(list) || !list.length) return;
+            rec.innerHTML = list.map(b => `
+                <div class="col">
+                    <a href="${escapeHtml(b.url)}" class="rec-card">
+                        <img src="${escapeHtml(b.image)}" alt="${escapeHtml(b.title)} kitap kapağı" loading="lazy" onerror="this.src='assets/images/book_placeholder.svg'">
+                        <div class="rec-title">${escapeHtml(b.title)}</div>
+                        <div class="fs-8 text-muted text-truncate">${escapeHtml(b.author || '')}</div>
+                    </a>
+                    <div class="d-flex align-items-center justify-content-between mt-1">
+                        <span class="fw-bold text-danger fs-7">${money(b.price)}</span>
+                        <button type="button" class="btn btn-sm btn-outline-danger py-0 px-2 btn-add-cart" title="Sepete ekle"
+                                data-id="${b.id}" data-title="${escapeHtml(b.title)}" data-price="${b.price}" data-image="${escapeHtml(b.image)}"><i class="bi bi-bag-plus"></i></button>
+                    </div>
+                </div>`).join('');
+            wrap.classList.remove('d-none');
+        })
+        .catch(() => {});
+    bootstrap.Modal.getOrCreateInstance(el).show();
+    return true;
 }

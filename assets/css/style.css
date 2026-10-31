@@ -365,3 +365,19 @@ footer a {
 footer a:hover {
     color: var(--accent-color);
 }
+
+/* 9. ÜRÜN SAYFASI: fiyat/sepet kutusu, sekmeler, "bunlara da bakın" */
+@media (min-width: 992px) {
+    .buy-box { position: sticky; top: 16px; }
+}
+.product-tabs .nav-link { color: #555; border: 0; border-bottom: 3px solid transparent; }
+.product-tabs .nav-link.active { color: #dc3545; border-bottom-color: #dc3545; background: transparent; }
+.rec-card { display: block; text-decoration: none; color: inherit; }
+.rec-card img { width: 100%; aspect-ratio: 2 / 3; object-fit: cover; border-radius: 8px; border: 1px solid #eee; background: #fff; }
+.rec-card .rec-title { font-size: .82rem; font-weight: 600; line-height: 1.2; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; margin-top: 6px; }
+.buy-box .btn-add-cart { width: auto; border-radius: 10px; }
+.buy-box .btn-add-cart.btn-danger { background-color: var(--accent-color, #dc3545); }
+.buy-box .btn-add-cart.btn-dark { width: 100%; background-color: #0a0a0c; }
+.buy-qty { flex-wrap: nowrap; width: 132px; }
+.rec-card + div .btn-add-cart { width: auto; padding: .15rem .55rem; border-radius: 8px; background: transparent; color: #dc3545; border: 1px solid #dc3545; font-weight: 600; }
+.rec-card + div .btn-add-cart:hover { background: #dc3545; color: #fff; box-shadow: none; }
