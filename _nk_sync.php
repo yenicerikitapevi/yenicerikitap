@@ -258,6 +258,9 @@ function nk_sync_store($store_id, $max_pages = 5) {
     $all_active_items = [];
     $pages_scanned = 0;
     $hit_cloudflare = false;
+    $complete = false;      // mağazanın son sayfasına kadar okundu mu? (satılan düşürme yalnızca o zaman güvenli)
+    $fetch_error = '';
+    @set_time_limit(300);
 
     // Sayfaları gez
     for ($page = 1; $page <= $max_pages; $page++) {
@@ -269,6 +272,7 @@ function nk_sync_store($store_id, $max_pages = 5) {
 
         $res = nk_sync_curl_get($page_url, $cookie_file);
         if (!$res['ok']) {
+            $fetch_error = 'NadirKitap sayfası açılamadı (HTTP ' . (int)$res['code'] . ($res['error'] ? ', ' . $res['error'] : '') . ')';
             break;
         }
 
@@ -279,18 +283,37 @@ function nk_sync_store($store_id, $max_pages = 5) {
         }
 
         if (empty($parsed['items'])) {
+            // Boş sayfa: ilk sayfa değilse mağazanın sonuna gelindi demektir
+            if ($page > 1) {
+                $complete = true;
+            } else {
+                $fetch_error = 'NadirKitap mağaza sayfasında kitap bulunamadı (sayfa yapısı değişmiş olabilir)';
+            }
             break;
         }
 
+        $new_on_page = 0;
         $pages_scanned++;
         foreach ($parsed['items'] as $c => $it) {
             if (!isset($all_active_items[$c])) {
                 $all_active_items[$c] = $it;
+                $new_on_page++;
             }
+        }
+        if ($new_on_page === 0) {
+            $complete = true; // sayfa parametresi yok sayılıp aynı liste döndü: son sayfa
+            break;
         }
 
         // İstekler arası nazik bekleme (rate limit)
         usleep(300000); // 0.3 saniye
+    }
+
+    // Hiç sayfa okunamadıysa "başarılı" deme: gerçek sebebi kaydet ve göster
+    if (!$hit_cloudflare && empty($all_active_items)) {
+        $why = $fetch_error ?: 'NadirKitap\'tan kitap listesi alınamadı';
+        db_query("UPDATE stores SET last_sync_at = ?, last_sync_result = ? WHERE id = ?", [date('Y-m-d H:i:s'), 'Hata: ' . $why, $store_id]);
+        return ['success' => false, 'message' => 'Senkronizasyon yapılamadı: ' . $why . '. Hiçbir kitap değiştirilmedi.', 'store_name' => $store_name];
     }
 
     // Cloudflare engeli durumunda bilgilendir
@@ -312,7 +335,8 @@ function nk_sync_store($store_id, $max_pages = 5) {
     // 1. SATILAN KİTAPLARI DÜŞÜR (Eğer NadirKitap'tan en az bir aktif ürün alındıysa güvenle silme yap)
     $active_codes = array_keys($all_active_items);
     $dropped_books = [];
-    if (!empty($active_codes)) {
+    // Yalnızca mağazanın tamamı okunduysa düşür; aksi hâlde okunmayan sayfalardaki kitaplar "satıldı" sanılırdı
+    if (!empty($active_codes) && $complete) {
         $dropped_books = nk_drop_sold_books($store_id, $active_codes);
     }
 
@@ -329,20 +353,19 @@ function nk_sync_store($store_id, $max_pages = 5) {
                 $reactivated++;
             }
         } else {
-            // Tamamen yeni bir kitap bulunmuşsa temel kaydını oluştur
+            // Tamamen yeni bir kitap: liste sayfasında yazar/kategori bilgisi yok. Yanlış bilgiyle satışa
+            // açılmasın diye PASİF eklenir; aktarım uygulamasıyla gelince tam bilgileriyle satışa açılır.
             $title = trim($item['title'] ?: "NadirKitap #{$code}");
             $price = $item['price'] > 0 ? $item['price'] : 50.00;
-            $slug  = unique_slug('books', $title);
             $cover = $item['image'] ?: 'book_placeholder.svg';
 
             try {
-                // Varsayılan yazar/kategori çözümle
-                $author_id    = 1;
-                $publisher_id = 1;
-                $category_id  = 1;
+                $author_id    = nk_sync_placeholder_id('authors', 'Kolektif / Belirtilmemiş');
+                $publisher_id = nk_sync_placeholder_id('publishers', 'Belirtilmemiş');
+                $category_id  = nk_sync_placeholder_id('categories', 'Genel / Sahaf');
 
                 db_query(
-                    "INSERT INTO books (store_id, title, author_id, publisher_id, category_id, price, stock, cover_image, is_active, nadirkitap_code, source_url) VALUES (?, ?, ?, ?, ?, ?, 1, ?, 1, ?, ?)",
+                    "INSERT INTO books (store_id, title, author_id, publisher_id, category_id, price, stock, cover_image, is_active, nadirkitap_code, source_url) VALUES (?, ?, ?, ?, ?, ?, 1, ?, 0, ?, ?)",
                     [$store_id, $title, $author_id, $publisher_id, $category_id, $price, $cover, $code, $item['url']]
                 );
                 $new_added++;
@@ -353,7 +376,7 @@ function nk_sync_store($store_id, $max_pages = 5) {
     }
 
     $drop_cnt = count($dropped_books);
-    $result_text = "Başarılı. Nadir'de Satılan Düşürülen: {$drop_cnt}, Yeni Eklenen: {$new_added}, Yeniden Aktif: {$reactivated}, Taranan Sayfa: {$pages_scanned}";
+    $result_text = "Başarılı. Nadir'de Satılan Düşürülen: {$drop_cnt}, Yeni (pasif) Eklenen: {$new_added}, Yeniden Aktif: {$reactivated}, Taranan Sayfa: {$pages_scanned}" . ($complete ? '' : ' (mağazanın tamamı okunamadı, düşürme yapılmadı)');
 
     db_query("UPDATE stores SET last_sync_at = ?, last_sync_result = ? WHERE id = ?", [
         date('Y-m-d H:i:s'),
@@ -363,9 +386,14 @@ function nk_sync_store($store_id, $max_pages = 5) {
 
     log_action('NadirKitap Senkronizasyonu', 'Stores', $store_id, "{$store_name}: {$result_text}");
 
-    $msg = "Senkronizasyon tamamlandı! NadirKitap'ta satılmış olan <b>{$drop_cnt}</b> adet kitap dükkânınızdan düşürüldü. <b>{$new_added}</b> adet yeni kitap eklendi.";
+    // Bildirim kutusu HTML göstermez: düz metin
+    $msg = "Senkronizasyon tamamlandı ({$pages_scanned} sayfa, NadirKitap'ta " . count($all_active_items) . " kitap). ";
+    $msg .= $complete ? "Satılmış {$drop_cnt} kitap dükkândan düşürüldü." : "Mağazanın tamamı okunamadığı için satılan kitap düşürme yapılmadı.";
+    if ($new_added > 0) {
+        $msg .= " Sitede olmayan {$new_added} kitap pasif olarak eklendi; aktarım uygulamasıyla aktarınca satışa açılır.";
+    }
     if ($reactivated > 0) {
-        $msg .= " <b>{$reactivated}</b> adet kitap yeniden aktif edildi.";
+        $msg .= " {$reactivated} kitap yeniden satışa açıldı.";
     }
 
     return [
@@ -379,4 +407,14 @@ function nk_sync_store($store_id, $max_pages = 5) {
         'reactivated_count'  => $reactivated,
         'message'            => $msg
     ];
+}
+
+/** Yer tutucu yazar / yayınevi / kategori kaydı (yoksa oluşturur) */
+function nk_sync_placeholder_id($table, $name) {
+    $row = find_by_name($table, $name);
+    if ($row) {
+        return (int)$row['id'];
+    }
+    db_query("INSERT INTO {$table} (name, slug) VALUES (?, ?)", [$name, unique_slug($table, $name)]);
+    return (int)db_last_id();
 }

@@ -211,7 +211,7 @@ if ($route === '/sync-sold' || preg_match('#^/pbatch/([^/]+)/sync-sold$#i', $rou
     $active_codes = $body['activeCodes'] ?? $body['activeProductCodes'] ?? [];
     if (!is_array($active_codes) || empty($active_codes)) {
         // İstemci kod göndermediyse sunucu tarafı tarayıcı motorunu çalıştır
-        $res = nk_sync_store($auth_store_id, 10);
+        $res = nk_sync_store($auth_store_id, 40);
         nk_json_response($res, $res['success'], [$res['message'] ?? '']);
     } else {
         $dropped = nk_drop_sold_books($auth_store_id, $active_codes);
