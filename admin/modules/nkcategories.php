@@ -9,53 +9,6 @@
  */
 if (!defined('SITE_URL')) exit;
 
-/** NadirKitap kitap sayfasından, verilen numaraya ait kategori adını bulmaya çalışır. [ad, güven('yüksek'|'tahmini')] */
-function nk_category_name_from_html($html, $code) {
-    $code = preg_quote((string)$code, '/');
-    $clean = function ($t) {
-        $t = trim(preg_replace('/\s+/u', ' ', html_entity_decode(strip_tags((string)$t), ENT_QUOTES | ENT_HTML5, 'UTF-8')));
-        return (mb_strlen($t, 'UTF-8') >= 2 && mb_strlen($t, 'UTF-8') <= 60 && !preg_match('/^\d+$/', $t)) ? $t : '';
-    };
-    // 1) JSON-LD BreadcrumbList: adresi bu numarayı içeren öğe
-    $crumbs = [];
-    if (preg_match_all('#<script[^>]+application/ld\+json[^>]*>(.*?)</script>#is', $html, $m)) {
-        foreach ($m[1] as $json) {
-            $d = json_decode(trim($json), true);
-            foreach ((isset($d['@graph']) ? $d['@graph'] : [$d]) as $node) {
-                if (($node['@type'] ?? '') === 'BreadcrumbList') {
-                    foreach ($node['itemListElement'] ?? [] as $it) {
-                        $url = is_array($it['item'] ?? null) ? ($it['item']['@id'] ?? '') : ($it['item'] ?? '');
-                        $name = $clean($it['name'] ?? (is_array($it['item'] ?? null) ? ($it['item']['name'] ?? '') : ''));
-                        if ($name !== '') {
-                            $crumbs[] = $name;
-                            if (preg_match('/(?<!\d)' . $code . '(?!\d)/', (string)$url)) return [$name, 'yüksek'];
-                        }
-                    }
-                }
-            }
-        }
-    }
-    // 2) Kategori bağlantısı: adresinde "kategori/category" ve bu numara geçen <a>
-    if (preg_match_all('#<a\b[^>]*href=["\']([^"\']*)["\'][^>]*>(.*?)</a>#is', $html, $m, PREG_SET_ORDER)) {
-        $votes = [];
-        foreach ($m as $a) {
-            if (preg_match('/kateg|categor/i', $a[1]) && preg_match('/(?<!\d)' . $code . '(?!\d)/', $a[1])) {
-                $name = $clean($a[2]);
-                if ($name !== '') $votes[$name] = ($votes[$name] ?? 0) + 1;
-            }
-        }
-        if ($votes) {
-            arsort($votes);
-            return [array_key_first($votes), 'yüksek'];
-        }
-    }
-    // 3) Breadcrumb'da kitaptan önceki son öğe (numara eşleşmedi: tahmini)
-    if (count($crumbs) >= 2) {
-        return [$crumbs[count($crumbs) - 2], 'tahmini'];
-    }
-    return ['', ''];
-}
-
 $numeric = array_values(array_filter(
     db_fetch_all("SELECT c.id, c.name, COUNT(b.id) as cnt FROM categories c LEFT JOIN books b ON b.category_id = c.id GROUP BY c.id, c.name ORDER BY cnt DESC"),
     function ($c) { return is_numeric_category_name($c['name']); }

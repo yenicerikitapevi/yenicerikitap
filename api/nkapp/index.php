@@ -338,6 +338,10 @@ if (preg_match('#^/pbatch/([^/]+)/([^/]+)/(\d+)$#i', $route, $m)) {
             if ($cat_code !== '') {
                 $category_id = nk_category_for_code($cat_code);
             }
+            if (!$category_id && $cat_label === '' && $cat_code !== '') {
+                // Uygulama yalnızca numara gönderdi: adı kitabın NadirKitap sayfasından bul (numara başına bir kez)
+                $cat_label = nk_resolve_category_name($cat_code, $meta['sourceUrl'] ?? '');
+            }
             if (!$category_id) {
                 $category_id = nk_resolve_entity('categories', $cat_label !== '' ? $cat_label : $cat_code, $entity_cache);
                 if ($cat_code !== '') {
