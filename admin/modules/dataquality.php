@@ -130,7 +130,7 @@ $tab = isset($tabs[$_GET['tab'] ?? '']) ? $_GET['tab'] : 'cats';
                     <?php if (!$numeric_cats): ?><tr><td colspan="4" class="text-center text-muted py-4">Numarayla görünen kategori yok.</td></tr><?php endif; ?>
                     <?php foreach ($numeric_cats as $c): ?>
                         <tr><td class="ps-3 fw-bold">"<?= e($c['name']) ?>" <span class="text-muted fw-normal">(#<?= $c['id'] ?>)</span></td><td class="text-end"><?= (int)$c['cnt'] ?></td><td class="fs-8"><?= e(implode(' • ', $c['samples'])) ?></td>
-                        <td class="pe-3 text-end"><a href="index.php?p=Catalog&tab=categories&edit=<?= $c['id'] ?>" class="btn btn-sm btn-outline-primary">Adlandır / Birleştir</a></td></tr>
+                        <td class="pe-3 text-end"><a href="index.php?p=NkCategories" class="btn btn-sm btn-danger me-1">Otomatik bul</a><a href="index.php?p=Catalog&tab=categories&edit=<?= $c['id'] ?>" class="btn btn-sm btn-outline-primary">Elle</a></td></tr>
                     <?php endforeach; ?>
                 </tbody>
             <?php elseif ($tab === 'authors'): ?>

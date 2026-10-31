@@ -20,6 +20,7 @@ $allowed_pages = [
     'ActionLogs'   => 'actionlogs.php',
     'DataQuality'  => 'dataquality.php',
     'Cleanup'      => 'cleanup.php',
+    'NkCategories' => 'nkcategories.php',
     'Settings'     => 'settings.php'
 ];
 
@@ -152,6 +153,7 @@ $unread_messages = db_fetch("SELECT COUNT(*) as cnt FROM contact_messages WHERE 
                             'ActionLogs' => 'Sistem ve Denetim Logları',
                             'DataQuality' => 'Veri Kontrolü (SEO)',
                             'Cleanup' => 'Örnek Veri Temizliği',
+                            'NkCategories' => 'NadirKitap Kategori Adları',
                             'Settings' => 'Genel Site Ayarları'
                         ];
                         echo $titles[$current_p] ?? 'Yönetim Paneli';
