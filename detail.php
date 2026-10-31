@@ -4,7 +4,7 @@
  */
 require_once __DIR__ . '/config.php';
 
-$book_sql = "SELECT b.*, a.name as author_name, a.bio as author_bio, a.slug as author_slug, p.name as publisher_name, c.name as category_name, c.slug as category_slug, s.name as store_name, s.slug as store_slug 
+$book_sql = "SELECT b.*, a.name as author_name, a.bio as author_bio, a.slug as author_slug, p.name as publisher_name, c.name as category_name, c.slug as category_slug, s.name as store_name, s.slug as store_slug, s.city as store_city 
                   FROM books b 
                   LEFT JOIN authors a ON b.author_id = a.id 
                   LEFT JOIN publishers p ON b.publisher_id = p.id 
@@ -99,103 +99,160 @@ track_view('detail', $book['id'], $book['store_id'] ?? null);
             }
         }
         ?>
-        <div class="row g-5">
-            <div class="col-md-5 col-lg-4">
-                <div class="bg-white p-4 rounded-4 shadow-sm text-center border">
-                    <?= cover_picture($book['cover_image'] ?? '', cover_alt($book), 'img-fluid rounded-3 shadow', 400, 600, false, 'id="mainBookCover" style="max-height: 420px; width: auto; object-fit: cover;" onerror="this.src=\'/assets/images/book_placeholder.svg\'"') ?>
+        <?php
+        $in_stock = (int)$book['stock'] > 0;
+        $disc_pct = (!empty($book['old_price']) && $book['old_price'] > $book['price']) ? (int)round(($book['old_price'] - $book['price']) / $book['old_price'] * 100) : 0;
+        $free_limit = (float)setting('shipping_free_limit', '350');
+        $ship_min = min(array_column(shipping_options(), 'price'));
+        $is_sahaf = !empty($book['store_name']);
+        $seller_books = $is_sahaf ? (int)(db_fetch("SELECT COUNT(*) as cnt FROM books WHERE store_id = ? AND is_active = 1", [$book['store_id']])['cnt'] ?? 0) : 0;
+        $specs = array_filter([
+            'ISBN' => $book['isbn'], 'Yazar' => $book['author_name'], 'Yayınevi' => $book['publisher_name'], 'Kategori' => is_numeric_category_name($book['category_name']) ? '' : $book['category_name'],
+            'Orijinal Adı' => $book['original_title'], 'Çeviren / Hazırlayan' => $book['translator'], 'Sayfa Sayısı' => $book['pages'], 'Basım Yılı' => $book['year'],
+            'Yayın Yeri' => $book['publish_place'], 'Dil' => $book['language'], 'Cilt' => $book['cover_type'], 'Ebat' => $book['dimensions'], 'Kondisyon' => $book['condition_text'],
+        ], function ($v) { return trim((string)$v) !== '' && $v !== '0'; });
+        ?>
+        <div class="row g-4 product-top">
+            <!-- Kapak ve galeri -->
+            <div class="col-md-5 col-lg-3">
+                <div class="bg-white p-3 rounded-4 shadow-sm text-center border position-relative">
+                    <?php if ($disc_pct > 0): ?><span class="badge bg-danger position-absolute top-0 start-0 m-2 fs-7">%<?= $disc_pct ?> indirim</span><?php endif; ?>
+                    <?= cover_picture($book['cover_image'] ?? '', cover_alt($book), 'img-fluid rounded-3 shadow-sm', 400, 600, false, 'id="mainBookCover" style="max-height: 420px; width: auto; object-fit: cover;" onerror="this.src=\'/assets/images/book_placeholder.svg\'"') ?>
                     <?php if (count($gallery_images) > 1): ?>
                         <div class="d-flex justify-content-center gap-2 mt-3 flex-wrap">
                             <?php foreach ($gallery_images as $g_url): ?>
-                                <img src="<?= e($g_url) ?>" alt="<?= e($book['title']) ?> - ek görsel" width="58" height="76" loading="lazy" class="rounded border p-1 bg-light" style="width: 58px; height: 76px; object-fit: cover; cursor: pointer;" onclick="var m = document.getElementById('mainBookCover'); m.src = this.src; if (m.parentNode.tagName === 'PICTURE') { m.parentNode.querySelector('source').srcset = this.src; }">
+                                <img src="<?= e($g_url) ?>" alt="<?= e($book['title']) ?> - ek görsel" width="52" height="70" loading="lazy" class="rounded border p-1 bg-light" style="width: 52px; height: 70px; object-fit: cover; cursor: pointer;" onclick="var m = document.getElementById('mainBookCover'); m.src = this.src; if (m.parentNode.tagName === 'PICTURE') { m.parentNode.querySelector('source').srcset = this.src; }">
                             <?php endforeach; ?>
                         </div>
                     <?php endif; ?>
                 </div>
             </div>
 
-            <div class="col-md-7 col-lg-8">
-                <span class="badge bg-danger bg-opacity-10 text-danger px-3 py-2 rounded-pill font-bold mb-2"><?= e($book['category_name']) ?></span>
-                <h1 class="fw-extrabold text-dark mb-2"><?= e($book['title']) ?></h1>
-                
-                <div class="fs-6 text-muted mb-3">
-                    Yazar: <a href="<?= e(author_path(['slug' => $book['author_slug'], 'name' => $book['author_name']])) ?>" class="fw-bold text-dark text-decoration-none"><?= e($book['author_name']) ?></a> 
-                    <span class="mx-2">•</span> 
-                    Yayınevi: <span class="fw-semibold text-secondary"><?= e($book['publisher_name']) ?></span>
-                    <?php if (!empty($book['store_name'])): ?>
-                        <span class="mx-2">•</span>
-                        Satıcı Dükkan: <a href="magaza.php?s=<?= urlencode($book['store_slug'] ?? '') ?>" class="badge bg-dark text-white text-decoration-none px-2 py-1"><i class="bi bi-shop text-danger me-1"></i><?= e($book['store_name']) ?></a>
-                    <?php endif; ?>
+            <!-- Başlık ve özet bilgiler -->
+            <div class="col-md-7 col-lg-5">
+                <?php if (!is_numeric_category_name($book['category_name'])): ?><span class="badge bg-danger bg-opacity-10 text-danger px-3 py-2 rounded-pill fw-semibold mb-2"><?= e($book['category_name']) ?></span><?php endif; ?>
+                <h1 class="h2 fw-extrabold text-dark mb-2"><?= e($book['title']) ?></h1>
+                <div class="fs-6 mb-3">
+                    <a href="<?= e(author_path(['slug' => $book['author_slug'], 'name' => $book['author_name']])) ?>" class="fw-bold text-danger text-decoration-none"><?= e($book['author_name']) ?></a>
+                    <span class="text-muted mx-1">•</span><span class="text-secondary"><?= e($book['publisher_name']) ?></span>
                 </div>
-
                 <?php $badges = campaign_badges_html($book, 'fs-7 px-3 py-2'); if ($badges !== ''): ?>
-                    <div class="mt-3"><?= $badges ?></div>
+                    <div class="mb-3"><?= $badges ?></div>
                 <?php endif; ?>
-                <div class="d-flex align-items-baseline gap-3 my-4 p-3 bg-white rounded-3 border d-inline-flex">
-                    <span class="display-6 fw-extrabold text-danger"><?= format_price($book['price']) ?></span>
-                    <?php if ($book['old_price']): ?>
-                        <span class="fs-5 text-muted text-decoration-line-through"><?= format_price($book['old_price']) ?></span>
-                    <?php endif; ?>
-                    <?php if ((int)$book['stock'] > 0): ?>
-                        <span class="badge bg-success bg-opacity-10 text-success ms-2"><i class="bi bi-check-circle-fill me-1"></i> Stokta Var</span>
-                    <?php else: ?>
-                        <span class="badge bg-secondary ms-2"><i class="bi bi-x-circle-fill me-1"></i> Tükendi</span>
-                    <?php endif; ?>
+                <div class="row g-2 fs-7 mb-3">
+                    <?php foreach (array_slice(array_intersect_key($specs, array_flip(['ISBN', 'Sayfa Sayısı', 'Basım Yılı', 'Cilt', 'Kondisyon', 'Dil'])), 0, 6) as $k => $v): ?>
+                        <div class="col-6"><span class="text-muted"><?= e($k) ?>:</span> <span class="fw-semibold"><?= e($v) ?></span></div>
+                    <?php endforeach; ?>
                 </div>
+                <?php if (!empty($book['summary'])): ?>
+                    <p class="text-secondary fs-7 mb-1"><?= e(mb_strimwidth(trim($book['summary']), 0, 260, '…', 'UTF-8')) ?></p>
+                    <a href="#urunSekmeler" class="fs-7 text-danger fw-semibold text-decoration-none" onclick="var t = document.querySelector('[data-bs-target=&quot;#tabDesc&quot;]'); if (t && window.bootstrap) bootstrap.Tab.getOrCreateInstance(t).show();">Devamını oku <i class="bi bi-chevron-down"></i></a>
+                <?php endif; ?>
+            </div>
 
-                <div class="mb-4">
-                    <?php if ((int)$book['stock'] > 0): ?>
-                        <button class="btn btn-danger btn-lg px-5 py-3 rounded-3 font-bold shadow btn-add-cart"
-                                data-id="<?= $book['id'] ?>"
-                                data-title="<?= e($book['title']) ?>"
-                                data-price="<?= $book['price'] ?>"
-                                data-image="<?= e($img_src) ?>">
-                            <i class="bi bi-bag-plus-fill me-2 fs-5"></i> Sepete Ekle
-                        </button>
-                    <?php else: ?>
-                        <button class="btn btn-secondary btn-lg px-5 py-3 rounded-3 font-bold" disabled>Stokta Yok</button>
-                    <?php endif; ?>
+            <!-- Fiyat / sepet kutusu ve satıcı -->
+            <div class="col-lg-4">
+                <div class="buy-box">
+                    <div class="bg-white border rounded-4 shadow-sm p-4 mb-3">
+                        <?php if ($disc_pct > 0): ?>
+                            <div class="d-flex align-items-center gap-2 mb-1">
+                                <span class="text-muted text-decoration-line-through"><?= format_price($book['old_price']) ?></span>
+                                <span class="badge bg-danger">%<?= $disc_pct ?></span>
+                            </div>
+                        <?php endif; ?>
+                        <div class="display-6 fw-extrabold text-danger mb-2"><?= format_price($book['price']) ?></div>
+                        <div class="fs-7 mb-3">
+                            <?php if ($in_stock): ?>
+                                <span class="text-success fw-semibold"><i class="bi bi-check-circle-fill me-1"></i>Stokta<?= (int)$book['stock'] <= 3 ? ' — son ' . (int)$book['stock'] . ' adet' : '' ?></span>
+                            <?php else: ?>
+                                <span class="text-secondary fw-semibold"><i class="bi bi-x-circle-fill me-1"></i>Tükendi</span>
+                            <?php endif; ?>
+                        </div>
+                        <?php if ($in_stock): ?>
+                            <div class="d-flex gap-2 mb-2">
+                                <div class="input-group buy-qty">
+                                    <button class="btn btn-outline-secondary" type="button" onclick="var q = document.getElementById('buyQty'); q.value = Math.max(1, (parseInt(q.value, 10) || 1) - 1);" aria-label="Azalt">−</button>
+                                    <input type="number" id="buyQty" class="form-control text-center px-1" value="1" min="1" max="<?= (int)$book['stock'] ?>" aria-label="Adet">
+                                    <button class="btn btn-outline-secondary" type="button" onclick="var q = document.getElementById('buyQty'); q.value = Math.min(<?= (int)$book['stock'] ?>, (parseInt(q.value, 10) || 1) + 1);" aria-label="Artır">+</button>
+                                </div>
+                                <button class="btn btn-danger flex-grow-1 fw-bold btn-add-cart" data-qty-input="#buyQty"
+                                        data-id="<?= $book['id'] ?>" data-title="<?= e($book['title']) ?>" data-price="<?= $book['price'] ?>" data-image="<?= e($img_src) ?>">
+                                    <i class="bi bi-bag-plus-fill me-1"></i> Sepete Ekle
+                                </button>
+                            </div>
+                            <button class="btn btn-dark w-100 fw-bold btn-add-cart" data-qty-input="#buyQty" data-go="checkout"
+                                    data-id="<?= $book['id'] ?>" data-title="<?= e($book['title']) ?>" data-price="<?= $book['price'] ?>" data-image="<?= e($img_src) ?>">
+                                <i class="bi bi-lightning-charge-fill me-1"></i> Hemen Al
+                            </button>
+                        <?php else: ?>
+                            <button class="btn btn-secondary w-100 fw-bold" disabled>Stokta Yok</button>
+                        <?php endif; ?>
+                        <ul class="list-unstyled fs-8 text-secondary mt-3 mb-0">
+                            <li class="mb-1"><i class="bi bi-truck text-danger me-1"></i><?= $book['price'] >= $free_limit ? '<b class="text-success">Kargo bedava</b>' : format_price($free_limit) . ' ve üzeri kargo bedava' . ($ship_min > 0 ? ' (kargo ' . format_price($ship_min) . '\'den başlayan)' : '') ?></li>
+                            <li class="mb-1"><i class="bi bi-box-seam text-danger me-1"></i><?= $is_sahaf ? 'Sahaf tarafından hazırlanıp kargolanır' : '1-3 iş günü içinde kargoda' ?></li>
+                            <li><i class="bi bi-shield-check text-danger me-1"></i>Güvenli ödeme • 14 gün içinde iade</li>
+                        </ul>
+                    </div>
+
+                    <div class="bg-white border rounded-4 shadow-sm p-3">
+                        <div class="text-muted fs-8 text-uppercase fw-semibold mb-1">Satıcı</div>
+                        <?php if ($is_sahaf): ?>
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <div class="fw-bold"><i class="bi bi-shop text-danger me-1"></i><?= e($book['store_name']) ?></div>
+                                    <div class="fs-8 text-muted"><?= $book['store_city'] ? e($book['store_city']) . ' • ' : '' ?><?= $seller_books ?> kitap</div>
+                                </div>
+                                <a href="magaza.php?s=<?= urlencode($book['store_slug'] ?? '') ?>" class="btn btn-sm btn-outline-dark rounded-pill">Mağazaya Git</a>
+                            </div>
+                        <?php else: ?>
+                            <div class="fw-bold"><i class="bi bi-patch-check-fill text-danger me-1"></i>Yeniçeri Kitabevi</div>
+                            <div class="fs-8 text-muted">Etimesgut / Ankara • Kitap kendi stoğumuzdan gönderilir</div>
+                        <?php endif; ?>
+                    </div>
                 </div>
+            </div>
+        </div>
 
-                <div class="bg-white p-4 rounded-4 border shadow-sm mb-4">
-                    <h5 class="fw-bold text-dark mb-3">Kitap Özeti & Künye</h5>
+        <!-- Sekmeler -->
+        <div class="bg-white border rounded-4 shadow-sm mt-4" id="urunSekmeler">
+            <ul class="nav nav-tabs px-3 pt-2 product-tabs" role="tablist">
+                <li class="nav-item"><button class="nav-link active fw-semibold" data-bs-toggle="tab" data-bs-target="#tabDesc" type="button" role="tab">Açıklama</button></li>
+                <li class="nav-item"><button class="nav-link fw-semibold" data-bs-toggle="tab" data-bs-target="#tabSpecs" type="button" role="tab">Kitap Bilgileri</button></li>
+                <?php if (!empty($book['author_bio'])): ?><li class="nav-item"><button class="nav-link fw-semibold" data-bs-toggle="tab" data-bs-target="#tabAuthor" type="button" role="tab">Yazar Hakkında</button></li><?php endif; ?>
+                <li class="nav-item"><button class="nav-link fw-semibold" data-bs-toggle="tab" data-bs-target="#tabShip" type="button" role="tab">Kargo & İade</button></li>
+            </ul>
+            <div class="tab-content p-4">
+                <div class="tab-pane fade show active" id="tabDesc" role="tabpanel">
                     <?php if (!empty($book['summary'])): ?>
-                        <p class="text-secondary leading-relaxed mb-4"><?= nl2br(e($book['summary'])) ?></p>
+                        <div class="text-secondary"><?= nl2br(e($book['summary'])) ?></div>
+                    <?php else: ?>
+                        <p class="text-muted mb-0"><?= e(book_meta_description($book)) ?></p>
                     <?php endif; ?>
-
-                    <div class="row g-3 fs-7 border-top pt-3">
-                        <div class="col-6 col-sm-3"><strong>ISBN:</strong> <?= e($book['isbn'] ?: '-') ?></div>
-                        <div class="col-6 col-sm-3"><strong>Sayfa Sayısı:</strong> <?= e($book['pages'] ?: '-') ?></div>
-                        <div class="col-6 col-sm-3"><strong>Basım Yılı:</strong> <?= e($book['year'] ?: '-') ?></div>
-                        <?php if (!empty($book['condition_text'])): ?>
-                            <div class="col-6 col-sm-3"><strong>Kondisyon:</strong> <?= e($book['condition_text']) ?></div>
-                        <?php endif; ?>
-                        <?php if (!empty($book['cover_type'])): ?>
-                            <div class="col-6 col-sm-3"><strong>Cilt Durumu:</strong> <?= e($book['cover_type']) ?></div>
-                        <?php endif; ?>
-                        <?php if (!empty($book['dimensions'])): ?>
-                            <div class="col-6 col-sm-3"><strong>Ebat:</strong> <?= e($book['dimensions']) ?></div>
-                        <?php endif; ?>
-                        <?php if (!empty($book['language'])): ?>
-                            <div class="col-6 col-sm-3"><strong>Dil:</strong> <?= e($book['language']) ?></div>
-                        <?php endif; ?>
-                        <?php if (!empty($book['translator'])): ?>
-                            <div class="col-6 col-sm-3"><strong>Çeviren / Haz.:</strong> <?= e($book['translator']) ?></div>
-                        <?php endif; ?>
-                        <?php if (!empty($book['publish_place'])): ?>
-                            <div class="col-6 col-sm-3"><strong>Yayın Yeri:</strong> <?= e($book['publish_place']) ?></div>
-                        <?php endif; ?>
-                        <?php if (!empty($book['original_title'])): ?>
-                            <div class="col-6 col-sm-3"><strong>Orijinal Adı:</strong> <?= e($book['original_title']) ?></div>
-                        <?php endif; ?>
-                    </div>
                 </div>
-
+                <div class="tab-pane fade" id="tabSpecs" role="tabpanel">
+                    <table class="table table-sm fs-7 mb-0" style="max-width: 640px;">
+                        <tbody>
+                            <?php foreach ($specs as $k => $v): ?>
+                                <tr><th class="text-muted fw-semibold" style="width: 40%;"><?= e($k) ?></th><td><?= e($v) ?></td></tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
                 <?php if (!empty($book['author_bio'])): ?>
-                    <div class="bg-light p-4 rounded-4 border">
-                        <h6 class="fw-bold text-dark mb-2">Yazar Hakkında: <?= e($book['author_name']) ?></h6>
-                        <p class="text-muted fs-7 mb-0"><?= e($book['author_bio']) ?></p>
+                    <div class="tab-pane fade" id="tabAuthor" role="tabpanel">
+                        <h2 class="h6 fw-bold"><?= e($book['author_name']) ?></h2>
+                        <p class="text-secondary fs-7"><?= nl2br(e($book['author_bio'])) ?></p>
+                        <a href="<?= e(author_path(['slug' => $book['author_slug'], 'name' => $book['author_name']])) ?>" class="fs-7 text-danger fw-semibold">Yazarın tüm kitapları <i class="bi bi-arrow-right"></i></a>
                     </div>
                 <?php endif; ?>
+                <div class="tab-pane fade" id="tabShip" role="tabpanel">
+                    <ul class="fs-7 text-secondary mb-2">
+                        <li><?= format_price($free_limit) ?> ve üzeri siparişlerde kargo ücretsizdir. Kargo firmasını ödeme adımında seçebilirsiniz.</li>
+                        <li>Siparişiniz kargoya verildiğinde takip numarası e-postanıza gönderilir; durumunu <a href="siparis-takip.php" class="text-danger">Sipariş Takip</a> sayfasından izleyebilirsiniz.</li>
+                        <li>Teslimattan itibaren 14 gün içinde cayma hakkınızı kullanabilirsiniz.<?= $is_sahaf ? ' İkinci el kitaplarda kondisyon bilgisi açıklamada belirtilir.' : '' ?></li>
+                    </ul>
+                    <a href="legal.php?p=teslimat-iade" class="fs-7 text-danger">Teslimat, iptal ve iade koşullarının tamamı</a>
+                </div>
             </div>
         </div>
 
