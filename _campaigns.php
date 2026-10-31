@@ -128,7 +128,7 @@ function cart_build_lines(array $requested) {
  * Kampanyaları uygular. $lines: cart_build_lines çıktısı (discount alanı doldurulur).
  * Dönüş: subtotal, discount, net, shipping, total, applied [[id, name, amount]], free_shipping_by, coupon_status
  */
-function campaign_apply(array &$lines, $coupon = '') {
+function campaign_apply(array &$lines, $coupon = '', $shipping_key = '') {
     $coupon = trim((string)$coupon);
     $campaigns = campaigns_active($coupon);
     $applied = [];
@@ -231,7 +231,8 @@ function campaign_apply(array &$lines, $coupon = '') {
     $net = round($subtotal - $discount, 2);
 
     // Kargo: önce normal limit (indirimli tutara göre), sonra ücretsiz kargo kampanyaları
-    $shipping = $lines ? shipping_cost($net) : 0.0;
+    $ship_opt = function_exists('shipping_option') ? shipping_option($shipping_key) : ['key' => '', 'name' => 'Kargo', 'price' => (float)setting('flat_shipping_cost', '29.90')];
+    $shipping = $lines ? shipping_cost($net, $ship_opt['key']) : 0.0;
     $free_by = null;
     if ($shipping > 0) {
         foreach ($campaigns as $c) {
@@ -274,6 +275,8 @@ function campaign_apply(array &$lines, $coupon = '') {
         'discount'      => round($discount, 2),
         'net'           => $net,
         'shipping'      => round($shipping, 2),
+        'shipping_option' => $ship_opt['key'],
+        'shipping_name' => $ship_opt['name'],
         'total'         => round($net + $shipping, 2),
         'applied'       => $applied,
         'free_shipping' => $free_by,

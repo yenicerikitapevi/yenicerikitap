@@ -12,7 +12,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_settings'])) {
         'company_legal_name', 'company_tax_office', 'company_tax_number', 'company_mersis',
         'payment_merchant_id', 'payment_api_key', 'payment_merchant_salt', 'paytr_test_mode',
         'nk_store_code', 'nk_api_key',
-        'smtp_host', 'smtp_port', 'smtp_secure', 'smtp_user', 'smtp_pass', 'mail_from_email', 'mail_from_name', 'order_notify_email'
+        'home_show_store_books', 'smtp_host', 'smtp_port', 'smtp_secure', 'smtp_user', 'smtp_pass', 'mail_from_email', 'mail_from_name', 'order_notify_email'
     ];
     // Gizli anahtarlar sayfada gösterilmez; alan boş bırakılırsa kayıtlı değer korunur
     $secret_keys = ['payment_api_key', 'payment_merchant_salt', 'smtp_pass'];
@@ -45,6 +45,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_settings'])) {
             } else {
                 db_query("INSERT INTO settings (setting_key, setting_value) VALUES (?, ?)", [$key, $val]);
             }
+        }
+    }
+
+    // Kargo seçenekleri: işaretli firmalar ve ücretleri (ödeme sayfasında müşteriye sunulur)
+    if (isset($_POST['ship_opts_present'])) {
+        $ship = [];
+        foreach (shipping_carriers() as $ck => $cv) {
+            if ($ck !== 'diger' && !empty($_POST['ship_on'][$ck])) {
+                $ship[] = ['carrier' => $ck, 'price' => number_format(max(0, (float)str_replace(',', '.', $_POST['ship_price'][$ck] ?? '0')), 2, '.', '')];
+            }
+        }
+        $json = $ship ? json_encode($ship) : '';
+        if (db_fetch("SELECT id FROM settings WHERE setting_key = 'shipping_options'")) {
+            db_query("UPDATE settings SET setting_value = ? WHERE setting_key = 'shipping_options'", [$json]);
+        } else {
+            db_query("INSERT INTO settings (setting_key, setting_value) VALUES ('shipping_options', ?)", [$json]);
         }
     }
 
@@ -171,6 +187,14 @@ foreach ($setting_rows as $row) {
                                 <input type="url" name="<?= $sk ?>" class="form-control" placeholder="https://..." value="<?= e($s[$sk] ?? '') ?>">
                             </div>
                         <?php endforeach; ?>
+                        <div class="col-12">
+                            <input type="hidden" name="home_show_store_books" value="0">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" name="home_show_store_books" value="1" id="homeStore" <?= ($s['home_show_store_books'] ?? '0') === '1' ? 'checked' : '' ?>>
+                                <label class="form-check-label fw-semibold fs-7" for="homeStore">Ana sayfa vitrinlerinde sahaf kitaplarını da göster</label>
+                                <div class="text-muted fs-8">Kapalıyken ana sayfada yalnızca Yeniçeri Kitabevi'nin kendi kitapları görünür; sahaf kitapları "Sahaflarımız" bölümünden ve her sahafın kendi sayfasından açılır. Arama ve kategorilerde tüm kitaplar listelenir.</div>
+                            </div>
+                        </div>
                         <div class="col-12"><small class="text-muted">Sosyal medya adresleri Google'daki işletme bilgisine (Organization / sameAs) eklenir. Boş bırakılanlar kullanılmaz.</small></div>
 
                         <div class="col-md-6">
@@ -181,6 +205,28 @@ foreach ($setting_rows as $row) {
                         <div class="col-md-6">
                             <label class="form-label fw-semibold fs-7">Sabit Kargo Ücreti (TL)</label>
                             <input type="number" step="0.01" name="flat_shipping_cost" class="form-control" value="<?= e($s['flat_shipping_cost'] ?? '29.90') ?>">
+                            <small class="text-muted">Aşağıda kargo firması seçilmezse bu ücret kullanılır.</small>
+                        </div>
+
+                        <div class="col-md-12">
+                            <input type="hidden" name="ship_opts_present" value="1">
+                            <label class="form-label fw-semibold fs-7 mb-1">Kargo Seçenekleri (ödeme sayfasında müşteri seçer)</label>
+                            <div class="text-muted fs-8 mb-2">Çalıştığınız firmaları işaretleyip ücretini yazın. Ücretsiz kargo limiti ve kampanyalar tüm firmalar için geçerlidir. Hiçbiri işaretli değilse "Standart Kargo" (sabit ücret) kullanılır. Müşterinin seçtiği firma sipariş ekranına otomatik yazılır.</div>
+                            <?php $cur_ship = []; foreach ((json_decode((string)($s['shipping_options'] ?? ''), true) ?: []) as $so) { $cur_ship[$so['carrier']] = $so['price']; } ?>
+                            <div class="row g-2">
+                                <?php foreach (shipping_carriers() as $ck => $cv): if ($ck === 'diger') continue; ?>
+                                    <div class="col-md-6 col-lg-4">
+                                        <div class="input-group input-group-sm">
+                                            <span class="input-group-text bg-white" style="min-width: 210px;">
+                                                <input class="form-check-input mt-0 me-2" type="checkbox" name="ship_on[<?= $ck ?>]" value="1" id="ship_<?= $ck ?>" <?= isset($cur_ship[$ck]) ? 'checked' : '' ?>>
+                                                <label for="ship_<?= $ck ?>" class="mb-0"><?= e($cv['name']) ?></label>
+                                            </span>
+                                            <input type="number" step="0.01" min="0" name="ship_price[<?= $ck ?>]" class="form-control" placeholder="Ücret" value="<?= e($cur_ship[$ck] ?? ($s['flat_shipping_cost'] ?? '29.90')) ?>">
+                                            <span class="input-group-text">TL</span>
+                                        </div>
+                                    </div>
+                                <?php endforeach; ?>
+                            </div>
                         </div>
 
                         <div class="col-md-12 pt-2">
