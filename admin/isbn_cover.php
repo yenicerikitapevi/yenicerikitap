@@ -2,7 +2,7 @@
 /**
  * ISBN Yardımcısı – kapak vekili.
  * /admin/isbn_cover.php?u[]=<görsel adresi>&u[]=<alternatif>   → 600x900 JPEG
- * Birden çok adres verilirse en yüksek çözünürlüklü / 2:3'e yakın olan seçilir.
+ * Birden çok adres verilirse öncelik sırasındaki ilk uygun (≥250×350, kitap oranında) kapak seçilir; yoksa en iyisi.
  * Tarayıcının CORS kısıtına takılmadan görseli forma dosya olarak koymak için kullanılır.
  */
 error_reporting(0);
@@ -52,6 +52,17 @@ foreach ($urls as $i => $x) {
         $ratio = $w / $h;
         $score = $w * $h * (($ratio >= 0.45 && $ratio <= 0.85) ? 1.0 : 0.35);
     }
+    // Adresler öncelik sırasında gelir (önce mağazalar, en son Open Library / Google).
+    // Yeterince büyük ve kitap oranında ilk kapak seçilir: büyük ama eski baskı kapağı güncel mağaza kapağının önüne geçmesin.
+    $usable = $w >= 250 && $h >= 350 && ($w / $h) >= 0.45 && ($w / $h) <= 0.85;
+    if ($usable) {
+        if ($best) {
+            imagedestroy($best['im']);
+        }
+        $best = ['im' => $im, 'url' => $x, 'w' => $w, 'h' => $h];
+        break;
+    }
+    // Uygun kapak yoksa en iyi puanlı yedek olarak tutulur
     if ($score > $bestScore) {
         if ($best) {
             imagedestroy($best['im']);

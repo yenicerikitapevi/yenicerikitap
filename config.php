@@ -259,9 +259,10 @@ function whatsapp_link($phone) {
 /**
  * Kargo ücreti: ara toplam ücretsiz kargo limitinin altındaysa sabit ücret uygulanır
  */
-function shipping_cost($subtotal) {
+function shipping_cost($subtotal, $option_key = '') {
     $free_limit = (float)setting('shipping_free_limit', '350');
-    $flat_cost  = (float)setting('flat_shipping_cost', '29.90');
+    // Müşterinin seçtiği kargo firmasının ücreti (Site Ayarları → Kargo Seçenekleri); yoksa sabit ücret
+    $flat_cost  = function_exists('shipping_option') ? (float)shipping_option($option_key)['price'] : (float)setting('flat_shipping_cost', '29.90');
     return ($subtotal >= $free_limit) ? 0.0 : $flat_cost;
 }
 

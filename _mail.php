@@ -44,6 +44,34 @@ function shipping_carriers() {
     ];
 }
 
+/**
+ * Ödeme sayfasında sunulan kargo seçenekleri (Site Ayarları → Kargo Seçenekleri).
+ * Hiç seçenek tanımlanmadıysa tek "Standart Kargo" (sabit kargo ücreti) kullanılır.
+ */
+function shipping_options() {
+    static $opts = null;
+    if ($opts === null) {
+        $opts = [];
+        $carriers = shipping_carriers();
+        foreach ((json_decode((string)setting('shipping_options'), true) ?: []) as $o) {
+            $k = (string)($o['carrier'] ?? '');
+            if (isset($carriers[$k]) && $k !== 'diger') {
+                $opts[$k] = ['key' => $k, 'name' => $carriers[$k]['name'], 'price' => max(0, (float)($o['price'] ?? 0))];
+            }
+        }
+        if (!$opts) {
+            $opts[''] = ['key' => '', 'name' => 'Standart Kargo', 'price' => (float)setting('flat_shipping_cost', '29.90')];
+        }
+    }
+    return $opts;
+}
+
+/** Seçilen kargo seçeneği; geçersizse ilk seçenek */
+function shipping_option($key = '') {
+    $opts = shipping_options();
+    return $opts[(string)$key] ?? reset($opts);
+}
+
 /** Müşteriye gösterilecek takip bağlantısı: elle girilen tam adres > firma kalıbı > firmanın ana sayfası */
 function order_tracking_link($o) {
     if (!empty($o['tracking_url']) && preg_match('#^https://#i', $o['tracking_url'])) {

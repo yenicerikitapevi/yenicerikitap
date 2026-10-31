@@ -38,6 +38,70 @@ function resolve_or_create($table, $selected, $new_name) {
 }
 $collections = db_fetch_all("SELECT * FROM collections ORDER BY id ASC");
 
+// Toplu işlemler: seçili kitapları aktif/pasif yap, sil, kategori değiştir, vitrine ekle/çıkar
+if ($action === 'bulk' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    $ids = array_values(array_unique(array_filter(array_map('intval', (array)($_POST['ids'] ?? [])))));
+    $op = $_POST['bulk_op'] ?? '';
+    $back = 'index.php?p=Products' . (!empty($_POST['back_qs']) ? '&' . preg_replace('/[^a-zA-Z0-9_=&%.\-+]/', '', $_POST['back_qs']) : '');
+    if (!$ids) {
+        set_flash('warning', 'Önce listeden kitap seçin.');
+        redirect($back);
+    }
+    $in = implode(',', $ids);
+    $n = count($ids);
+    switch ($op) {
+        case 'activate':
+            db_query("UPDATE books SET is_active = 1 WHERE id IN ({$in})");
+            $msg = "{$n} kitap satışa açıldı.";
+            break;
+        case 'deactivate':
+            db_query("UPDATE books SET is_active = 0 WHERE id IN ({$in})");
+            $msg = "{$n} kitap satıştan kaldırıldı (pasif).";
+            break;
+        case 'delete':
+            // Siparişte geçen kitap silinmez, pasife alınır (eski faturalarda adı kaybolmasın)
+            $ordered = array_map('intval', array_column(db_fetch_all("SELECT DISTINCT book_id FROM order_items WHERE book_id IN ({$in})"), 'book_id'));
+            $del = array_values(array_diff($ids, $ordered));
+            if ($ordered) db_query("UPDATE books SET is_active = 0 WHERE id IN (" . implode(',', $ordered) . ")");
+            if ($del) {
+                $din = implode(',', $del);
+                foreach (db_fetch_all("SELECT cover_image FROM books WHERE id IN ({$din})") as $cv) {
+                    if (!empty($cv['cover_image']) && strpos($cv['cover_image'], 'cover_') === 0) @unlink(UPLOAD_DIR . '/' . basename($cv['cover_image']));
+                }
+                db_query("DELETE FROM book_showcase WHERE book_id IN ({$din})");
+                db_query("DELETE FROM book_collection WHERE book_id IN ({$din})");
+                db_query("DELETE FROM books WHERE id IN ({$din})");
+            }
+            $msg = count($del) . ' kitap silindi.' . ($ordered ? ' ' . count($ordered) . ' kitap siparişlerde geçtiği için silinmedi, pasife alındı.' : '');
+            break;
+        case 'category':
+            $cid = (int)($_POST['bulk_category'] ?? 0);
+            if (!db_fetch("SELECT id FROM categories WHERE id = ?", [$cid])) { set_flash('warning', 'Kategori seçin.'); redirect($back); }
+            db_query("UPDATE books SET category_id = ? WHERE id IN ({$in})", [$cid]);
+            $msg = "{$n} kitabın kategorisi değiştirildi.";
+            break;
+        case 'showcase_add':
+        case 'showcase_remove':
+            $sid = (int)($_POST['bulk_showcase'] ?? 0);
+            if (!db_fetch("SELECT id FROM showcases WHERE id = ?", [$sid])) { set_flash('warning', 'Vitrin seçin.'); redirect($back); }
+            db_query("DELETE FROM book_showcase WHERE showcase_id = ? AND book_id IN ({$in})", [$sid]);
+            if ($op === 'showcase_add') {
+                foreach ($ids as $bid) db_query("INSERT INTO book_showcase (book_id, showcase_id) VALUES (?, ?)", [$bid, $sid]);
+            }
+            $msg = "{$n} kitap vitrine " . ($op === 'showcase_add' ? 'eklendi.' : 'den çıkarıldı.');
+            break;
+        default:
+            set_flash('warning', 'Bir toplu işlem seçin.');
+            redirect($back);
+    }
+    if (in_array($op, ['activate', 'deactivate', 'category'], true)) {
+        foreach ($ids as $bid) book_touch($bid);
+    }
+    log_action('Toplu Kitap İşlemi', 'Products', null, $op . ': ' . $in);
+    set_flash('success', $msg);
+    redirect($back);
+}
+
 if ($action === 'delete' && $edit_id > 0 && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $book = db_fetch("SELECT title, cover_image FROM books WHERE id = ?", [$edit_id]);
     if ($book) {
@@ -153,6 +217,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_book'])) {
         db_query("INSERT INTO book_collection (book_id, collection_id) VALUES (?, ?)", [$book_id, (int)$col_id]);
     }
 
+    if ($edit_id === 0) {
+        // Yeni kitaptan sonra boş ekleme formu açılır; art arda kitap eklenebilir
+        $_SESSION['last_added_book'] = (int)$book_id;
+        if ($upload_error === '') set_flash('success', '"' . $title . '" kataloğa eklendi. Sıradaki kitabı ekleyebilirsiniz.');
+        redirect('index.php?p=Products&action=add');
+    }
     redirect('index.php?p=Products');
 }
 
@@ -191,6 +261,18 @@ if (($action === 'add' || $action === 'edit') && $edit_id > 0) {
 </div>
 
 <?php if ($action === 'add' || $action === 'edit'): ?>
+    <?php
+    $last_added = ($action === 'add' && !empty($_SESSION['last_added_book'])) ? db_fetch("SELECT id, title, slug, price, cover_image FROM books WHERE id = ?", [(int)$_SESSION['last_added_book']]) : null;
+    unset($_SESSION['last_added_book']);
+    ?>
+    <?php if ($last_added): ?>
+        <div class="d-flex align-items-center gap-3 bg-white border border-success rounded-4 p-3 mb-3 shadow-sm">
+            <img src="../<?= e(cover_url($last_added['cover_image'] ?? '')) ?>" alt="" width="40" height="58" style="width: 40px; height: 58px; object-fit: cover;" class="rounded border">
+            <div class="flex-grow-1 fs-7"><i class="bi bi-check-circle-fill text-success me-1"></i>Son eklenen: <b><?= e($last_added['title']) ?></b> — <?= format_price($last_added['price']) ?></div>
+            <a href="../<?= e(book_path($last_added)) ?>" target="_blank" class="btn btn-sm btn-outline-dark"><i class="bi bi-eye me-1"></i>Sitede gör</a>
+            <a href="index.php?p=Products&action=edit&id=<?= (int)$last_added['id'] ?>" class="btn btn-sm btn-outline-primary"><i class="bi bi-pencil me-1"></i>Düzenle</a>
+        </div>
+    <?php endif; ?>
     <div class="card border-0 shadow-sm rounded-4">
         <div class="card-header bg-white border-bottom p-4">
             <h5 class="fw-bold mb-0 text-dark">
@@ -426,7 +508,7 @@ if (($action === 'add' || $action === 'edit') && $edit_id > 0) {
                 });
             </script>
             <?php if ($action === 'add'): ?>
-                <script src="isbn_helper/isbn-helper.js?v=1" defer></script>
+                <script src="isbn_helper/isbn-helper.js?v=2" defer></script>
             <?php endif; ?>
         </div>
     </div>
@@ -451,6 +533,8 @@ if (($action === 'add' || $action === 'edit') && $edit_id > 0) {
     if ($store_filter > 0) {
         $where[] = "b.store_id = ?";
         $params[] = $store_filter;
+    } elseif ($store_filter === -1) {
+        $where[] = "b.store_id IS NULL"; // yalnızca Yeniçeri Kitabevi'nin kendi kitapları
     }
 
     $where_sql = implode(' AND ', $where);
@@ -490,6 +574,7 @@ if (($action === 'add' || $action === 'edit') && $edit_id > 0) {
                 <div class="col-md-3">
                     <select name="store_id" class="form-select bg-light">
                         <option value="0">Tüm Dükkanlar</option>
+                        <option value="-1" <?= $store_filter === -1 ? 'selected' : '' ?>>Yeniçeri Kitabevi (kendi kitaplarımız)</option>
                         <?php foreach ($stores_all as $st): ?>
                             <option value="<?= $st['id'] ?>" <?= $store_filter == $st['id'] ? 'selected' : '' ?>>Alt Dükkan: <?= e($st['name']) ?></option>
                         <?php endforeach; ?>
@@ -505,19 +590,66 @@ if (($action === 'add' || $action === 'edit') && $edit_id > 0) {
                 </div>
                 <div class="col-md-2 d-flex gap-2">
                     <button type="submit" class="btn btn-dark w-100 fw-semibold">Filtrele</button>
-                    <?php if (!empty($search) || $cat_filter > 0 || $store_filter > 0): ?>
+                    <?php if (!empty($search) || $cat_filter > 0 || $store_filter !== 0): ?>
                         <a href="index.php?p=Products" class="btn btn-outline-secondary"><i class="bi bi-x-lg"></i></a>
                     <?php endif; ?>
                 </div>
             </form>
         </div>
 
+        <form method="POST" action="index.php?p=Products&action=bulk" id="bulkForm" class="px-4 py-2 border-top bg-light d-flex flex-wrap gap-2 align-items-center" onsubmit="return bulkConfirm(this);">
+            <input type="hidden" name="back_qs" value="<?= e(http_build_query(array_diff_key($_GET, ['p' => 1]))) ?>">
+            <span class="fs-7 fw-semibold"><span id="bulkCount">0</span> kitap seçili</span>
+            <select name="bulk_op" id="bulkOp" class="form-select form-select-sm" style="width: auto;">
+                <option value="">Toplu işlem seçin…</option>
+                <option value="activate">Satışa aç (aktif)</option>
+                <option value="deactivate">Satıştan kaldır (pasif)</option>
+                <option value="category">Kategoriyi değiştir</option>
+                <option value="showcase_add">Vitrine ekle</option>
+                <option value="showcase_remove">Vitrinden çıkar</option>
+                <option value="delete">Sil</option>
+            </select>
+            <select name="bulk_category" id="bulkCat" class="form-select form-select-sm d-none" style="width: auto;">
+                <option value="">Kategori…</option>
+                <?php foreach ($categories as $cat): ?><option value="<?= $cat['id'] ?>"><?= e($cat['name']) ?></option><?php endforeach; ?>
+            </select>
+            <select name="bulk_showcase" id="bulkShow" class="form-select form-select-sm d-none" style="width: auto;">
+                <option value="">Vitrin…</option>
+                <?php foreach ($showcases as $sc): ?><option value="<?= $sc['id'] ?>"><?= e($sc['title']) ?></option><?php endforeach; ?>
+            </select>
+            <button type="submit" class="btn btn-sm btn-dark" id="bulkBtn" disabled>Uygula</button>
+        </form>
+        <script>
+        (function () {
+            var cbs = function () { return document.querySelectorAll('.bulk-cb'); };
+            var sync = function () {
+                var n = document.querySelectorAll('.bulk-cb:checked').length;
+                document.getElementById('bulkCount').textContent = n;
+                document.getElementById('bulkBtn').disabled = n === 0;
+            };
+            document.addEventListener('change', function (e) {
+                if (e.target.id === 'bulkAll') cbs().forEach(function (c) { c.checked = e.target.checked; });
+                if (e.target.id === 'bulkOp') {
+                    document.getElementById('bulkCat').classList.toggle('d-none', e.target.value !== 'category');
+                    document.getElementById('bulkShow').classList.toggle('d-none', e.target.value.indexOf('showcase') !== 0);
+                }
+                if (e.target.classList.contains('bulk-cb') || e.target.id === 'bulkAll') sync();
+            });
+            window.bulkConfirm = function (f) {
+                var n = document.querySelectorAll('.bulk-cb:checked').length, op = document.getElementById('bulkOp');
+                if (!op.value) { alert('Bir toplu işlem seçin.'); return false; }
+                return op.value !== 'delete' || confirm(n + ' kitap silinecek (siparişte geçenler pasife alınır). Emin misiniz?');
+            };
+        })();
+        </script>
+
         <div class="card-body p-0">
             <div class="table-responsive">
                 <table class="table table-hover align-middle mb-0">
                     <thead class="table-light fs-7">
                         <tr>
-                            <th class="ps-4">ID</th>
+                            <th class="ps-3" style="width: 34px;"><input type="checkbox" class="form-check-input" id="bulkAll" title="Tümünü seç"></th>
+                            <th>ID</th>
                             <th>Kitap Detayları</th>
                             <th>Yazar / Yayınevi</th>
                             <th>Kategori / Raf</th>
@@ -530,17 +662,18 @@ if (($action === 'add' || $action === 'edit') && $edit_id > 0) {
                     <tbody>
                         <?php if (empty($books_list)): ?>
                             <tr>
-                                <td colspan="8" class="text-center py-5 text-muted">Arama kriterlerine uygun kitap bulunamadı.</td>
+                                <td colspan="9" class="text-center py-5 text-muted">Arama kriterlerine uygun kitap bulunamadı.</td>
                             </tr>
                         <?php else: ?>
                             <?php foreach ($books_list as $b): ?>
                                 <tr>
-                                    <td class="ps-4 text-muted fs-7">#<?= $b['id'] ?></td>
+                                    <td class="ps-3"><input type="checkbox" class="form-check-input bulk-cb" name="ids[]" value="<?= (int)$b['id'] ?>" form="bulkForm"></td>
+                                    <td class="text-muted fs-7">#<?= $b['id'] ?></td>
                                     <td>
                                         <div class="d-flex align-items-center gap-2">
                                             <img src="../<?= e(cover_url($b['cover_image'] ?? '')) ?>" alt="" style="width: 36px; height: 52px; object-fit: cover;" class="rounded border bg-white" loading="lazy">
                                             <div>
-                                                <div class="fw-bold text-dark fs-7"><?= e($b['title']) ?></div>
+                                                <a href="../<?= e(book_path($b)) ?>" target="_blank" class="fw-bold text-dark fs-7 text-decoration-none d-block" title="Sitede görüntüle"><?= e($b['title']) ?> <i class="bi bi-box-arrow-up-right text-muted fs-8"></i></a>
                                                 <small class="text-muted fs-8">
                                                     ISBN: <?= e($b['isbn'] ?: '-') ?>
                                                     <?php if (!empty($b['nadirkitap_code'])): ?>

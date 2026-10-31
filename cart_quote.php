@@ -21,7 +21,7 @@ if (is_array($items)) {
 }
 
 [$lines, $errors] = cart_build_lines($requested);
-$quote = campaign_apply($lines, substr(trim($_POST['coupon_code'] ?? ''), 0, 50));
+$quote = campaign_apply($lines, substr(trim($_POST['coupon_code'] ?? ''), 0, 50), (string)($_POST['shipping_option'] ?? ''));
 
 $offers = [];
 foreach (campaigns_active() as $c) {

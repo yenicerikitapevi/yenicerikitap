@@ -67,6 +67,7 @@
     var cands = [];
     Array.prototype.forEach.call(sel.options, function (o) {
       if (o.value === '' || o.value === '0' || o.value === '__new') return;
+      if (/^\s*\d+\s*$/.test(o.text)) return; // NadirKitap numarasıyla oluşmuş kategoriler eşleştirilmez
       cands.push({ value: o.value, text: o.text.trim(), n: norm(o.text) });
     });
     for (var i = 0; i < cands.length; i++) if (cands[i].n === w) return { value: cands[i].value, text: cands[i].text, score: 1 };
@@ -95,7 +96,7 @@
   function matchCategory(sel, wanted) {
     var m = matchOption(sel, wanted), w = norm(wanted);
     if (m || !w) return m;
-    var opts = Array.prototype.filter.call(sel.options, function (o) { return ['', '0', '__new'].indexOf(o.value) < 0; });
+    var opts = Array.prototype.filter.call(sel.options, function (o) { return ['', '0', '__new'].indexOf(o.value) < 0 && !/^\s*\d+\s*$/.test(o.text); });
     var wt = w.split(' ');
     for (var i = 0; i < opts.length; i++) { // "Roman" ⊂ "Edebiyat & Roman"
       var ot = norm(opts[i].text).split(' ');

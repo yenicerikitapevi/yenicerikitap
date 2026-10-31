@@ -32,6 +32,16 @@ $is_sqlite = $GLOBALS['pdo']->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite';
 $day_expr  = function ($col) use ($is_sqlite) {
     return $is_sqlite ? "date({$col}, '+3 hours')" : "DATE(DATE_ADD({$col}, INTERVAL 3 HOUR))";
 };
+// Tek gün seçilince grafik saat saat gösterilir
+$single_day = $from_d->format('Y-m-d') === $to_d->format('Y-m-d');
+$hour_expr = function ($col) use ($is_sqlite) {
+    return $is_sqlite ? "strftime('%H', {$col}, '+3 hours')" : "LPAD(HOUR(DATE_ADD({$col}, INTERVAL 3 HOUR)), 2, '0')";
+};
+$bucket_expr = $single_day ? $hour_expr : $day_expr;
+// UTC kayıt zamanını Türkiye saatine çevirip gösterir
+$tr_time = function ($utc_str, $fmt = 'd.m.Y H:i') use ($tz_tr) {
+    return $utc_str ? (new DateTime($utc_str, new DateTimeZone('UTC')))->setTimezone($tz_tr)->format($fmt) : '';
+};
 
 // Olay filtresi (dükkân seçiliyse yalnızca o dükkânın kitap sayfaları ve vitrin sayfası)
 $ev_where  = "e.created_at >= ? AND e.created_at < ?";
@@ -63,10 +73,16 @@ $sales = db_fetch("SELECT COALESCE(SUM(oi.quantity), 0) as qty, COALESCE(SUM(oi.
 
 // --- Günlük grafik ---
 $daily = [];
-for ($d = clone $from_d; $d <= $to_d; $d->modify('+1 day')) {
-    $daily[$d->format('Y-m-d')] = ['views' => 0, 'visitors' => 0, 'cart' => 0, 'sales' => 0];
+if ($single_day) {
+    for ($h = 0; $h < 24; $h++) {
+        $daily[sprintf('%02d', $h)] = ['views' => 0, 'visitors' => 0, 'cart' => 0, 'sales' => 0];
+    }
+} else {
+    for ($d = clone $from_d; $d <= $to_d; $d->modify('+1 day')) {
+        $daily[$d->format('Y-m-d')] = ['views' => 0, 'visitors' => 0, 'cart' => 0, 'sales' => 0];
+    }
 }
-foreach (db_fetch_all("SELECT {$day_expr('e.created_at')} as d,
+foreach (db_fetch_all("SELECT {$bucket_expr('e.created_at')} as d,
         SUM(CASE WHEN e.event_type = 'view' THEN 1 ELSE 0 END) as views,
         COUNT(DISTINCT CASE WHEN e.event_type = 'view' THEN e.visitor_hash END) as visitors,
         SUM(CASE WHEN e.event_type = 'cart_add' THEN 1 ELSE 0 END) as cart
@@ -75,7 +91,7 @@ foreach (db_fetch_all("SELECT {$day_expr('e.created_at')} as d,
         $daily[$r['d']] = array_merge($daily[$r['d']], ['views' => (int)$r['views'], 'visitors' => (int)$r['visitors'], 'cart' => (int)$r['cart']]);
     }
 }
-foreach (db_fetch_all("SELECT {$day_expr('o.created_at')} as d, SUM(oi.quantity) as qty
+foreach (db_fetch_all("SELECT {$bucket_expr('o.created_at')} as d, SUM(oi.quantity) as qty
     FROM order_items oi JOIN orders o ON oi.order_id = o.id JOIN books b ON oi.book_id = b.id
     WHERE {$sale_where} GROUP BY d", $sale_params) as $r) {
     if (isset($daily[$r['d']])) {
@@ -258,31 +274,38 @@ $period_labels = ['1' => 'Bugün', '7' => 'Son 7 gün', '30' => 'Son 30 gün', '
 <div class="row g-3 mb-4">
     <?php
     $cards = [
-        ['Görüntülenme', $num($summary['views'] ?? 0), 'bi-eye', 'Sayfa açılış sayısı'],
-        ['Tekil Ziyaretçi', $num($summary['visitors'] ?? 0), 'bi-people', 'Farklı kişi (tarayıcı)'],
-        ['Ziyaret (Oturum)', $num($summary['sessions'] ?? 0), 'bi-door-open', '30 dk hareketsizlikle biter'],
-        ['Ort. Kalma Süresi', $fmt_sec($summary['avg_sec'] ?? 0), 'bi-stopwatch', 'Sayfa başına'],
-        ['Sepete Ekleme', $num($summary['cart_adds'] ?? 0), 'bi-cart-plus', 'Dönüşüm: ' . $pct($summary['cart_adds'] ?? 0, $summary['views'] ?? 0)],
-        ['Satılan Kitap', $num($sales['qty']), 'bi-bag-check', $num($sales['orders']) . ' sipariş'],
-        ['Ciro', format_price($sales['revenue']), 'bi-cash-stack', $sales['discount'] > 0 ? 'Kampanya indirimi sonrası (' . format_price($sales['discount']) . ' indirim)' : 'Ödemesi alınan siparişler'],
+        ['Görüntülenme', $num($summary['views'] ?? 0), 'bi-eye', 'Sayfa açılış sayısı', 'views'],
+        ['Tekil Ziyaretçi', $num($summary['visitors'] ?? 0), 'bi-people', 'Farklı kişi (tarayıcı)', 'sessions'],
+        ['Ziyaret (Oturum)', $num($summary['sessions'] ?? 0), 'bi-door-open', '30 dk hareketsizlikle biter', 'sessions'],
+        ['Ort. Kalma Süresi', $fmt_sec($summary['avg_sec'] ?? 0), 'bi-stopwatch', 'Sayfa başına', 'sessions'],
+        ['Sepete Ekleme', $num($summary['cart_adds'] ?? 0), 'bi-cart-plus', 'Dönüşüm: ' . $pct($summary['cart_adds'] ?? 0, $summary['views'] ?? 0), 'cart'],
+        ['Satılan Kitap', $num($sales['qty']), 'bi-bag-check', $num($sales['orders']) . ' sipariş', 'orders'],
+        ['Ciro', format_price($sales['revenue']), 'bi-cash-stack', $sales['discount'] > 0 ? 'Kampanya indirimi sonrası (' . format_price($sales['discount']) . ' indirim)' : 'Ödemesi alınan siparişler', 'orders'],
     ];
     if ($scope_store > 0) {
-        $cards[] = ['Komisyon', format_price($sales['commission']), 'bi-percent', 'Şu anki oran: %' . rtrim(rtrim(number_format(store_commission_rate($scope_store), 2, ',', ''), '0'), ',')];
-        $cards[] = ['Net Hakediş', format_price($sales['revenue'] - $sales['commission']), 'bi-wallet2', 'Ciro − komisyon'];
+        $cards[] = ['Komisyon', format_price($sales['commission']), 'bi-percent', 'Şu anki oran: %' . rtrim(rtrim(number_format(store_commission_rate($scope_store), 2, ',', ''), '0'), ','), 'orders'];
+        $cards[] = ['Net Hakediş', format_price($sales['revenue'] - $sales['commission']), 'bi-wallet2', 'Ciro − komisyon', 'orders'];
     }
+    $detail = in_array($_GET['detail'] ?? '', ['views', 'sessions', 'cart', 'orders'], true) ? $_GET['detail'] : '';
+    $keep = ['period' => $period, 'from' => $from_d->format('Y-m-d'), 'to' => $to_d->format('Y-m-d')] + (!$is_seller && $scope_store ? ['store_id' => $scope_store] : []);
+    $detail_url = function ($d) use ($report_base, $keep, $detail) {
+        return $report_base . http_build_query($keep + ($d === $detail ? [] : ['detail' => $d])) . '#detay';
+    };
     foreach ($cards as $c): ?>
         <div class="col-6 col-md-4 col-xl">
-            <div class="bg-white rounded-4 shadow-sm p-3 h-100">
+            <a href="<?= e($detail_url($c[4])) ?>" class="d-block text-decoration-none bg-white rounded-4 shadow-sm p-3 h-100 border <?= $detail === $c[4] ? 'border-danger' : 'border-white' ?>" title="Ayrıntıları göster">
                 <div class="text-muted fs-8 fw-semibold text-uppercase"><i class="bi <?= $c[2] ?> text-danger me-1"></i><?= $c[0] ?></div>
                 <div class="fs-4 fw-extrabold text-dark mt-1"><?= $c[1] ?></div>
-                <div class="text-muted fs-8"><?= $c[3] ?></div>
-            </div>
+                <div class="text-muted fs-8"><?= $c[3] ?> <i class="bi bi-chevron-<?= $detail === $c[4] ? 'up' : 'down' ?> float-end"></i></div>
+            </a>
         </div>
     <?php endforeach; ?>
 </div>
 
+<?php if ($detail !== ''): include __DIR__ . '/reports_detail.php'; endif; ?>
+
 <div class="card border-0 shadow-sm rounded-4 mb-4">
-    <div class="card-header bg-white border-0 p-3 pb-0"><h6 class="fw-bold mb-0">Günlük Trafik ve Satış</h6></div>
+    <div class="card-header bg-white border-0 p-3 pb-0"><h6 class="fw-bold mb-0"><?= $single_day ? 'Saatlik Trafik ve Satış (' . $from_d->format('d.m.Y') . ')' : 'Günlük Trafik ve Satış' ?></h6></div>
     <div class="card-body p-3"><div style="height: 280px;"><canvas id="dailyChart"></canvas></div></div>
 </div>
 
@@ -428,7 +451,7 @@ $period_labels = ['1' => 'Bugün', '7' => 'Son 7 gün', '30' => 'Son 30 gün', '
 (function () {
     if (!window.Chart) return;
     var d = <?= json_encode(array_values($daily)) ?>;
-    var labels = <?= json_encode(array_map(function ($k) { return date('d.m', strtotime($k)); }, array_keys($daily))) ?>;
+    var labels = <?= json_encode(array_map(function ($k) use ($single_day) { return $single_day ? $k . ':00' : date('d.m', strtotime($k)); }, array_keys($daily))) ?>;
     new Chart(document.getElementById('dailyChart'), {
         data: {
             labels: labels,

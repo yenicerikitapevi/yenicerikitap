@@ -69,7 +69,10 @@ $params = [];
 if (!empty($status_filter)) {
     $where .= " AND o.status = ?";
     $params[] = $status_filter;
+} else {
+    $where .= " AND o.status != 'İptal'"; // iptal edilenler yalnızca İptal sekmesinde
 }
+$status_counts = array_column(db_fetch_all("SELECT status, COUNT(*) as cnt FROM orders GROUP BY status"), 'cnt', 'status');
 
 $orders = db_fetch_all("SELECT o.*, u.name as customer_name, u.email as customer_email, u.phone as customer_phone 
                         FROM orders o 
@@ -87,11 +90,11 @@ $orders = db_fetch_all("SELECT o.*, u.name as customer_name, u.email as customer
 
 <ul class="nav nav-pills mb-4 bg-white p-2 rounded-4 shadow-sm border">
     <li class="nav-item">
-        <a class="nav-link <?= empty($status_filter) ? 'active bg-danger text-white' : 'text-secondary' ?> fw-semibold" href="index.php?p=Orders">Tüm Siparişler</a>
+        <a class="nav-link <?= empty($status_filter) ? 'active bg-danger text-white' : 'text-secondary' ?> fw-semibold" href="index.php?p=Orders">Tüm Siparişler <span class="badge bg-light text-dark ms-1"><?= array_sum($status_counts) - (int)($status_counts['İptal'] ?? 0) ?></span></a>
     </li>
     <?php foreach ($order_statuses as $st => $st_class): ?>
         <li class="nav-item">
-            <a class="nav-link <?= $status_filter === $st ? 'active ' . $st_class : 'text-secondary' ?> fw-semibold" href="index.php?p=Orders&status=<?= urlencode($st) ?>"><?= e($st) ?></a>
+            <a class="nav-link <?= $status_filter === $st ? 'active ' . $st_class : 'text-secondary' ?> fw-semibold" href="index.php?p=Orders&status=<?= urlencode($st) ?>"><?= e($st) ?> <span class="badge bg-light text-dark ms-1"><?= (int)($status_counts[$st] ?? 0) ?></span></a>
         </li>
     <?php endforeach; ?>
 </ul>

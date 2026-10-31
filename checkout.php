@@ -8,7 +8,7 @@ $order_created = false;
 $new_order_number = '';
 $order_total = 0;
 $errors = [];
-$form = ['name' => '', 'email' => '', 'phone' => '', 'address' => '', 'coupon_code' => ''];
+$form = ['name' => '', 'email' => '', 'phone' => '', 'address' => '', 'coupon_code' => '', 'shipping_option' => ''];
 $paytr_token = '';
 $payment_result = $_GET['odeme'] ?? '';
 
@@ -58,7 +58,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['complete_checkout']))
             [$lines, $line_errors] = cart_build_lines($requested);
             $errors = array_merge($errors, $line_errors);
             // Kampanyalar (indirim, ücretsiz kargo, kupon) sunucuda, veritabanı fiyatlarıyla hesaplanır
-            $quote = campaign_apply($lines, $form['coupon_code']);
+            $quote = campaign_apply($lines, $form['coupon_code'], $form['shipping_option']);
             if ($form['coupon_code'] !== '' && $quote['coupon_status'] !== 'ok') {
                 $errors[] = $quote['coupon_status'] === 'not_applicable'
                     ? 'Kupon kodu sepetinizdeki ürünlere uygulanamıyor (kampanya şartlarını kontrol edin) ya da kupon alanını boş bırakın.'
@@ -95,8 +95,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['complete_checkout']))
                     $new_order_number = 'YNC-' . date('Ymd') . '-' . strtoupper(bin2hex(random_bytes(3)));
                 } while (db_fetch("SELECT id FROM orders WHERE order_number = ?", [$new_order_number]));
 
-                db_query("INSERT INTO orders (order_number, user_id, total_amount, shipping_amount, status, payment_method, shipping_address, discount_amount, coupon_code, campaign_summary) VALUES (?, ?, ?, ?, 'Ödeme Bekliyor', ?, ?, ?, ?, ?)",
-                    [$new_order_number, $user_id, $order_total, $shipping, $payment_method, $form['address'], $quote['discount'], $form['coupon_code'] !== '' ? mb_strtoupper($form['coupon_code'], 'UTF-8') : null, $applied_campaigns ? json_encode($applied_campaigns, JSON_UNESCAPED_UNICODE) : null]);
+                db_query("INSERT INTO orders (order_number, user_id, total_amount, shipping_amount, status, payment_method, shipping_address, discount_amount, coupon_code, campaign_summary, shipping_carrier) VALUES (?, ?, ?, ?, 'Ödeme Bekliyor', ?, ?, ?, ?, ?, ?)",
+                    [$new_order_number, $user_id, $order_total, $shipping, $payment_method, $form['address'], $quote['discount'], $form['coupon_code'] !== '' ? mb_strtoupper($form['coupon_code'], 'UTF-8') : null, $applied_campaigns ? json_encode($applied_campaigns, JSON_UNESCAPED_UNICODE) : null, $quote['shipping_option'] !== '' ? $quote['shipping_option'] : null]);
                 $order_id = db_last_id();
                 foreach ($applied_campaigns as $ac) {
                     db_query("UPDATE campaigns SET used_count = used_count + 1 WHERE id = ?", [$ac['id']]);
@@ -288,6 +288,19 @@ track_view('checkout');
                                 </div>
                             </div>
 
+                            <h5 class="fw-bold text-dark mt-4 mb-3"><i class="bi bi-truck text-danger me-2"></i> Kargo</h5>
+                            <?php $ship_opts = shipping_options(); $ship_sel = shipping_option($form['shipping_option'])['key']; ?>
+                            <?php foreach ($ship_opts as $so): ?>
+                                <label class="d-flex align-items-center justify-content-between border rounded-3 p-3 mb-2 bg-light" for="ship_<?= e($so['key'] ?: 'std') ?>" style="cursor: pointer;">
+                                    <span class="form-check mb-0">
+                                        <input class="form-check-input js-ship" type="radio" name="shipping_option" id="ship_<?= e($so['key'] ?: 'std') ?>" value="<?= e($so['key']) ?>" <?= $so['key'] === $ship_sel ? 'checked' : '' ?>>
+                                        <span class="fw-semibold"><?= e($so['name']) ?></span>
+                                    </span>
+                                    <span class="fs-7 fw-semibold"><?= $so['price'] > 0 ? format_price($so['price']) : 'Ücretsiz' ?></span>
+                                </label>
+                            <?php endforeach; ?>
+                            <div class="fs-8 text-muted mb-1"><?= format_price((float)setting('shipping_free_limit', '350')) ?> ve üzeri siparişlerde kargo ücretsizdir. Siparişiniz kargoya verilince takip numarası e-postanıza gönderilir.</div>
+
                             <h5 class="fw-bold text-dark mt-4 mb-3"><i class="bi bi-wallet2 text-danger me-2"></i> Ödeme Yöntemi</h5>
 
                             <?php if ($card_enabled): ?>
@@ -379,6 +392,8 @@ track_view('checkout');
                 const fd = new FormData();
                 fd.append('cart_data', JSON.stringify(cart));
                 fd.append('coupon_code', couponInput ? couponInput.value.trim() : '');
+                const shipSel = document.querySelector('.js-ship:checked');
+                fd.append('shipping_option', shipSel ? shipSel.value : '');
                 let q;
                 try {
                     const res = await fetch('cart_quote.php', { method: 'POST', body: fd, credentials: 'same-origin' });
@@ -398,7 +413,7 @@ track_view('checkout');
                 q.applied.forEach(a => {
                     html += `<div class="d-flex justify-content-between fs-7 mb-1 text-success"><span><i class="bi bi-gift-fill me-1"></i>${escapeHtml(a.name)}</span><span>-${money(a.amount)}</span></div>`;
                 });
-                html += `<div class="d-flex justify-content-between fs-7 mb-1"><span>Kargo Ücreti:</span><span>${q.free_shipping ? `<s class="text-muted me-1">${money(q.free_shipping.amount)}</s><span class="text-success fw-semibold">Ücretsiz</span>` : money(q.shipping)}</span></div>`;
+                html += `<div class="d-flex justify-content-between fs-7 mb-1"><span>Kargo (${escapeHtml(q.shipping_name || 'Standart')}):</span><span>${q.free_shipping ? `<s class="text-muted me-1">${money(q.free_shipping.amount)}</s><span class="text-success fw-semibold">Ücretsiz</span>` : (q.shipping > 0 ? money(q.shipping) : '<span class="text-success fw-semibold">Ücretsiz</span>')}</span></div>`;
                 if (q.free_shipping) {
                     html += `<div class="fs-8 text-success mb-1"><i class="bi bi-truck me-1"></i>${escapeHtml(q.free_shipping.name)}</div>`;
                 } else if (q.shipping > 0 && q.free_limit > q.net) {
@@ -423,6 +438,7 @@ track_view('checkout');
             const applyBtn = document.getElementById('btnApplyCoupon');
             if (applyBtn) applyBtn.addEventListener('click', refreshQuote);
             if (couponInput) couponInput.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); refreshQuote(); } });
+            document.querySelectorAll('.js-ship').forEach(r => r.addEventListener('change', refreshQuote));
         });
     </script>
     <?= track_script() ?>

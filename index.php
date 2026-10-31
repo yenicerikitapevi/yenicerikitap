@@ -12,6 +12,9 @@ foreach ($settings_rows as $row) {
 
 $categories = nav_categories();
 
+// Ana sayfa yalnızca Yeniçeri Kitabevi'nin kendi kitaplarını gösterir; sahaf kitapları kendi vitrin sayfalarında
+// (Site Ayarları → "Ana sayfada sahaf kitaplarını da göster" ile değiştirilebilir)
+$home_scope = setting('home_show_store_books', '0') === '1' ? '' : ' AND b.store_id IS NULL';
 $showcases = db_fetch_all("SELECT * FROM showcases ORDER BY id ASC");
 $showcase_books = [];
 foreach ($showcases as $sc) {
@@ -21,7 +24,7 @@ foreach ($showcases as $sc) {
                            LEFT JOIN authors a ON b.author_id = a.id 
                            LEFT JOIN publishers p ON b.publisher_id = p.id 
                            LEFT JOIN stores s ON b.store_id = s.id 
-                           WHERE bs.showcase_id = ? AND b.is_active = 1 
+                           WHERE bs.showcase_id = ? AND b.is_active = 1{$home_scope} 
                            ORDER BY b.id DESC LIMIT 8", [$sc['id']]);
     $showcase_books[$sc['id']] = $books;
 }
@@ -33,17 +36,24 @@ foreach ($collections as $col) {
                              FROM books b 
                              JOIN book_collection bc ON b.id = bc.book_id 
                              LEFT JOIN authors a ON b.author_id = a.id 
-                             WHERE bc.collection_id = ? AND b.is_active = 1 
+                             WHERE bc.collection_id = ? AND b.is_active = 1{$home_scope} 
                              LIMIT 4", [$col['id']]);
     $collection_books[$col['id']] = $c_books;
 }
 // Sağdaki öne çıkan kitap: "Seçtiklerimiz" vitrininden, yoksa en yeni indirimli, yoksa en yeni kitap (sabit örnek metin yerine gerçek ürün)
-$featured_sql = "SELECT b.*, a.name as author_name FROM books b LEFT JOIN authors a ON a.id = b.author_id WHERE b.is_active = 1 AND b.stock > 0";
+$featured_sql = "SELECT b.*, a.name as author_name FROM books b LEFT JOIN authors a ON a.id = b.author_id WHERE b.is_active = 1 AND b.stock > 0{$home_scope}";
 $featured = db_fetch($featured_sql . " AND b.id IN (SELECT book_id FROM book_showcase WHERE showcase_id = 5) ORDER BY b.id DESC LIMIT 1")
     ?: db_fetch($featured_sql . " AND b.old_price > b.price ORDER BY b.id DESC LIMIT 1")
     ?: db_fetch($featured_sql . " ORDER BY b.id DESC LIMIT 1");
 // Kitabı olmayan koleksiyonlar gösterilmez
 $collections = array_values(array_filter($collections, function ($col) use ($collection_books) { return !empty($collection_books[$col['id']]); }));
+// Sahaflar bölümü: her sahaf kendi sayfasına gider
+$home_stores = db_fetch_all("SELECT s.id, s.name, s.slug, s.city, (SELECT COUNT(*) FROM books b WHERE b.store_id = s.id AND b.is_active = 1) as book_count FROM stores s WHERE s.is_active = 1 ORDER BY book_count DESC");
+$home_stores = array_values(array_filter($home_stores, function ($st) { return $st['book_count'] > 0; }));
+foreach ($home_stores as &$hs) {
+    $hs['covers'] = db_fetch_all("SELECT id, title, slug, cover_image FROM books WHERE store_id = ? AND is_active = 1 AND cover_image IS NOT NULL AND cover_image != '' ORDER BY id DESC LIMIT 4", [$hs['id']]);
+}
+unset($hs);
 track_view('home');
 ?>
 <!DOCTYPE html>
@@ -240,6 +250,40 @@ track_view('home');
             </div>
         </section>
     <?php endforeach; ?>
+
+    <!-- 5b. SAHAFLAR (her biri kendi sayfasında) -->
+    <?php if ($home_stores): ?>
+    <section class="py-5 bg-white border-top">
+        <div class="container">
+            <div class="d-flex align-items-center justify-content-between mb-4">
+                <div>
+                    <h2 class="section-title h3 mb-0"><i class="bi bi-shop text-danger me-2"></i>Sahaflarımız</h2>
+                    <small class="text-muted">İkinci el ve nadir kitaplar, her sahafın kendi vitrininde</small>
+                </div>
+                <a href="magaza.php" class="btn btn-sm btn-outline-dark rounded-pill px-3 font-semibold">Tüm Sahaflar</a>
+            </div>
+            <div class="row g-3">
+                <?php foreach ($home_stores as $hs): ?>
+                    <div class="col-md-6 col-lg-4">
+                        <a href="magaza.php?s=<?= urlencode($hs['slug']) ?>" class="d-block border rounded-4 p-3 h-100 text-decoration-none text-dark shadow-sm bg-light">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <div><div class="fw-bold fs-5"><?= e($hs['name']) ?></div><small class="text-muted"><?= $hs['city'] ? '<i class="bi bi-geo-alt me-1"></i>' . e($hs['city']) . ' • ' : '' ?><?= (int)$hs['book_count'] ?> kitap</small></div>
+                                <span class="btn btn-sm btn-danger rounded-pill">Vitrine Git</span>
+                            </div>
+                            <?php if ($hs['covers']): ?>
+                                <div class="d-flex gap-2">
+                                    <?php foreach ($hs['covers'] as $cv): ?>
+                                        <?= cover_picture($cv['cover_image'], $cv['title'] . ' kitap kapağı', 'rounded border bg-white', 70, 100, true, 'style="width: 23%; height: auto; aspect-ratio: 2/3; object-fit: cover;"') ?>
+                                    <?php endforeach; ?>
+                                </div>
+                            <?php endif; ?>
+                        </a>
+                    </div>
+                <?php endforeach; ?>
+            </div>
+        </div>
+    </section>
+    <?php endif; ?>
 
     <!-- 6. TEMATİK KOLEKSİYONLAR -->
     <?php if ($collections): ?>
