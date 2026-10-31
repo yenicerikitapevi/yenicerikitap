@@ -22,7 +22,7 @@ $tab             = ($_GET['tab'] ?? '') === 'rapor' ? 'rapor' : 'dukkan';
 
 // NadirKitap Senkronizasyon İsteği (Tek tıkla satılanları düşür & yeni kitapları çek)
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'sync_nk') {
-    $res = nk_sync_store($report_store_id, 10);
+    $res = nk_sync_store($report_store_id, 40);
     if (!empty($res['success'])) {
         set_flash('success', $res['message']);
     } else {

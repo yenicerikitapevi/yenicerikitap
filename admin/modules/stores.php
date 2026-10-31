@@ -8,7 +8,7 @@ $action = sanitize($_GET['action'] ?? 'list');
 $edit_id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 
 if ($action === 'sync' && $edit_id > 0 && $_SERVER['REQUEST_METHOD'] === 'POST') {
-    $res = nk_sync_store($edit_id, 10);
+    $res = nk_sync_store($edit_id, 40);
     if (!empty($res['success'])) {
         set_flash('success', $res['message']);
     } else {
