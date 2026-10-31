@@ -12,7 +12,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_settings'])) {
         'company_legal_name', 'company_tax_office', 'company_tax_number', 'company_mersis',
         'payment_merchant_id', 'payment_api_key', 'payment_merchant_salt', 'paytr_test_mode',
         'nk_store_code', 'nk_api_key',
-        'home_show_store_books', 'smtp_host', 'smtp_port', 'smtp_secure', 'smtp_user', 'smtp_pass', 'mail_from_email', 'mail_from_name', 'order_notify_email'
+        'home_show_store_books', 'isbn_autosave', 'smtp_host', 'smtp_port', 'smtp_secure', 'smtp_user', 'smtp_pass', 'mail_from_email', 'mail_from_name', 'order_notify_email'
     ];
     // Gizli anahtarlar sayfada gösterilmez; alan boş bırakılırsa kayıtlı değer korunur
     $secret_keys = ['payment_api_key', 'payment_merchant_salt', 'smtp_pass'];
@@ -193,6 +193,14 @@ foreach ($setting_rows as $row) {
                                 <input class="form-check-input" type="checkbox" name="home_show_store_books" value="1" id="homeStore" <?= ($s['home_show_store_books'] ?? '0') === '1' ? 'checked' : '' ?>>
                                 <label class="form-check-label fw-semibold fs-7" for="homeStore">Ana sayfa vitrinlerinde sahaf kitaplarını da göster</label>
                                 <div class="text-muted fs-8">Kapalıyken ana sayfada yalnızca Yeniçeri Kitabevi'nin kendi kitapları görünür; sahaf kitapları "Sahaflarımız" bölümünden ve her sahafın kendi sayfasından açılır. Arama ve kategorilerde tüm kitaplar listelenir.</div>
+                            </div>
+                        </div>
+                        <div class="col-12">
+                            <input type="hidden" name="isbn_autosave" value="0">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" name="isbn_autosave" value="1" id="isbnAutosave" <?= ($s['isbn_autosave'] ?? '0') === '1' ? 'checked' : '' ?>>
+                                <label class="form-check-label fw-semibold fs-7" for="isbnAutosave">ISBN yardımcısı: fotoğraftan sonra otomatik kaydet</label>
+                                <div class="text-muted fs-8">Kapalıyken (önerilen) yardımcı yalnızca formu doldurur, Kaydet'e siz basarsınız. Açıkken fotoğrafla eklenen kitapta ad, yazar, yayınevi, fiyat ve kategori (formda zorunlu) bulunduysa 3 sn sonra kaydedilir (iptal edilebilir). Aynı ISBN zaten kayıtlıysa kaydedilmez.</div>
                             </div>
                         </div>
                         <div class="col-12"><small class="text-muted">Sosyal medya adresleri Google'daki işletme bilgisine (Organization / sameAs) eklenir. Boş bırakılanlar kullanılmaz.</small></div>

@@ -26,6 +26,21 @@ return [
     'ssl_verify' => true,
     'ca_bundle'  => '',        // CA hatası alırsanız hosting'in cacert.pem yolunu yazın
 
+    // İkinci el ilan siteleri (fiyat önceliği bunlarda). {q} = ISBN ya da "ad yazar" araması (URL kodlanmış).
+    // Siteler arama adresini değiştirirse yalnızca bu satırları güncelleyin.
+    'listing_sites' => [
+        'nadirkitap' => ['name' => 'Nadir Kitap', 'search' => 'https://www.nadirkitap.com/kitapara.php?ara=aramayap&kelime={q}'],
+        'kitantik'   => ['name' => 'Kitantik',    'search' => 'https://www.kitantik.com/arama?q={q}'],
+    ],
+
+    // Fotoğraftan kitap tanıma (Claude). Anahtar KODA YAZILMAZ: Render → Environment → ANTHROPIC_API_KEY
+    // (Ortam değişkeni yoksa ve gerçekten gerekiyorsa buraya yazılabilir; bu dosyayı herkese açık depoya göndermeyin.)
+    'anthropic_api_key' => getenv('ANTHROPIC_API_KEY') ?: '',
+    'vision_model'      => 'claude-opus-5-5',
+
+    // Bir isteğin en fazla süresi (sn). PHP sınırı 60 sn; altında kalmalı.
+    'request_budget' => 50,
+
     // Test amaçlı hata ayrıntısı
     'debug' => false,
 ];

@@ -508,7 +508,7 @@ if (($action === 'add' || $action === 'edit') && $edit_id > 0) {
                 });
             </script>
             <?php if ($action === 'add'): ?>
-                <script src="isbn_helper/isbn-helper.js?v=2" defer></script>
+                <script src="isbn_helper/isbn-helper.js?v=3" defer></script>
             <?php endif; ?>
         </div>
     </div>
