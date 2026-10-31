@@ -14,7 +14,8 @@ if ($slug !== '') {
     $category = db_fetch("SELECT * FROM categories WHERE slug = ?", [$slug]);
     if (!$category) {
         // Eski / değişmiş kategori adresi: kategoriye, olmazsa kitaba, o da olmazsa ana sayfaya kalıcı yönlendirme
-        $target = legacy_find_category($slug);
+        $moved = slug_redirect_target('category', $slug);
+        $target = $moved ? db_fetch("SELECT id, slug FROM categories WHERE id = ?", [$moved]) : legacy_find_category($slug);
         if ($target) redirect_301(category_path($target));
         $book_target = legacy_find_book($slug);
         if ($book_target) redirect_301(book_path($book_target));

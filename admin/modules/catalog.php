@@ -179,6 +179,7 @@ $edit_has_children = $edit && $tab === 'categories' && db_fetch("SELECT id FROM 
         Bunlar sahaf aktarımında NadirKitap'ın kategori numarasıyla oluştu ve sitenin menüsünde gösterilmiyor.
         Kitaplarına bakıp ya <b>Düzenle</b> ile doğru adı verin ya da <b>Birleştir</b> ile mevcut bir kategoriye (ör. Tarih & Araştırma) taşıyın.
         Numara hatırlanır: sonraki aktarımlarda aynı numaralı kitaplar doğrudan seçtiğiniz kategoriye gider.
+        <div class="mt-2"><a href="index.php?p=NkCategories" class="btn btn-sm btn-danger"><i class="bi bi-search me-1"></i> Adları NadirKitap'tan otomatik bul</a></div>
     </div>
 <?php endif; endif; ?>
 
