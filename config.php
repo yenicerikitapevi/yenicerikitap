@@ -123,6 +123,31 @@ if ($pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite') {
     }
 }
 
+// Sahaf üyelik başvurusu: firma bilgileri ve onay durumu (mevcut dükkânlar 'approved' sayılır)
+$is_sqlite_db = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite';
+$store_apply_cols = [
+    'approval_status'  => $is_sqlite_db ? "TEXT DEFAULT 'approved'" : "VARCHAR(20) DEFAULT 'approved'",
+    'company_type'     => $is_sqlite_db ? 'TEXT' : 'VARCHAR(20) NULL',
+    'company_title'    => $is_sqlite_db ? 'TEXT' : 'VARCHAR(255) NULL',
+    'contact_name'     => $is_sqlite_db ? 'TEXT' : 'VARCHAR(150) NULL',
+    'email'            => $is_sqlite_db ? 'TEXT' : 'VARCHAR(190) NULL',
+    'tax_office'       => $is_sqlite_db ? 'TEXT' : 'VARCHAR(120) NULL',
+    'tax_number'       => $is_sqlite_db ? 'TEXT' : 'VARCHAR(20) NULL',
+    'address'          => $is_sqlite_db ? 'TEXT' : 'TEXT NULL',
+    'iban'             => $is_sqlite_db ? 'TEXT' : 'VARCHAR(40) NULL',
+    'applied_at'       => $is_sqlite_db ? 'TEXT' : 'DATETIME NULL',
+    'reviewed_at'      => $is_sqlite_db ? 'TEXT' : 'DATETIME NULL',
+    'rejection_reason' => $is_sqlite_db ? 'TEXT' : 'TEXT NULL',
+];
+$have_store_cols = $is_sqlite_db
+    ? array_column($pdo->query("PRAGMA table_info(stores)")->fetchAll(), 'name')
+    : array_column($pdo->query("SHOW COLUMNS FROM stores")->fetchAll(), 'Field');
+foreach ($store_apply_cols as $col_name => $col_type) {
+    if (!in_array($col_name, $have_store_cols, true)) {
+        $pdo->exec("ALTER TABLE stores ADD COLUMN {$col_name} {$col_type};");
+    }
+}
+
 // Varsayılan ilk Alt Dükkan (Umay Sahaf) kaydı yoksa otomatik oluştur
 try {
     $store_cnt = (int)($pdo->query("SELECT COUNT(*) FROM stores")->fetchColumn() ?: 0);

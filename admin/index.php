@@ -36,6 +36,7 @@ if (array_key_exists($requested_p, $allowed_pages)) {
 
 $admin_name = $_SESSION['admin_user']['name'] ?? 'Yönetici';
 $unread_messages = db_fetch("SELECT COUNT(*) as cnt FROM contact_messages WHERE is_read = 0")['cnt'] ?? 0;
+$pending_sellers = db_fetch("SELECT COUNT(*) as cnt FROM stores WHERE approval_status = 'pending'")['cnt'] ?? 0;
 ?>
 <!DOCTYPE html>
 <html lang="tr">
@@ -79,6 +80,7 @@ $unread_messages = db_fetch("SELECT COUNT(*) as cnt FROM contact_messages WHERE 
 
                 <a href="index.php?p=Stores" class="nav-link <?= $current_p === 'Stores' ? 'active' : '' ?>">
                     <i class="bi bi-shop"></i> Alt Dükkanlar (Sahaflar)
+                    <?php if ($pending_sellers > 0): ?><span class="badge bg-warning text-dark rounded-pill ms-1" title="Onay bekleyen başvuru"><?= (int)$pending_sellers ?></span><?php endif; ?>
                 </a>
 
                 <a href="index.php?p=Campaigns" class="nav-link <?= $current_p === 'Campaigns' ? 'active' : '' ?>">

@@ -15,7 +15,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $store = $username !== '' ? db_fetch("SELECT * FROM stores WHERE LOWER(username) = ?", [$username]) : null;
 
     if ($store && password_verify($password, $store['password_hash'])) {
-        if (!$store['is_active']) {
+        $approval = $store['approval_status'] ?? 'approved';
+        if ($approval === 'pending') {
+            $error = 'Üyelik başvurunuz henüz onaylanmadı. Onaylandığında e-posta ile bilgilendirileceksiniz.';
+        } elseif ($approval === 'rejected') {
+            $error = 'Üyelik başvurunuz onaylanmadı.' . (!empty($store['rejection_reason']) ? ' Gerekçe: ' . $store['rejection_reason'] : '') . ' Ayrıntı için site yöneticisiyle iletişime geçin.';
+        } elseif (!$store['is_active']) {
             $error = 'Dükkânınız pasif durumda. Lütfen site yöneticisiyle iletişime geçin.';
         } else {
             session_regenerate_id(true);
@@ -67,8 +72,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <i class="bi bi-box-arrow-in-right me-1"></i> Giriş Yap
             </button>
         </form>
-        <div class="mt-4 text-center fs-8 text-muted border-top pt-3">
-            Kitap aktarım uygulamasında kullandığınız kullanıcı adı ve şifre ile giriş yapın.
+        <div class="mt-4 text-center border-top pt-3">
+            <div class="fs-7 text-muted mb-2">Sahaf veya kitabevi misiniz? Kitaplarınızı burada satın.</div>
+            <a href="kayit.php" class="btn btn-outline-danger w-100 py-2 fw-bold rounded-3">
+                <i class="bi bi-person-plus me-1"></i> Üye Ol (Sahaf Başvurusu)
+            </a>
+            <div class="fs-8 text-muted mt-3">Kitap aktarım uygulamasında kullandığınız kullanıcı adı ve şifre ile giriş yapın.</div>
         </div>
     </div>
 </body>

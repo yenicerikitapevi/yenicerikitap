@@ -92,6 +92,9 @@ if ($username !== '') {
     if (!$store_row) {
         nk_json_response(null, false, ['Kullanıcı adı bulunamadı. Lütfen kullanıcı adınızı kontrol edin.'], 'INVALID_CREDENTIALS', 401);
     }
+    if (($store_row['approval_status'] ?? 'approved') !== 'approved') {
+        nk_json_response(null, false, ['Sahaf üyelik başvurunuz henüz onaylanmadı. Onaylandıktan sonra kitap aktarabilirsiniz.'], 'STORE_NOT_APPROVED', 403);
+    }
     if ((int)$store_row['is_active'] !== 1) {
         nk_json_response(null, false, ['Bu alt dükkan hesabı şu anda pasif durumdadır.'], 'STORE_INACTIVE', 403);
     }
