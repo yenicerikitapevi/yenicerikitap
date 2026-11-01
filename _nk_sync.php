@@ -117,7 +117,7 @@ function nk_sync_parse_items_from_html($html) {
         foreach ($matches as $m) {
             $code = trim($m[3]);
             $path = trim($m[2]);
-            $full_url = 'https://www.nadirkitap.com/' . $path . '-kitap' . $code . '.html';
+            $full_url = 'https://www.nadirkitap.com/' . $path;
 
             if (!isset($products[$code])) {
                 $products[$code] = [
@@ -145,13 +145,9 @@ function nk_sync_parse_items_from_html($html) {
                         $products[$code]['title'] = trim(html_entity_decode($tm[1], ENT_QUOTES | ENT_HTML5, 'UTF-8'));
                     }
 
-                    // Fiyat ayıkla: 25,00 TL / 150.00 TL
-                    if (preg_match('#(\d+(?:[\.,]\d{1,2})?)\s*(?:TL|₺)#iu', $card_html, $pm)) {
-                        $pval = str_replace(',', '.', str_replace('.', '', $pm[1]));
-                        if (strpos($pm[1], ',') !== false && strpos($pm[1], '.') === false) {
-                            $pval = str_replace(',', '.', $pm[1]);
-                        }
-                        $products[$code]['price'] = (float)$pval;
+                    // Fiyat ayıkla: 25,00 TL / 150.00 TL / 1.250,00 TL
+                    if (preg_match('#(\d[\d\.,]*)\s*(?:TL|₺)#iu', $card_html, $pm)) {
+                        $products[$code]['price'] = nk_sync_parse_price($pm[1]);
                     }
 
                     // Görsel ayıkla
@@ -306,7 +302,8 @@ function nk_sync_store($store_id, $max_pages = 5) {
             }
         }
         if ($new_on_page === 0) {
-            $complete = true; // sayfa parametresi yok sayılıp aynı liste döndü: son sayfa
+            // Aynı liste tekrar döndü: sayfalama çalışmıyor olabilir, sonraki sayfalar hiç okunmamış olabilir.
+            // Tamamlandı sayılmaz; aksi hâlde ilk sayfa dışındaki tüm kitaplar "satıldı" diye düşerdi.
             break;
         }
 
@@ -348,14 +345,20 @@ function nk_sync_store($store_id, $max_pages = 5) {
     // 2. YENİ EKLENEN VEYA TEKRAR AKTİF OLAN KİTAPLARI GÜNCELLE
     $new_added = 0;
     $reactivated = 0;
+    $price_updated = 0;
 
     foreach ($all_active_items as $code => $item) {
-        $existing = db_fetch("SELECT id, is_active FROM books WHERE nadirkitap_code = ? AND store_id = ?", [$code, $store_id]);
+        $existing = db_fetch("SELECT id, is_active, price FROM books WHERE nadirkitap_code = ? AND store_id = ?", [$code, $store_id]);
         if ($existing) {
             if ((int)$existing['is_active'] === 0) {
                 // Önceden pasif edilmiş ama şimdi Nadir'de tekrar vitrindeyse aktifleştir
                 db_query("UPDATE books SET is_active = 1, stock = 1 WHERE id = ?", [$existing['id']]);
                 $reactivated++;
+            }
+            // NadirKitap'ta fiyatı değiştiyse güncelle
+            if ($item['price'] > 0 && abs((float)$existing['price'] - $item['price']) >= 0.01) {
+                db_query("UPDATE books SET price = ? WHERE id = ?", [$item['price'], $existing['id']]);
+                $price_updated++;
             }
         } else {
             // Tamamen yeni bir kitap: liste sayfasında yazar/kategori bilgisi yok. Yanlış bilgiyle satışa
@@ -373,15 +376,18 @@ function nk_sync_store($store_id, $max_pages = 5) {
                     "INSERT INTO books (store_id, title, author_id, publisher_id, category_id, price, stock, cover_image, is_active, nadirkitap_code, source_url) VALUES (?, ?, ?, ?, ?, ?, 1, ?, 0, ?, ?)",
                     [$store_id, $title, $author_id, $publisher_id, $category_id, $price, $cover, $code, $item['url']]
                 );
+                $book_id = (int)db_last_id();
+                book_refresh_slug($book_id); // okunabilir adres
+                book_touch($book_id); // site haritası lastmod
                 $new_added++;
             } catch (Throwable $e) {
-                // Duplicate slug vb. durumları yoksay
+                error_log('[Yeniceri nk_sync] Kitap eklenemedi (' . $code . '): ' . $e->getMessage());
             }
         }
     }
 
     $drop_cnt = count($dropped_books);
-    $result_text = "Başarılı. Nadir'de Satılan Düşürülen: {$drop_cnt}, Yeni (pasif) Eklenen: {$new_added}, Yeniden Aktif: {$reactivated}, Taranan Sayfa: {$pages_scanned}" . ($complete ? '' : ' (mağazanın tamamı okunamadı, düşürme yapılmadı)');
+    $result_text = "Başarılı. Nadir'de Satılan Düşürülen: {$drop_cnt}, Yeni (pasif) Eklenen: {$new_added}, Yeniden Aktif: {$reactivated}, Fiyatı Güncellenen: {$price_updated}, Taranan Sayfa: {$pages_scanned}" . ($complete ? '' : ' (mağazanın tamamı okunamadı, düşürme yapılmadı)');
 
     db_query("UPDATE stores SET last_sync_at = ?, last_sync_result = ? WHERE id = ?", [
         date('Y-m-d H:i:s'),
@@ -400,6 +406,9 @@ function nk_sync_store($store_id, $max_pages = 5) {
     if ($reactivated > 0) {
         $msg .= " {$reactivated} kitap yeniden satışa açıldı.";
     }
+    if ($price_updated > 0) {
+        $msg .= " {$price_updated} kitabın fiyatı güncellendi.";
+    }
 
     return [
         'success'            => true,
@@ -412,6 +421,19 @@ function nk_sync_store($store_id, $max_pages = 5) {
         'reactivated_count'  => $reactivated,
         'message'            => $msg
     ];
+}
+
+/** Türkçe/İngilizce yazılmış fiyatı sayıya çevirir: "1.250,00" -> 1250.00, "150.00" -> 150.00, "1.250" -> 1250.00 */
+function nk_sync_parse_price($raw) {
+    $s = trim((string)$raw, " .,");
+    if (strpos($s, ',') !== false) {
+        // Virgül varsa ondalık ayırıcıdır, noktalar binlik ayırıcıdır
+        $s = str_replace(',', '.', str_replace('.', '', $s));
+    } elseif (preg_match('/^\d{1,3}(\.\d{3})+$/', $s)) {
+        // Yalnızca binlik ayırıcı nokta: 1.250
+        $s = str_replace('.', '', $s);
+    }
+    return max(0.0, round((float)$s, 2));
 }
 
 /** Yer tutucu yazar / yayınevi / kategori kaydı (yoksa oluşturur) */

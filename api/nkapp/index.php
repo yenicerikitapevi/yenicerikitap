@@ -52,7 +52,7 @@ if (!is_array($body)) {
 }
 
 // Kimlik doğrulama: X-Api-Key (YNCAUTH:<base64_json> veya username:password:nkInput) veya JSON gövdesi
-$api_key = trim($_SERVER['HTTP_X_API_KEY'] ?? $_GET['api_key'] ?? '');
+$api_key = trim($_SERVER['HTTP_X_API_KEY'] ?? '');
 $username = trim((string)($body['username'] ?? ''));
 $password = (string)($body['password'] ?? '');
 $nk_input = trim((string)($body['nkInput'] ?? $body['nadirkitap'] ?? ''));
@@ -118,12 +118,13 @@ if ($username !== '') {
         nk_json_response(null, false, ['Lütfen NadirKitap mağaza kodunuzu (örn: 348635) veya mağaza bağlantınızı (URL) girin.'], 'MISSING_NK_CODE', 400);
     }
 } else {
-    // Geriye dönük anahtar desteği (varsayılan ilk alt dükkan)
-    $configured_key = setting('nk_api_key', 'Yeniceri-348635');
+    // Geriye dönük anahtar desteği (varsayılan ilk alt dükkan). Yalnızca panelde açıkça tanımlanmış anahtar kabul edilir;
+    // mağaza kodu herkese açık olduğundan kod veya koddan türetilen sabit anahtarlar kimlik doğrulama sayılmaz.
+    $configured_key = trim((string)setting('nk_api_key', ''));
     $default_store  = setting('nk_store_code', '348635');
-    $valid_keys     = array_unique(array_filter([$configured_key, 'Yeniceri-348635', 'yeniceri-348635', '348635', $default_store]));
+    $key_ok = $configured_key !== '' && strlen($configured_key) >= 16 && $api_key !== '' && hash_equals($configured_key, $api_key);
 
-    if ($api_key !== '' && in_array($api_key, $valid_keys, true)) {
+    if ($key_ok) {
         $authenticated_store = db_fetch("SELECT * FROM stores ORDER BY id ASC LIMIT 1");
         $store_code = $authenticated_store['nadirkitap_code'] ?? $default_store;
     } else {
@@ -409,10 +410,15 @@ if (preg_match('#^/pbatch/([^/]+)/([^/]+)/(\d+)$#i', $route, $m)) {
             $cover_image = !empty($saved_images) ? $saved_images[0] : null;
             $extra_images_json = count($saved_images) > 1 ? json_encode($saved_images, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) : null;
 
-            // Mevcut kaydı kontrol et (nadirkitap_code ile)
+            // Mevcut kaydı kontrol et (nadirkitap_code ile). Başka bir alt dükkanın kitabı devralınmaz;
+            // yalnızca bu dükkanın veya henüz dükkana bağlanmamış eski kayıtlar güncellenir.
             $existing_book = null;
             if ($nk_code !== '') {
-                $existing_book = db_fetch("SELECT id, cover_image, shelf_code, isbn FROM books WHERE nadirkitap_code = ?", [$nk_code]);
+                if ($auth_store_id) {
+                    $existing_book = db_fetch("SELECT id, cover_image, shelf_code, isbn FROM books WHERE nadirkitap_code = ? AND (store_id = ? OR store_id IS NULL) ORDER BY store_id DESC", [$nk_code, $auth_store_id]);
+                } else {
+                    $existing_book = db_fetch("SELECT id, cover_image, shelf_code, isbn FROM books WHERE nadirkitap_code = ? AND store_id IS NULL", [$nk_code]);
+                }
             }
 
             // ISBN çakışma kontrolü
