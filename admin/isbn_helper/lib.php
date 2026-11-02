@@ -387,6 +387,19 @@ function ih_jsonld_book($html)
     foreach ($all as $g) {
         $t = ih_types($g);
         if (in_array('Book', $t, true) || (in_array('Product', $t, true) && (!empty($g['isbn']) || !empty($g['gtin13'])))) {
+            // Bazı siteler (ör. Kitapyurdu) fiyatı ayrı bir "Product" düğümünde, ISBN'i "Book" düğümünde verir: eksikleri birleştir
+            if (empty($g['offers']) || empty($g['image']) || empty($g['brand'])) {
+                foreach ($all as $p) {
+                    if ($p !== $g && in_array('Product', ih_types($p), true)) {
+                        foreach (['offers', 'image', 'brand'] as $k) {
+                            if (empty($g[$k]) && !empty($p[$k])) {
+                                $g[$k] = $p[$k];
+                            }
+                        }
+                        break;
+                    }
+                }
+            }
             return $g;
         }
     }
@@ -544,7 +557,7 @@ function ih_dr_parse($isbn, $resp)
 {
     $r = ih_res('dr', 'D&R');
     if ($resp['code'] !== 200) {
-        $r['error'] = 'HTTP ' . $resp['code'];
+        $r['error'] = 'HTTP ' . $resp['code'] . ($resp['code'] === 403 ? ' (site sunucudan gelen istekleri engelliyor)' : '');
         return $r;
     }
     $html = $resp['body'];
@@ -721,6 +734,17 @@ function ih_kitapyurdu_parse($isbn, $hint, $href, $html)
         'summary'   => ih_good_summary(isset($book['description']) ? $book['description'] : ''),
         'cover_urls' => array_slice($imgs, 0, 1),
     ];
+    // Kategori: "İlgili Kategoriler" bölümündeki ilk yolun son halkası (Kitap > Edebiyat > Roman > ...)
+    $catBlock = $x->query('//*[' . ih_cls('ky-pd-attributes__category') . ']')->item(0);
+    if ($catBlock) {
+        $items = $x->query('.//*[' . ih_cls('ky-pd-attributes__category-item') . ']', $catBlock);
+        if ($items->length > 0) {
+            $last = ih_clean_text($items->item($items->length - 1)->textContent);
+            if ($last !== '' && ih_norm($last) !== 'kitap') {
+                $r['meta']['category'] = $last;
+            }
+        }
+    }
     if ($price) {
         $r['offer'] = ['price' => $price, 'list_price' => ($lst && $lst > $price) ? $lst : null,
                        'in_stock' => strpos((string)(isset($off['availability']) ? $off['availability'] : ''), 'InStock') !== false];
@@ -1161,7 +1185,8 @@ function ih_lookup($isbn)
     if ($hint['title']) {
         $q1 = trim($hint['title'] . ' ' . ($hint['publisher'] ?: ''));
         $q2 = trim($hint['title'] . ' ' . ($hint['author'] ?: ''));
-        $base = 'https://www.kitapyurdu.com/index.php?route=product/search&filter_name=';
+        // Kitapyurdu arama adresi route=product/list oldu (eski product/search 301 ile yönleniyor)
+        $base = 'https://www.kitapyurdu.com/index.php?route=product/list&filter_name=';
         $text_q = [];
         foreach (ih_listing_requests($q2, '_t') as $lk_t => $u) {
             if (empty($listing_res[substr($lk_t, 0, -2)]['listings'])) {
@@ -1180,7 +1205,10 @@ function ih_lookup($isbn)
         $hrefs = ih_kitapyurdu_cards($hint, [$s3['a'], $s3['b']]);
         $ky = ih_res('kitapyurdu', 'Kitapyurdu');
         if (!$hrefs) {
-            $ky['error'] = 'arama sonucu yok';
+            $codes = array_unique([$s3['a']['code'], $s3['b']['code']]);
+            $ky['error'] = in_array(200, $codes, true)
+                ? 'arama sonucu yok'
+                : 'HTTP ' . implode('/', $codes) . ' (site sunucudan gelen istekleri engelliyor)';
         } else {
             $reqs = [];
             foreach ($hrefs as $i => $h) {

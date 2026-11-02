@@ -339,18 +339,20 @@ if (preg_match('#^/pbatch/([^/]+)/([^/]+)/(\d+)$#i', $route, $m)) {
                 }
             }
             $category_id = null;
-            if ($cat_code !== '') {
+            if ($cat_label !== '') {
+                // Ad geldiyse ad kullanılır. Numara-kategori eşleşmesi burada kaydedilmez: numara (category1) ile ad
+                // (category2) farklı seviyelerden gelebiliyor; eşleştirmek o numaralı tüm kitapları yanlış kategoriye taşıyordu.
+                $category_id = nk_resolve_entity('categories', $cat_label, $entity_cache);
+            } elseif ($cat_code !== '') {
                 $category_id = nk_category_for_code($cat_code);
-            }
-            if (!$category_id && $cat_label === '' && $cat_code !== '') {
-                // Uygulama yalnızca numara gönderdi: adı kitabın NadirKitap sayfasından bul (numara başına bir kez)
-                $cat_label = nk_resolve_category_name($cat_code, $meta['sourceUrl'] ?? '');
-            }
-            if (!$category_id) {
-                $category_id = nk_resolve_entity('categories', $cat_label !== '' ? $cat_label : $cat_code, $entity_cache);
-                if ($cat_code !== '') {
+                if (!$category_id) {
+                    // Uygulama yalnızca numara gönderdi: adı kitabın NadirKitap sayfasından bul (numara başına bir kez)
+                    $resolved = nk_resolve_category_name($cat_code, $meta['sourceUrl'] ?? '');
+                    $category_id = nk_resolve_entity('categories', $resolved !== '' ? $resolved : $cat_code, $entity_cache);
                     nk_category_map_set($cat_code, $category_id);
                 }
+            } else {
+                $category_id = nk_resolve_entity('categories', '', $entity_cache);
             }
 
             $price = nk_parse_price($meta['price'] ?? '0');
@@ -395,7 +397,8 @@ if (preg_match('#^/pbatch/([^/]+)/([^/]+)/(\d+)$#i', $route, $m)) {
                     $ext_raw = strtolower(trim((string)($img['extension'] ?? 'jpg')));
                     $ext = $allowed_exts[$ext_raw] ?? 'jpg';
                     $safe_code = preg_replace('/[^a-zA-Z0-9_-]/', '', $nk_code ?: uniqid('book_'));
-                    $fname = 'nk_' . ($auth_store_id ?: 0) . '_' . $safe_code . '_' . ($idx + 1) . '.' . $ext;
+                    // İçerik özeti dosya adında: kapak değişince adres de değişir (kapaklar 1 yıl önbelleğe alınıyor, aynı adla eski kapak görünürdü)
+                    $fname = 'nk_' . ($auth_store_id ?: 0) . '_' . $safe_code . '_' . ($idx + 1) . '_' . substr(md5($bin), 0, 8) . '.' . $ext;
                     if (@file_put_contents(UPLOAD_DIR . '/' . $fname, $bin) !== false) {
                         $saved_images[] = $fname;
                     }

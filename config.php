@@ -614,3 +614,49 @@ require_once __DIR__ . '/_mail.php';
 
 // NadirKitap otomatik senkronizasyon ve satılan kitapları düşürme motoru
 require_once __DIR__ . '/_nk_sync.php';
+
+/**
+ * Sahaf kitapları için kondisyon (durum) tanımları; vitrinde "Kondisyon durumuna dikkat ediniz" kutusunda gösterilir.
+ * Site Ayarları'nda condition_guide (JSON: {"Yeni Gibi": "...", ...}) ile değiştirilebilir.
+ */
+function condition_guide() {
+    $custom = json_decode((string)setting('condition_guide', ''), true);
+    if (is_array($custom) && $custom) {
+        return $custom;
+    }
+    return [
+        'Yeni Gibi' => 'Kitap neredeyse yeni durumdadır. Kullanım izi yok denecek kadar azdır. Sayfalar temiz, kapakta belirgin bir hasar veya yıpranma bulunmaz.',
+        'Çok İyi'   => 'Yeni gibi kitaplara kıyasla daha kapsamlı kullanılmış ancak hâlâ oldukça iyi durumdadır. Kapakta hafif izler, sayfalarda sararma veya ufak tefek kusurlar olabilir ancak genel olarak temiz ve iyi korunmuştur. Bölüm bölüm altı çizili yerler olabilir.',
+        'İyi'       => 'Kitap okunmuş ve hafif kullanım izleri taşımaktadır. Kapakta veya sayfalarda küçük kıvrılmalar, hafif lekeler ya da sayfa kenarlarında sararma olabilir.',
+        'Zayıf'     => 'Kitap yoğun kullanım görmüştür. Sayfalarda eksiklik, yazılar, notlar veya kopmalar olabilir. Bu kitaplar genellikle koleksiyon amaçlı değil, içeriğini okumak isteyenler için uygundur.',
+    ];
+}
+
+/** Kitabın kondisyon metnine uyan tanım (ör. "Çok İyi" / "cok iyi durumda") */
+function condition_description($condition_text) {
+    $norm = function ($s) { return trim(preg_replace('/\s+/u', ' ', mb_strtolower(strtr((string)$s, ['İ' => 'i', 'I' => 'ı']), 'UTF-8'))); };
+    $c = $norm($condition_text);
+    if ($c === '') return null;
+    // Uzun adlar önce: "Çok İyi" içinde "İyi" de geçtiği için
+    $guide = condition_guide();
+    uksort($guide, function ($a, $b) { return mb_strlen($b, 'UTF-8') <=> mb_strlen($a, 'UTF-8'); });
+    foreach ($guide as $name => $desc) {
+        if (mb_strpos($c, $norm($name), 0, 'UTF-8') !== false) {
+            return ['name' => $name, 'text' => $desc];
+        }
+    }
+    return null;
+}
+
+/** "Kondisyon durumuna dikkat ediniz" kutusu (sahaf vitrini ve sahaf kitap sayfası) */
+function condition_guide_html($highlight = '') {
+    $hl = $highlight !== '' ? (condition_description($highlight)['name'] ?? '') : '';
+    $out = '<div class="condition-guide border border-warning rounded-4 bg-warning bg-opacity-10 p-3 fs-7">';
+    $out .= '<div class="fw-bold text-dark mb-2"><i class="bi bi-exclamation-triangle-fill text-warning me-1"></i>KONDİSYON DURUMUNA DİKKAT EDİNİZ</div>';
+    $out .= '<ul class="list-unstyled mb-0">';
+    foreach (condition_guide() as $name => $desc) {
+        $on = $name === $hl;
+        $out .= '<li class="mb-1' . ($on ? ' bg-white rounded-3 px-2 py-1 border border-warning' : '') . '"><b class="text-danger">' . e($name) . ':</b> <span class="text-secondary">' . e($desc) . '</span></li>';
+    }
+    return $out . '</ul></div>';
+}

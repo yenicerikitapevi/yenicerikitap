@@ -262,7 +262,9 @@ if (($action === 'add' || $action === 'edit') && $edit_id > 0) {
 
 <?php if ($action === 'add' || $action === 'edit'): ?>
     <?php
-    $last_added = ($action === 'add' && !empty($_SESSION['last_added_book'])) ? db_fetch("SELECT id, title, slug, price, cover_image FROM books WHERE id = ?", [(int)$_SESSION['last_added_book']]) : null;
+    $last_added = ($action === 'add' && !empty($_SESSION['last_added_book'])) ? db_fetch("SELECT id, title, slug, price, cover_image, category_id, store_id FROM books WHERE id = ?", [(int)$_SESSION['last_added_book']]) : null;
+    // Art arda ekleme: yeni boş formda bir önceki kitabın kategorisi ve satıcısı seçili gelir
+    $form_defaults = $last_added ? ['category_id' => $last_added['category_id'], 'store_id' => $last_added['store_id']] : [];
     unset($_SESSION['last_added_book']);
     ?>
     <?php if ($last_added): ?>
@@ -351,7 +353,7 @@ if (($action === 'add' || $action === 'edit') && $edit_id > 0) {
                         <select name="category_id" class="form-select js-new-toggle" data-target="newCategoryName" required>
                             <option value="">-- Kategori Seçiniz --</option>
                             <?php foreach ($categories as $c): ?>
-                                <option value="<?= $c['id'] ?>" <?= ($book_data['category_id'] ?? 0) == $c['id'] ? 'selected' : '' ?>>
+                                <option value="<?= $c['id'] ?>" <?= ($book_data['category_id'] ?? $form_defaults['category_id'] ?? 0) == $c['id'] ? 'selected' : '' ?>>
                                     <?= e($c['name']) ?>
                                 </option>
                             <?php endforeach; ?>
@@ -429,7 +431,7 @@ if (($action === 'add' || $action === 'edit') && $edit_id > 0) {
                         <select name="store_id" class="form-select">
                             <option value="">-- Ana Mağaza (Yeniçeri Kitabevi) --</option>
                             <?php foreach ($stores_all as $st): ?>
-                                <option value="<?= $st['id'] ?>" <?= ($book_data['store_id'] ?? 0) == $st['id'] ? 'selected' : '' ?>>
+                                <option value="<?= $st['id'] ?>" <?= ($book_data['store_id'] ?? $form_defaults['store_id'] ?? 0) == $st['id'] ? 'selected' : '' ?>>
                                     <?= e($st['name']) ?>
                                 </option>
                             <?php endforeach; ?>

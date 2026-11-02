@@ -122,23 +122,7 @@ track_view('category');
     <link rel="stylesheet" href="<?= asset_v('assets/css/style.css') ?>">
 </head>
 <body>
-    <div class="top-bar py-2 border-bottom border-dark">
-        <div class="container d-flex align-items-center justify-content-between">
-            <div><i class="bi bi-geo-alt-fill text-danger me-1"></i> Etimesgut / Ankara</div>
-            <div><a href="index.php" class="text-white text-decoration-none"><i class="bi bi-house-door me-1"></i> Anasayfa</a></div>
-        </div>
-    </div>
-
-    <header class="bg-white py-3 border-bottom shadow-sm">
-        <div class="container d-flex align-items-center justify-content-between">
-            <a href="index.php" class="navbar-brand text-dark d-flex align-items-center">
-                <img src="assets/images/logo_horizontal.png" alt="Yeniçeri Kitabevi" style="height: 48px; max-width: 220px; object-fit: contain;">
-            </a>
-            <button class="btn btn-outline-dark rounded-pill px-3 py-2 fw-bold" data-bs-toggle="offcanvas" data-bs-target="#cartDrawer">
-                <i class="bi bi-bag-handle-fill text-danger me-1"></i> Sepetim <span class="badge bg-danger rounded-pill cart-count-badge">0</span>
-            </button>
-        </div>
-    </header>
+    <?php $header_active = $cat_id; include __DIR__ . '/_site_header.php'; ?>
 
     <div class="container py-5">
         <div class="row g-4">

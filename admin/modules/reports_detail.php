@@ -76,7 +76,7 @@ $titles = ['views' => 'Son Sayfa Görüntülemeleri', 'sessions' => 'Ziyaretler'
         WHERE {$sale_where} GROUP BY o.id, o.order_number, o.created_at, o.status, o.payment_method, u.name ORDER BY o.created_at DESC LIMIT 200", $sale_params);
     $items = [];
     if ($rows) {
-        foreach (db_fetch_all("SELECT oi.order_id, b.title, oi.quantity FROM order_items oi JOIN books b ON b.id = oi.book_id WHERE oi.order_id IN (" . implode(',', array_map('intval', array_column($rows, 'id'))) . ")" . ($scope_store > 0 ? " AND b.store_id = " . (int)$scope_store : '')) as $it) {
+        foreach (db_fetch_all("SELECT oi.order_id, b.title, oi.quantity FROM order_items oi JOIN books b ON b.id = oi.book_id WHERE oi.order_id IN (" . implode(',', array_map('intval', array_column($rows, 'id'))) . ")" . ($scope_store > 0 ? " AND b.store_id = " . (int)$scope_store : ($scope_store === -1 ? ' AND b.store_id IS NULL' : ''))) as $it) {
             $items[$it['order_id']][] = $it['title'] . ($it['quantity'] > 1 ? ' ×' . (int)$it['quantity'] : '');
         }
     } ?>

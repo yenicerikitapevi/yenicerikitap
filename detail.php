@@ -66,25 +66,9 @@ track_view('detail', $book['id'], $book['store_id'] ?? null);
     <link rel="stylesheet" href="<?= asset_v('assets/css/style.css') ?>">
 </head>
 <body>
-    <div class="top-bar py-2 border-bottom border-dark">
-        <div class="container d-flex align-items-center justify-content-between">
-            <div><i class="bi bi-geo-alt-fill text-danger me-1"></i> Etimesgut / Ankara</div>
-            <div><a href="index.php" class="text-white text-decoration-none"><i class="bi bi-arrow-left me-1"></i> Mağazaya Dön</a></div>
-        </div>
-    </div>
+    <?php $header_active = (int)$book['category_id']; include __DIR__ . '/_site_header.php'; ?>
 
-    <header class="bg-white py-3 border-bottom shadow-sm">
-        <div class="container d-flex align-items-center justify-content-between">
-            <a href="index.php" class="navbar-brand text-dark d-flex align-items-center">
-                <img src="assets/images/logo_horizontal.png" alt="Yeniçeri Kitabevi" style="height: 48px; max-width: 220px; object-fit: contain;">
-            </a>
-            <button class="btn btn-outline-dark rounded-pill px-3 py-2 fw-bold" data-bs-toggle="offcanvas" data-bs-target="#cartDrawer">
-                <i class="bi bi-bag-handle-fill text-danger me-1"></i> Sepetim <span class="badge bg-danger rounded-pill cart-count-badge">0</span>
-            </button>
-        </div>
-    </header>
-
-    <div class="container py-5">
+    <div class="container py-4">
         <div class="mb-4"><?= breadcrumb_html($crumbs) ?></div>
 
         <?php
@@ -144,6 +128,11 @@ track_view('detail', $book['id'], $book['store_id'] ?? null);
                         <div class="col-6"><span class="text-muted"><?= e($k) ?>:</span> <span class="fw-semibold"><?= e($v) ?></span></div>
                     <?php endforeach; ?>
                 </div>
+                <?php if ($is_sahaf && ($cond = condition_description($book['condition_text'] ?? ''))): ?>
+                    <div class="border border-warning rounded-3 bg-warning bg-opacity-10 p-2 fs-8 mb-3">
+                        <i class="bi bi-info-circle-fill text-warning me-1"></i><b>Kondisyon — <?= e($cond['name']) ?>:</b> <?= e($cond['text']) ?>
+                    </div>
+                <?php endif; ?>
                 <?php if (!empty($book['summary'])): ?>
                     <p class="text-secondary fs-7 mb-1"><?= e(mb_strimwidth(trim($book['summary']), 0, 260, '…', 'UTF-8')) ?></p>
                     <a href="#urunSekmeler" class="fs-7 text-danger fw-semibold text-decoration-none" onclick="var t = document.querySelector('[data-bs-target=&quot;#tabDesc&quot;]'); if (t && window.bootstrap) bootstrap.Tab.getOrCreateInstance(t).show();">Devamını oku <i class="bi bi-chevron-down"></i></a>
@@ -237,6 +226,9 @@ track_view('detail', $book['id'], $book['store_id'] ?? null);
                             <?php endforeach; ?>
                         </tbody>
                     </table>
+                    <?php if ($is_sahaf): ?>
+                        <div class="mt-3" style="max-width: 760px;"><?= condition_guide_html((string)($book['condition_text'] ?? '')) ?></div>
+                    <?php endif; ?>
                 </div>
                 <?php if (!empty($book['author_bio'])): ?>
                     <div class="tab-pane fade" id="tabAuthor" role="tabpanel">

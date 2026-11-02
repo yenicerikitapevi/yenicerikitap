@@ -219,7 +219,7 @@ foreach ($setting_rows as $row) {
                         <div class="col-md-12">
                             <input type="hidden" name="ship_opts_present" value="1">
                             <label class="form-label fw-semibold fs-7 mb-1">Kargo Seçenekleri (ödeme sayfasında müşteri seçer)</label>
-                            <div class="text-muted fs-8 mb-2">Çalıştığınız firmaları işaretleyip ücretini yazın. Ücretsiz kargo limiti ve kampanyalar tüm firmalar için geçerlidir. Hiçbiri işaretli değilse "Standart Kargo" (sabit ücret) kullanılır. Müşterinin seçtiği firma sipariş ekranına otomatik yazılır.</div>
+                            <div class="text-muted fs-8 mb-2">Çalıştığınız firmaları işaretleyip ücretini yazın. Ücretsiz kargo limiti ve kampanyalar tüm firmalar için geçerlidir. Hiçbiri işaretli değilse PTT Kargo sabit kargo ücretiyle kullanılır. Müşterinin seçtiği firma sipariş ekranına otomatik yazılır.</div>
                             <?php $cur_ship = []; foreach ((json_decode((string)($s['shipping_options'] ?? ''), true) ?: []) as $so) { $cur_ship[$so['carrier']] = $so['price']; } ?>
                             <div class="row g-2">
                                 <?php foreach (shipping_carriers() as $ck => $cv): if ($ck === 'diger') continue; ?>

@@ -197,6 +197,10 @@ track_view('store', null, $store['id'] ?? null);
             </div>
         </section>
 
+        <div class="container pt-4">
+            <?= condition_guide_html() ?>
+        </div>
+
         <div class="container py-5">
             <div class="row g-4">
                 <div class="col-lg-3">

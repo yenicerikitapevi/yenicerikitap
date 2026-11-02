@@ -7,7 +7,8 @@ if (!defined('SITE_URL')) exit;
 
 $is_seller   = isset($report_store_id);
 $report_base = $report_base ?? 'index.php?p=Reports&';
-$scope_store = $is_seller ? (int)$report_store_id : (isset($_GET['store_id']) ? (int)$_GET['store_id'] : 0);
+// store_id: 0 = tüm site, -1 = yalnızca Yeniçeri'nin kendi kitapları (sahafı olmayan), >0 = o alt dükkân
+$scope_store = $is_seller ? (int)$report_store_id : (isset($_GET['store_id']) ? max(-1, (int)$_GET['store_id']) : 0);
 
 // Tarih aralığı Türkiye saatiyle seçilir; veritabanı UTC tutar (Türkiye sabit UTC+3)
 $tz_tr  = new DateTimeZone('Europe/Istanbul');
@@ -49,6 +50,8 @@ $ev_params = [$from_utc, $to_utc];
 if ($scope_store > 0) {
     $ev_where .= " AND e.store_id = ?";
     $ev_params[] = $scope_store;
+} elseif ($scope_store === -1) {
+    $ev_where .= " AND e.store_id IS NULL";
 }
 // Satış filtresi (ödemesi alınmış siparişler)
 $sale_where  = "o.created_at >= ? AND o.created_at < ? AND o.status NOT IN ('İptal', 'Ödeme Bekliyor')";
@@ -56,6 +59,8 @@ $sale_params = [$from_utc, $to_utc];
 if ($scope_store > 0) {
     $sale_where .= " AND b.store_id = ?";
     $sale_params[] = $scope_store;
+} elseif ($scope_store === -1) {
+    $sale_where .= " AND b.store_id IS NULL";
 }
 
 // --- Özet kartları ---
@@ -255,6 +260,7 @@ $period_labels = ['1' => 'Bugün', '7' => 'Son 7 gün', '30' => 'Son 30 gün', '
                     <label class="form-label fs-7 fw-semibold mb-1">Dükkân</label>
                     <select name="store_id" class="form-select">
                         <option value="0">Tüm Site</option>
+                        <option value="-1" <?= $scope_store === -1 ? 'selected' : '' ?>>Yeniçeri (Ana Mağaza) — sahaflar hariç</option>
                         <?php foreach ($stores_all_r as $st): ?>
                             <option value="<?= $st['id'] ?>" <?= $scope_store === (int)$st['id'] ? 'selected' : '' ?>>Alt Dükkan: <?= e($st['name']) ?></option>
                         <?php endforeach; ?>
@@ -429,7 +435,7 @@ $period_labels = ['1' => 'Bugün', '7' => 'Son 7 gün', '30' => 'Son 30 gün', '
                     <?php foreach ($stores_report as $sid => $r): ?>
                         <tr>
                             <td class="ps-3 fw-semibold">
-                                <?php if ($sid > 0): ?><a href="<?= e($report_base) ?>store_id=<?= $sid ?>&period=<?= e($period) ?>&from=<?= $from_d->format('Y-m-d') ?>&to=<?= $to_d->format('Y-m-d') ?>" class="text-dark"><?= e($r['name']) ?></a><?php else: ?><?= e($r['name']) ?><?php endif; ?>
+                                <?php if ($sid > 0): ?><a href="<?= e($report_base) ?>store_id=<?= $sid ?>&period=<?= e($period) ?>&from=<?= $from_d->format('Y-m-d') ?>&to=<?= $to_d->format('Y-m-d') ?>" class="text-dark"><?= e($r['name']) ?></a><?php else: ?><a href="<?= e($report_base) ?>store_id=-1&period=<?= e($period) ?>&from=<?= $from_d->format('Y-m-d') ?>&to=<?= $to_d->format('Y-m-d') ?>" class="text-dark"><?= e($r['name']) ?></a><?php endif; ?>
                             </td>
                             <td class="text-end"><?= $num($r['books']) ?></td>
                             <td class="text-end"><?= $num($r['views']) ?></td>

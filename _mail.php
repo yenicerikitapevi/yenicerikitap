@@ -46,7 +46,7 @@ function shipping_carriers() {
 
 /**
  * Ödeme sayfasında sunulan kargo seçenekleri (Site Ayarları → Kargo Seçenekleri).
- * Hiç seçenek tanımlanmadıysa tek "Standart Kargo" (sabit kargo ücreti) kullanılır.
+ * Hiç seçenek tanımlanmadıysa varsayılan firma (Site Ayarları → default_carrier, yoksa PTT Kargo) sabit kargo ücretiyle kullanılır.
  */
 function shipping_options() {
     static $opts = null;
@@ -60,7 +60,11 @@ function shipping_options() {
             }
         }
         if (!$opts) {
-            $opts[''] = ['key' => '', 'name' => 'Standart Kargo', 'price' => (float)setting('flat_shipping_cost', '29.90')];
+            $k = (string)setting('default_carrier', 'ptt');
+            if (!isset($carriers[$k]) || $k === 'diger') {
+                $k = 'ptt';
+            }
+            $opts[$k] = ['key' => $k, 'name' => $carriers[$k]['name'], 'price' => (float)setting('flat_shipping_cost', '29.90')];
         }
     }
     return $opts;
