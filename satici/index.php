@@ -3,7 +3,7 @@
  * SATICI PANELİ: Sahaf yalnızca kendi dükkânını görür
  *  - Dükkânım: dükkân bilgileri, özet, kendi kitapları (arama + sayfalama)
  *  - Raporlar: kendi kitaplarının ve vitrin sayfasının ziyaret / satış raporu
- * Kitap ekleme/güncelleme aktarım uygulamasıyla yapılır; panel salt görüntülemedir.
+ * Kitap ekleme/düzenleme: kitap.php (ya da aktarım uygulaması); listede toplu satışa alma / kaldırma / silme
  */
 require_once __DIR__ . '/../config.php';
 
@@ -17,6 +17,50 @@ if (!$store || !$store['is_active']) {
 }
 
 $report_store_id = (int)$store['id'];
+if (empty($_SESSION['store_form_token'])) {
+    $_SESSION['store_form_token'] = bin2hex(random_bytes(16));
+}
+$store_token = $_SESSION['store_form_token'];
+
+// Toplu işlem: yalnızca bu dükkânın kitapları etkilenir
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'bulk' && hash_equals($store_token, (string)($_POST['token'] ?? ''))) {
+    $ids = array_values(array_filter(array_map('intval', (array)($_POST['ids'] ?? []))));
+    $op = $_POST['op'] ?? '';
+    $mine = [];
+    if ($ids) {
+        $in = implode(',', array_fill(0, count($ids), '?'));
+        $mine = array_map('intval', array_column(db_fetch_all("SELECT id FROM books WHERE store_id = ? AND id IN ({$in})", array_merge([$report_store_id], $ids)), 'id'));
+    }
+    if (!$mine) {
+        set_flash('warning', 'Önce listeden kitap seçin.');
+    } else {
+        $min = implode(',', $mine);
+        if ($op === 'activate') {
+            db_query("UPDATE books SET is_active = 1 WHERE id IN ({$min}) AND price > 0");
+            set_flash('success', count($mine) . ' kitap satışa alındı.');
+        } elseif ($op === 'deactivate') {
+            db_query("UPDATE books SET is_active = 0 WHERE id IN ({$min})");
+            set_flash('success', count($mine) . ' kitap satıştan kaldırıldı.');
+        } elseif ($op === 'delete') {
+            // Siparişi olan kitap silinmez (sipariş geçmişi bozulmasın), satıştan kaldırılır
+            $ordered = array_map('intval', array_column(db_fetch_all("SELECT DISTINCT book_id FROM order_items WHERE book_id IN ({$min})"), 'book_id'));
+            $deletable = array_values(array_diff($mine, $ordered));
+            if ($ordered) db_query("UPDATE books SET is_active = 0 WHERE id IN (" . implode(',', $ordered) . ")");
+            if ($deletable) {
+                $din = implode(',', $deletable);
+                foreach (db_fetch_all("SELECT cover_image FROM books WHERE id IN ({$din})") as $cv) {
+                    if (!empty($cv['cover_image']) && strpos($cv['cover_image'], 'cover_') === 0) @unlink(UPLOAD_DIR . '/' . basename($cv['cover_image']));
+                }
+                db_query("DELETE FROM book_showcase WHERE book_id IN ({$din})");
+                db_query("DELETE FROM book_collection WHERE book_id IN ({$din})");
+                db_query("DELETE FROM books WHERE id IN ({$din}) AND store_id = ?", [$report_store_id]);
+            }
+            log_action('Sahaf Kitap Sildi', 'Products', null, $store['name'] . ': ' . count($deletable) . ' silindi, ' . count($ordered) . ' satıştan kaldırıldı');
+            set_flash('success', count($deletable) . ' kitap silindi.' . ($ordered ? ' Siparişi olan ' . count($ordered) . ' kitap silinmedi, satıştan kaldırıldı.' : ''));
+        }
+    }
+    redirect('index.php?' . http_build_query(array_filter(['q' => $_POST['q'] ?? '', 'durum' => $_POST['durum'] ?? '', 'page' => $_POST['page'] ?? ''])));
+}
 $report_base     = 'index.php?tab=rapor&';
 $tab             = ($_GET['tab'] ?? '') === 'rapor' ? 'rapor' : 'dukkan';
 
@@ -205,6 +249,10 @@ if ($tab === 'dukkan') {
                 </div>
             </div>
 
+            <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+                <h2 class="h5 fw-bold mb-0"><i class="bi bi-book text-danger me-1"></i> Kitaplarım</h2>
+                <a href="kitap.php" class="btn btn-danger fw-bold rounded-3 shadow-sm"><i class="bi bi-plus-lg me-1"></i> Yeni Kitap Ekle</a>
+            </div>
             <div class="card border-0 shadow-sm rounded-4">
                 <div class="card-header bg-white border-0 p-3">
                     <form method="GET" action="index.php" class="row g-2 align-items-center">
@@ -221,16 +269,31 @@ if ($tab === 'dukkan') {
                     </form>
                 </div>
                 <div class="card-body p-0">
+                    <form method="POST" action="index.php" id="bulkForm">
+                    <input type="hidden" name="action" value="bulk">
+                    <input type="hidden" name="token" value="<?= e($store_token) ?>">
+                    <input type="hidden" name="q" value="<?= e($q) ?>"><input type="hidden" name="durum" value="<?= e($status) ?>"><input type="hidden" name="page" value="<?= (int)$pg ?>">
+                    <div class="d-flex align-items-center gap-2 px-3 py-2 border-bottom bg-light flex-wrap">
+                        <span class="fs-8 text-muted">Seçilenleri:</span>
+                        <select name="op" class="form-select form-select-sm" style="max-width: 200px;">
+                            <option value="">-- İşlem seçin --</option>
+                            <option value="activate">Satışa al</option>
+                            <option value="deactivate">Satıştan kaldır</option>
+                            <option value="delete">Sil</option>
+                        </select>
+                        <button class="btn btn-sm btn-dark">Uygula</button>
+                    </div>
                     <div class="table-responsive">
                         <table class="table table-hover align-middle mb-0 fs-7">
-                            <thead class="table-light fs-8"><tr><th class="ps-3">Kitap</th><th>Kategori / Raf</th><th class="text-end">Fiyat</th><th class="text-end">Stok</th><th class="text-end">Satılan</th><th>Durum</th><th class="pe-3"></th></tr></thead>
+                            <thead class="table-light fs-8"><tr><th class="ps-3" style="width: 30px;"><input type="checkbox" class="form-check-input" id="bkAll"></th><th>Kitap</th><th>Kategori / Raf</th><th class="text-end">Fiyat</th><th class="text-end">Stok</th><th class="text-end">Satılan</th><th>Durum</th><th class="pe-3"></th></tr></thead>
                             <tbody>
                                 <?php if (!$my_books): ?>
-                                    <tr><td colspan="7" class="text-center text-muted py-5"><?= $total === 0 && $q === '' && $status === '' ? 'Henüz kitabınız yok. Kitaplarınızı aktarım uygulamasıyla ekleyebilirsiniz.' : 'Aramaya uygun kitap bulunamadı.' ?></td></tr>
+                                    <tr><td colspan="8" class="text-center text-muted py-5"><?= $total === 0 && $q === '' && $status === '' ? 'Henüz kitabınız yok. "Yeni Kitap Ekle" ile ya da aktarım uygulamasıyla ekleyebilirsiniz.' : 'Aramaya uygun kitap bulunamadı.' ?></td></tr>
                                 <?php endif; ?>
                                 <?php foreach ($my_books as $b): ?>
                                     <tr>
-                                        <td class="ps-3">
+                                        <td class="ps-3"><input type="checkbox" class="form-check-input bk-row" name="ids[]" value="<?= (int)$b['id'] ?>"></td>
+                                        <td>
                                             <div class="d-flex align-items-center gap-2">
                                                 <img src="../<?= e(cover_url($b['cover_image'] ?? '')) ?>" alt="" width="34" height="50" style="width: 34px; height: 50px; object-fit: cover;" class="rounded border bg-white" loading="lazy">
                                                 <div>
@@ -244,12 +307,13 @@ if ($tab === 'dukkan') {
                                         <td class="text-end"><?= (int)$b['stock'] ?></td>
                                         <td class="text-end"><?= (int)$b['sold'] ?></td>
                                         <td><?= !$b['is_active'] ? '<span class="badge bg-secondary">Kaldırıldı</span>' : ((int)$b['stock'] > 0 ? '<span class="badge bg-success">Satışta</span>' : '<span class="badge bg-warning text-dark">Stok yok</span>') ?></td>
-                                        <td class="pe-3 text-end"><?php if ($b['is_active']): ?><a href="../<?= e(book_path($b)) ?>" target="_blank" class="btn btn-sm btn-outline-dark" title="Sitede gör"><i class="bi bi-eye"></i></a><?php endif; ?></td>
+                                        <td class="pe-3 text-end text-nowrap"><a href="kitap.php?id=<?= (int)$b['id'] ?>" class="btn btn-sm btn-outline-danger" title="Düzenle"><i class="bi bi-pencil"></i></a><?php if ($b['is_active']): ?> <a href="../<?= e(book_path($b)) ?>" target="_blank" class="btn btn-sm btn-outline-dark" title="Sitede gör"><i class="bi bi-eye"></i></a><?php endif; ?></td>
                                     </tr>
                                 <?php endforeach; ?>
                             </tbody>
                         </table>
                     </div>
+                    </form>
                     <?php if ($pages > 1): ?>
                         <div class="p-3 border-top d-flex justify-content-between align-items-center flex-wrap gap-2">
                             <small class="text-muted">Sayfa <?= $pg ?> / <?= $pages ?> (<?= $total ?> kitap)</small>
@@ -264,7 +328,17 @@ if ($tab === 'dukkan') {
                     <?php endif; ?>
                 </div>
             </div>
-            <div class="text-muted fs-8 mt-3"><i class="bi bi-info-circle me-1"></i>Kitap ekleme, fiyat ve stok güncellemesi aktarım uygulamasıyla yapılır. Fiyatlarınızı yalnızca siz belirlersiniz.</div>
+            <div class="text-muted fs-8 mt-3"><i class="bi bi-info-circle me-1"></i>Kitaplarınızı buradan ekleyip düzenleyebilir ya da aktarım uygulamasıyla NadirKitap'tan aktarabilirsiniz. NadirKitap'tan gelen kitaplarda eşitleme fiyat ve stoğu yeniden güncelleyebilir. Fiyatlarınızı yalnızca siz belirlersiniz.</div>
+            <script>
+                document.getElementById('bkAll').addEventListener('change', function () {
+                    document.querySelectorAll('.bk-row').forEach(c => c.checked = this.checked);
+                });
+                document.getElementById('bulkForm').addEventListener('submit', function (e) {
+                    if (!this.querySelector('.bk-row:checked')) { alert('Önce kitap seçin.'); e.preventDefault(); return; }
+                    if (!this.op.value) { alert('Bir işlem seçin.'); e.preventDefault(); return; }
+                    if (this.op.value === 'delete' && !confirm('Seçilen kitaplar silinsin mi? Siparişi olan kitaplar silinmez, satıştan kaldırılır.')) e.preventDefault();
+                });
+            </script>
         <?php endif; ?>
     </main>
 </body>
