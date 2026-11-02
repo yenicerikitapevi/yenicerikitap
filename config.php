@@ -148,6 +148,21 @@ foreach ($store_apply_cols as $col_name => $col_type) {
     }
 }
 
+// Müşteri hesabı: şifre belirleme/sıfırlama bağlantısı ve son giriş
+$user_account_cols = [
+    'reset_token_hash' => $is_sqlite_db ? 'TEXT' : 'VARCHAR(64) NULL',
+    'reset_expires'    => $is_sqlite_db ? 'TEXT' : 'DATETIME NULL',
+    'last_login_at'    => $is_sqlite_db ? 'TEXT' : 'DATETIME NULL',
+];
+$have_user_cols = $is_sqlite_db
+    ? array_column($pdo->query("PRAGMA table_info(users)")->fetchAll(), 'name')
+    : array_column($pdo->query("SHOW COLUMNS FROM users")->fetchAll(), 'Field');
+foreach ($user_account_cols as $col_name => $col_type) {
+    if (!in_array($col_name, $have_user_cols, true)) {
+        $pdo->exec("ALTER TABLE users ADD COLUMN {$col_name} {$col_type};");
+    }
+}
+
 // Varsayılan ilk Alt Dükkan (Umay Sahaf) kaydı yoksa otomatik oluştur
 try {
     $store_cnt = (int)($pdo->query("SELECT COUNT(*) FROM stores")->fetchColumn() ?: 0);
@@ -659,4 +674,13 @@ function condition_guide_html($highlight = '') {
         $out .= '<li class="mb-1' . ($on ? ' bg-white rounded-3 px-2 py-1 border border-warning' : '') . '"><b class="text-danger">' . e($name) . ':</b> <span class="text-secondary">' . e($desc) . '</span></li>';
     }
     return $out . '</ul></div>';
+}
+
+/** Üst çubuktaki müşteri bağlantısı: girişliyse "Hesabım", değilse "Giriş Yap / Üye Ol" */
+function customer_nav_link($class = '') {
+    if (!empty($_SESSION['customer_user'])) {
+        return '<a href="hesap.php" class="' . e($class) . '"><i class="bi bi-person-circle me-1"></i>Hesabım</a>';
+    }
+    return '<a href="hesap.php?a=giris" class="' . e($class) . '"><i class="bi bi-person me-1"></i>Giriş Yap</a>'
+        . '<a href="hesap.php?a=kayit" class="' . e($class) . ' fw-semibold"><i class="bi bi-person-plus me-1"></i>Üye Ol</a>';
 }

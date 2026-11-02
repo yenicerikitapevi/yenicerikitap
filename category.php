@@ -38,6 +38,11 @@ if ($slug !== '') {
 $where = ["b.is_active = 1"];
 $params = [];
 
+// Satıcı filtresi: yalnızca Yeniçeri Kitabevi'nin kendi kitapları ya da yalnızca sahaf (ikinci el) kitapları
+$seller = in_array($_GET['satici'] ?? '', ['yeniceri', 'sahaf'], true) ? $_GET['satici'] : '';
+if ($seller === 'yeniceri') $where[] = "b.store_id IS NULL";
+if ($seller === 'sahaf') $where[] = "b.store_id IS NOT NULL";
+
 if ($cat_id > 0) {
     $where[] = "b.category_id = ?";
     $params[] = $cat_id;
@@ -165,6 +170,20 @@ track_view('category');
                         <?php endif; ?>
                     </h1>
                     <span class="badge bg-light text-dark border px-3 py-2 fs-7"><?= $total_books ?> Eser Bulundu</span>
+                </div>
+                <?php
+                $seller_params = $_GET;
+                unset($seller_params['page'], $seller_params['slug'], $seller_params['id'], $seller_params['satici']);
+                $seller_path = $category && $query === '' ? category_path($category) : 'category.php';
+                $seller_url = function ($v) use ($seller_params, $seller_path) {
+                    if ($v !== '') $seller_params['satici'] = $v;
+                    return $seller_path . ($seller_params ? '?' . http_build_query($seller_params) : '');
+                };
+                ?>
+                <div class="d-flex flex-wrap gap-2 mb-4 fs-7" role="group" aria-label="Satıcı">
+                    <?php foreach (['' => ['Tümü', 'bi-grid'], 'yeniceri' => ['Yeniçeri Kitabevi', 'bi-book'], 'sahaf' => ['Sahaflar (İkinci El)', 'bi-shop']] as $sv => [$sl, $si]): ?>
+                        <a href="<?= e($seller_url($sv)) ?>" rel="nofollow" class="btn btn-sm rounded-pill px-3 <?= $seller === $sv ? 'btn-danger' : 'btn-outline-secondary' ?>"><i class="bi <?= $si ?> me-1"></i><?= $sl ?></a>
+                    <?php endforeach; ?>
                 </div>
                 <?php if ($category && trim((string)$category['description']) !== '' && $page === 1 && $query === ''): ?>
                     <div class="bg-white border rounded-4 p-4 mb-4 fs-7 text-secondary category-intro">

@@ -66,7 +66,7 @@ track_view('author');
     <div class="top-bar py-2 border-bottom border-dark">
         <div class="container d-flex align-items-center justify-content-between">
             <div><i class="bi bi-geo-alt-fill text-danger me-1"></i> Etimesgut / Ankara</div>
-            <div><a href="/" class="text-white text-decoration-none"><i class="bi bi-house-door me-1"></i> Anasayfa</a></div>
+            <div class="d-flex gap-3"><?= customer_nav_link('text-white text-decoration-none') ?><a href="/" class="text-white text-decoration-none"><i class="bi bi-house-door me-1"></i> Anasayfa</a></div>
         </div>
     </div>
 

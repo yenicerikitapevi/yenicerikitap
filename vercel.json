@@ -5,7 +5,7 @@
     }
   },
   "routes": [
-    { "src": "/admin/(isbn_lookup|isbn_cover)\\.php", "dest": "/admin/$1.php" },
+    { "src": "/admin/(isbn_lookup|isbn_cover|bulk_import)\\.php", "dest": "/admin/$1.php" },
     { "src": "/admin/isbn_helper/(isbn-helper|html5-qrcode\\.min)\\.js", "dest": "/admin/isbn_helper/$1.js" },
     { "src": "/track\\.php", "dest": "/track.php" },
     { "src": "/satici/?", "dest": "/satici/index.php" },

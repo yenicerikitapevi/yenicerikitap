@@ -10,6 +10,7 @@ $allowed_pages = [
     'FrontPage'    => 'frontpage.php',
     'Reports'      => 'reports.php',
     'Products'     => 'products.php',
+    'BulkImport'   => 'bulkimport.php',
     'Stores'       => 'stores.php',
     'Campaigns'    => 'campaigns.php',
     'Catalog'      => 'catalog.php',
@@ -76,6 +77,10 @@ $pending_sellers = db_fetch("SELECT COUNT(*) as cnt FROM stores WHERE approval_s
 
                 <a href="index.php?p=Products" class="nav-link <?= $current_p === 'Products' ? 'active' : '' ?>">
                     <i class="bi bi-book"></i> Kitap Yönetimi
+                </a>
+
+                <a href="index.php?p=BulkImport" class="nav-link <?= $current_p === 'BulkImport' ? 'active' : '' ?>">
+                    <i class="bi bi-file-earmark-spreadsheet"></i> Excel'den Toplu Ekle
                 </a>
 
                 <a href="index.php?p=Stores" class="nav-link <?= $current_p === 'Stores' ? 'active' : '' ?>">
@@ -146,6 +151,7 @@ $pending_sellers = db_fetch("SELECT COUNT(*) as cnt FROM stores WHERE approval_s
                             'FrontPage' => 'Genel Bakış & İstatistikler',
                             'Reports' => 'Raporlar & Trafik Analizi',
                             'Products' => 'Kitap & Katalog Yönetimi',
+                            'BulkImport' => "Excel'den Toplu Kitap Ekle",
                             'Stores' => 'Alt Dükkanlar & Satıcı Yönetimi',
                             'Campaigns' => 'Kampanyalar & Kuponlar',
                             'Members' => 'Müşteri & Üye Yönetimi',

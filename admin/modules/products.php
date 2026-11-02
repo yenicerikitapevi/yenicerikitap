@@ -250,9 +250,14 @@ if (($action === 'add' || $action === 'edit') && $edit_id > 0) {
         <p class="text-muted fs-7 mb-0">Kitapları ekleyebilir, stok/fiyat güncelleyebilir ve vitrin/koleksiyon etiketleri atayabilirsiniz.</p>
     </div>
     <?php if ($action === 'list'): ?>
-        <a href="index.php?p=Products&action=add" class="btn btn-danger font-semibold rounded-3 shadow">
-            <i class="bi bi-plus-lg me-1"></i> Yeni Kitap Ekle
-        </a>
+        <div class="d-flex gap-2">
+            <a href="index.php?p=BulkImport" class="btn btn-outline-success font-semibold rounded-3">
+                <i class="bi bi-file-earmark-spreadsheet me-1"></i> Excel'den Toplu Ekle
+            </a>
+            <a href="index.php?p=Products&action=add" class="btn btn-danger font-semibold rounded-3 shadow">
+                <i class="bi bi-plus-lg me-1"></i> Yeni Kitap Ekle
+            </a>
+        </div>
     <?php else: ?>
         <a href="index.php?p=Products" class="btn btn-outline-secondary font-semibold rounded-3">
             <i class="bi bi-arrow-left me-1"></i> Kataloğa Dön

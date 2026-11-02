@@ -89,6 +89,7 @@ track_view('home');
                 <a href="legal.php?p=teslimat-iade">Teslimat Şartları</a>
                 <a href="legal.php?p=gizlilik">Gizlilik Politikası</a>
                 <a href="contact.php">İletişim</a>
+                <?= customer_nav_link() ?>
                 <?php if (isset($_SESSION['store_user'])): ?>
                     <a href="satici/" class="text-warning font-semibold"><i class="bi bi-shop"></i> Sahaf Paneli (<?= e($_SESSION['store_user']['name']) ?>)</a>
                 <?php else: ?>

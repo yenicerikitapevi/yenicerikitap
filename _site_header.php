@@ -19,6 +19,7 @@ $header_active = $header_active ?? '';
                 <a href="siparis-takip.php"><i class="bi bi-truck me-1"></i>Sipariş Takip</a>
                 <a href="legal.php?p=teslimat-iade" class="d-none d-md-inline">Teslimat Şartları</a>
                 <a href="contact.php" class="d-none d-md-inline">İletişim</a>
+                <?= customer_nav_link() ?>
                 <?php if (isset($_SESSION['store_user'])): ?>
                     <a href="satici/" class="text-warning font-semibold"><i class="bi bi-shop"></i> Sahaf Paneli</a>
                 <?php else: ?>

@@ -9,6 +9,13 @@ $new_order_number = '';
 $order_total = 0;
 $errors = [];
 $form = ['name' => '', 'email' => '', 'phone' => '', 'address' => '', 'coupon_code' => '', 'shipping_option' => ''];
+// Üye girişi yapmış müşterinin bilgileri forma hazır gelir
+if (!empty($_SESSION['customer_user'])) {
+    $cu = db_fetch("SELECT name, email, phone, address FROM users WHERE id = ? AND role = 'customer' AND status = 'active'", [(int)$_SESSION['customer_user']['id']]);
+    if ($cu) {
+        foreach (['name', 'email', 'phone', 'address'] as $k) $form[$k] = (string)$cu[$k];
+    }
+}
 $paytr_token = '';
 $payment_result = $_GET['odeme'] ?? '';
 
@@ -74,7 +81,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['complete_checkout']))
                 $pdo->rollBack();
             } else {
                 if (!$user) {
-                    // Müşteri hesabıyla giriş özelliği yok; tahmin edilemeyen rastgele bir parola atanır
+                    // Üye olmadan sipariş: rastgele parola atanır, müşteri hesap.php "Şifremi unuttum" ile şifre belirleyebilir
                     $pass_hash = password_hash(bin2hex(random_bytes(16)), PASSWORD_DEFAULT);
                     db_query("INSERT INTO users (name, email, password_hash, role, status, phone, address) VALUES (?, ?, ?, 'customer', 'active', ?, ?)",
                         [$form['name'], $form['email'], $pass_hash, $form['phone'], $form['address']]);
@@ -266,6 +273,9 @@ track_view('checkout');
                             <input type="hidden" name="complete_checkout" value="1">
                             <input type="hidden" name="cart_data" id="cartDataInput">
 
+                            <?php if (empty($_SESSION['customer_user'])): ?>
+                                <div class="alert alert-light border fs-7 py-2 mb-3"><i class="bi bi-person-circle text-danger me-1"></i> Üye misiniz? <a href="hesap.php?a=giris&back=checkout.php" class="fw-bold text-danger">Giriş yapın</a>, bilgileriniz otomatik dolsun. Üye olmadan da sipariş verebilirsiniz.</div>
+                            <?php endif; ?>
                             <div class="row g-3">
                                 <div class="col-md-6">
                                     <label class="form-label fw-semibold fs-7">Adınız Soyadınız *</label>
