@@ -182,6 +182,30 @@ if ($tab === 'dukkan') {
         <?php if ($tab === 'rapor'): ?>
             <?php include __DIR__ . '/../admin/modules/reports.php'; ?>
         <?php else: ?>
+            <!-- AKTARIM UYGULAMASI: indirme ve giriş bilgileri -->
+            <?php $app_url = trim(setting('nk_app_download_url', '')) ?: 'https://github.com/yenicerikitapevi/yenicerikitap/releases/download/kitapekapp-v1.4.2/kitapekapp-1.4.2-dagitim.zip'; // Site Ayarları'nda adres girilmediyse GitHub sürümü ?>
+            <div class="card border-0 shadow-sm rounded-4 mb-4 bg-white">
+                <div class="card-body p-4 d-flex justify-content-between align-items-center flex-wrap gap-3">
+                    <div style="max-width: 760px;">
+                        <h6 class="fw-bold text-dark mb-1"><i class="bi bi-pc-display text-danger me-1"></i> Aktarım Uygulaması (kitapekapp)</h6>
+                        <p class="text-muted fs-7 mb-2">NadirKitap'taki kitaplarınızı bilgisayarınızdan dükkânınıza aktarır ve günceller. Windows bilgisayarda çalışır; Google Chrome kurulu olmalıdır.</p>
+                        <ol class="fs-7 mb-0 ps-3">
+                            <li>Uygulamayı indirip zip dosyasını bir klasöre çıkarın, <b>kitapekapp-chrome.bat</b> ile açın.</li>
+                            <li>Giriş bilgileri: <b>Kullanıcı adı</b> <code><?= e($store['username']) ?></code> • <b>Şifre</b> bu panelin şifresi • <b>NadirKitap kodu</b> <code><?= e($store['nadirkitap_code'] ?: '—') ?></code></li>
+                            <li>Açılan Chrome penceresinde NadirKitap güvenlik doğrulaması çıkarsa siz tamamlayın, aktarım kendiliğinden devam eder.</li>
+                        </ol>
+                    </div>
+                    <div class="text-center">
+                        <?php if ($app_url !== ''): ?>
+                            <a href="<?= e($app_url) ?>" class="btn btn-dark fw-semibold px-4 py-2 rounded-3" target="_blank" rel="noopener"><i class="bi bi-download me-1"></i> Aktarım uygulamasını indir</a>
+                            <div class="text-muted fs-8 mt-1">Windows • yaklaşık 380 MB</div>
+                        <?php else: ?>
+                            <div class="text-muted fs-7">İndirme bağlantısı henüz eklenmedi;<br>site yöneticisinden isteyin.</div>
+                        <?php endif; ?>
+                    </div>
+                </div>
+            </div>
+
             <!-- NADİRKİTAP SENKRONİZASYON VE SATILANLARI DÜŞÜRME KARTI -->
             <div class="card border-0 shadow-sm rounded-4 mb-4 bg-white overflow-hidden border-start border-danger border-4">
                 <div class="card-body p-4">

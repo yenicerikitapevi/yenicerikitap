@@ -11,7 +11,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_settings'])) {
         'flat_shipping_cost', 'bank_name', 'bank_account_name', 'bank_iban',
         'company_legal_name', 'company_tax_office', 'company_tax_number', 'company_mersis',
         'payment_merchant_id', 'payment_api_key', 'payment_merchant_salt', 'paytr_test_mode',
-        'nk_store_code', 'nk_api_key',
+        'nk_store_code', 'nk_api_key', 'nk_app_download_url',
         'home_show_store_books', 'isbn_autosave', 'smtp_host', 'smtp_port', 'smtp_secure', 'smtp_user', 'smtp_pass', 'mail_from_email', 'mail_from_name', 'order_notify_email'
     ];
     // Gizli anahtarlar sayfada gösterilmez; alan boş bırakılırsa kayıtlı değer korunur
@@ -30,7 +30,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_settings'])) {
             if (in_array($key, $secret_keys, true) && $val === '') {
                 continue;
             }
-            if (strpos($key, 'social_') === 0 && $val !== '' && !preg_match('#^https://#i', $val)) {
+            if ((strpos($key, 'social_') === 0 || $key === 'nk_app_download_url') && $val !== '' && !preg_match('#^https://#i', $val)) {
                 $val = ''; // yalnızca https:// ile başlayan profil adresleri
             }
             if ($key === 'paytr_test_mode') {
@@ -187,6 +187,11 @@ foreach ($setting_rows as $row) {
                                 <input type="url" name="<?= $sk ?>" class="form-control" placeholder="https://..." value="<?= e($s[$sk] ?? '') ?>">
                             </div>
                         <?php endforeach; ?>
+                        <div class="col-12">
+                            <label class="form-label fw-semibold fs-7">Aktarım Uygulaması İndirme Adresi</label>
+                            <input type="url" name="nk_app_download_url" class="form-control" placeholder="https://github.com/.../kitapekapp.zip ya da Google Drive bağlantısı" value="<?= e($s['nk_app_download_url'] ?? '') ?>">
+                            <div class="text-muted fs-8">Sahafların NadirKitap aktarım uygulamasını (kitapekapp) indireceği adres. Satıcı Paneli'nde "Aktarım uygulamasını indir" düğmesi bu adrese gider; boş bırakılırsa GitHub'daki 1.4.2 sürümü kullanılır.</div>
+                        </div>
                         <div class="col-12">
                             <input type="hidden" name="home_show_store_books" value="0">
                             <div class="form-check form-switch">
