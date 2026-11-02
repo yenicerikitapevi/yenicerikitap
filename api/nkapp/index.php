@@ -367,7 +367,8 @@ if (preg_match('#^/pbatch/([^/]+)/([^/]+)/(\d+)$#i', $route, $m)) {
                 // (category2) farklı seviyelerden gelebiliyor; eşleştirmek o numaralı tüm kitapları yanlış kategoriye taşıyordu.
                 $category_id = nk_resolve_entity('categories', $cat_label, $entity_cache);
             } elseif ($cat_code !== '') {
-                $category_id = nk_category_for_code($cat_code);
+                // Önce NadirKitap kategori tablosu (_nk_categories.php): adı ve üst kategorisiyle oluşturulur
+                $category_id = nk_category_ensure($cat_code);
                 if (!$category_id) {
                     // Uygulama yalnızca numara gönderdi: adı kitabın NadirKitap sayfasından bul (numara başına bir kez)
                     $resolved = nk_resolve_category_name($cat_code, $meta['sourceUrl'] ?? '');

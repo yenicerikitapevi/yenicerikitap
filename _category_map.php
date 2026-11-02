@@ -35,6 +35,58 @@ function nk_category_map_set($code, $category_id) {
     db_query("INSERT INTO nk_category_map (nk_code, category_id) VALUES (?, ?)", [trim((string)$code), (int)$category_id]);
 }
 
+/**
+ * NadirKitap kategori tablosu: numara => [sitede kullanılacak ad, üst kategori numarası|null]
+ * (_nk_categories.php, NadirKitap'ın kategori sayfalarından çıkarıldı; sunucu NadirKitap'a bağlanamadığı için dosyada tutulur)
+ */
+function nk_category_table() {
+    static $t = null;
+    if ($t === null) {
+        $t = is_file(__DIR__ . '/_nk_categories.php') ? (array)(require __DIR__ . '/_nk_categories.php') : [];
+    }
+    return $t;
+}
+
+function nk_category_label($code) {
+    $t = nk_category_table();
+    return $t[trim((string)$code)][0] ?? '';
+}
+
+/**
+ * Tablodaki numaranın sitedeki kategorisi: eşleşme varsa o, yoksa aynı adlı kategori, o da yoksa üst kategorisinin
+ * altında oluşturulur (alt kategoriler menüye dolmasın). Tabloda olmayan numarada null döner.
+ */
+function nk_category_ensure($code, $depth = 0) {
+    $code = trim((string)$code);
+    $mapped = nk_category_for_code($code);
+    if ($mapped) return $mapped;
+    $t = nk_category_table();
+    if (!isset($t[$code]) || $depth > 4) return null;
+    [$label, $parent_code] = $t[$code];
+    $existing = find_by_name('categories', $label);
+    if ($existing) {
+        $id = (int)$existing['id'];
+    } else {
+        $parent_id = $parent_code !== null ? nk_category_ensure($parent_code, $depth + 1) : null;
+        db_query("INSERT INTO categories (name, slug, parent_id) VALUES (?, ?, ?)", [$label, unique_slug('categories', $label), $parent_id]);
+        $id = (int)db_last_id();
+    }
+    nk_category_map_set($code, $id);
+    return $id;
+}
+
+/** Kategori ve alt kategorilerinin ID'leri (kategori sayfası alt kategorilerin kitaplarını da göstersin) */
+function category_with_children_ids($category_id) {
+    $ids = [(int)$category_id];
+    $frontier = $ids;
+    for ($level = 0; $level < 4 && $frontier; $level++) {
+        $in = implode(',', array_map('intval', $frontier));
+        $frontier = array_values(array_diff(array_map('intval', array_column(db_fetch_all("SELECT id FROM categories WHERE parent_id IN ({$in})"), 'id')), $ids));
+        $ids = array_merge($ids, $frontier);
+    }
+    return $ids;
+}
+
 /** Site menüsündeki kategoriler: yalnızca adı olan (numara olmayan) ana kategoriler */
 function nav_categories() {
     return array_values(array_filter(

@@ -44,8 +44,10 @@ if ($seller === 'yeniceri') $where[] = "b.store_id IS NULL";
 if ($seller === 'sahaf') $where[] = "b.store_id IS NOT NULL";
 
 if ($cat_id > 0) {
-    $where[] = "b.category_id = ?";
-    $params[] = $cat_id;
+    // Alt kategorilerin kitapları da listelenir (ör. Edebiyat sayfasında Roman, Şiir...)
+    $cat_ids = category_with_children_ids($cat_id);
+    $where[] = "b.category_id IN (" . implode(',', array_fill(0, count($cat_ids), '?')) . ")";
+    $params = array_merge($params, $cat_ids);
 }
 
 if (!empty($query)) {
@@ -180,6 +182,14 @@ track_view('category');
                     return $seller_path . ($seller_params ? '?' . http_build_query($seller_params) : '');
                 };
                 ?>
+                <?php $sub_cats = $category ? array_values(array_filter(db_fetch_all("SELECT id, name, slug FROM categories WHERE parent_id = ? ORDER BY name", [$cat_id]), function ($c) { return !is_numeric_category_name($c['name']); })) : []; ?>
+                <?php if ($sub_cats): ?>
+                    <div class="d-flex flex-wrap gap-2 mb-3 fs-7" aria-label="Alt kategoriler">
+                        <?php foreach ($sub_cats as $sc): ?>
+                            <a href="<?= e(category_path($sc)) ?>" class="btn btn-sm btn-light border rounded-pill px-3"><?= e($sc['name']) ?></a>
+                        <?php endforeach; ?>
+                    </div>
+                <?php endif; ?>
                 <div class="d-flex flex-wrap gap-2 mb-4 fs-7" role="group" aria-label="Satıcı">
                     <?php foreach (['' => ['Tümü', 'bi-grid'], 'yeniceri' => ['Yeniçeri Kitabevi', 'bi-book'], 'sahaf' => ['Sahaflar (İkinci El)', 'bi-shop']] as $sv => [$sl, $si]): ?>
                         <a href="<?= e($seller_url($sv)) ?>" rel="nofollow" class="btn btn-sm rounded-pill px-3 <?= $seller === $sv ? 'btn-danger' : 'btn-outline-secondary' ?>"><i class="bi <?= $si ?> me-1"></i><?= $sl ?></a>
