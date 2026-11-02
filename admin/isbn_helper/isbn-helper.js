@@ -299,19 +299,22 @@
     return null;
   }
 
-  /** Kategori: yalnızca birebir aynı ad seçilir; değilse boş bırakılır, öneri düğmesi gösterilir */
+  /** Kategori: birebir aynı ad seçilir; yoksa en yakın öneri otomatik seçilir (sarı işaretle); o da yoksa boş bırakılır */
   function chooseCategory(catName, srcText) {
     var cs = field('category_id');
     if (!cs) return '';
     if (!catName) { mark('category_id', true, 'kategori bilgisi gelmedi — listeden seçin'); return '⚠ <b>Dikkat:</b> kategori bilgisi gelmedi, listeden seçin.'; }
     var m = matchOption(cs, catName);
     if (m) { cs.value = m.value; fire(cs, 'change'); mark('category_id', false, srcText || ''); return '✔ Kategori: <b>' + esc(m.text) + '</b>'; }
-    cs.value = ''; fire(cs, 'change');
     var sug = suggestCategory(cs, catName);
-    mark('category_id', true, 'kaynakta “' + esc(catName) + '” yazıyor; listede birebir yok' + (sug ? ' — <a href="#" class="ih-cat-sug" data-v="' + esc(sug.value) + '">“' + esc(sug.text) + '” seç</a>' : ''));
-    var link = cs.parentNode.querySelector('.ih-cat-sug');
-    if (link) link.addEventListener('click', function (e) { e.preventDefault(); cs.value = link.dataset.v; fire(cs, 'change'); mark('category_id', false, 'öneri seçildi'); });
-    return '⚠ <b>Dikkat:</b> kategori boş bırakıldı (kaynak: “' + esc(catName) + '”' + (sug ? ', öneri: ' + esc(sug.text) : '') + '). Listeden seçin.';
+    if (sug) {
+      cs.value = sug.value; fire(cs, 'change');
+      mark('category_id', true, 'kaynakta “' + esc(catName) + '” yazıyor; en yakın kategori otomatik seçildi — kontrol edin');
+      return '✔ Kategori: <b>' + esc(sug.text) + '</b> (otomatik seçildi, kaynak: “' + esc(catName) + '”)';
+    }
+    cs.value = ''; fire(cs, 'change');
+    mark('category_id', true, 'kaynakta “' + esc(catName) + '” yazıyor; listede karşılığı yok — listeden seçin');
+    return '⚠ <b>Dikkat:</b> kategori boş bırakıldı (kaynak: “' + esc(catName) + '”). Listeden seçin.';
   }
 
   function checkShowcases() {
