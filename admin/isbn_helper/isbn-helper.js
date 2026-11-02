@@ -164,6 +164,7 @@
       '</div>' +
       '<div id="ih-reader" style="max-width:440px;margin-top:10px;display:none"></div>' +
       '<div id="ih-reader-file" style="display:none"></div>' +
+      '<div id="ih-relay" style="margin-top:6px;font-size:12px;color:#7c2d12"></div>' +
       '<div id="ih-status" style="margin-top:8px;font-size:14px" aria-live="polite"></div>' +
       '<div id="ih-result"></div>';
     form.insertBefore(panel, form.firstChild);
@@ -197,10 +198,7 @@
     status('Kitap ve fiyatlar aranıyor… (Nadir Kitap, Kitantik, BKM, Kitapsepeti, D&R, Kitap Ambarı, Kitapyurdu, Open Library) — 10-30 sn sürebilir.');
     var data;
     try {
-      var res = await fetch(cfg.api + '?isbn=' + isbn, { credentials: 'same-origin', headers: { Accept: 'application/json' } });
-      var txt = await res.text();
-      try { data = JSON.parse(txt); } catch (e) { throw new Error(res.status === 403 || /login|password/i.test(txt) ? 'Oturum geçersiz görünüyor. Panele yeniden giriş yapıp sayfayı yenileyin.' : 'Sunucu beklenmeyen bir yanıt verdi (HTTP ' + res.status + ').'); }
-      if (!res.ok && !data.error) throw new Error('HTTP ' + res.status);
+      data = await relayAlive() ? await lookupViaRelay(isbn, my) : await apiLookup(isbn, null);
     } catch (e) { if (my === seq) { busy(false); status('Hata: ' + esc(e.message), 'err'); } return; }
     if (my !== seq) return;
     busy(false);
@@ -222,6 +220,83 @@
     renderPrices(data);
     showExisting(data.existing);
     if (opt.fromPhoto) maybeAutosave(data);
+  }
+
+  /** Sunucudaki arama; pages verilirse yerel yardımcının indirdiği sayfalarla (POST) */
+  async function apiLookup(isbn, pages) {
+    var opts = { credentials: 'same-origin', headers: { Accept: 'application/json' } };
+    var url = cfg.api + '?isbn=' + isbn;
+    if (pages) {
+      url = cfg.api;
+      opts.method = 'POST';
+      opts.headers['Content-Type'] = 'application/json';
+      opts.body = JSON.stringify({ isbn: isbn, relay: 1, pages: pages });
+    }
+    var res = await fetch(url, opts);
+    var txt = await res.text(), data;
+    try { data = JSON.parse(txt); } catch (e) { throw new Error(res.status === 403 || /login|password/i.test(txt) ? 'Oturum geçersiz görünüyor. Panele yeniden giriş yapıp sayfayı yenileyin.' : 'Sunucu beklenmeyen bir yanıt verdi (HTTP ' + res.status + ').'); }
+    if (!res.ok && !data.error) throw new Error('HTTP ' + res.status);
+    return data;
+  }
+
+  /* ---------------- yerel yardımcı: D&R / Kitapyurdu sayfaları bu bilgisayardan indirilir ---------------- */
+  // Tarayıcı bilgisayardaki yardımcıya bağlanırken bir kez "yerel ağ erişimi" izni sorar; bu yüzden yalnızca
+  // kullanıcı "Yardımcıyı kullan" dediyse (bu tarayıcıda hatırlanır) bağlanılmaya çalışılır
+  var RELAY = 'http://127.0.0.1:17891', relayState = { ok: null, at: 0 };
+  function relayWanted() { try { return localStorage.getItem('ih_relay') === '1'; } catch (e) { return false; } }
+  function relayWant(on) { try { on ? localStorage.setItem('ih_relay', '1') : localStorage.removeItem('ih_relay'); } catch (e) {} }
+  async function relayAlive() {
+    if (!relayWanted()) { relayState = { ok: false, at: 0 }; renderRelayBadge(); return false; }
+    if (relayState.ok !== null && relayState.at && Date.now() - relayState.at < 30000) return relayState.ok;
+    var ok = false;
+    try {
+      var ctl = new AbortController(), t = setTimeout(function () { ctl.abort(); }, 1200);
+      var r = await fetch(RELAY + '/ping', { signal: ctl.signal, cache: 'no-store' });
+      clearTimeout(t);
+      ok = r.ok && !!(await r.json()).ok;
+    } catch (e) { ok = false; }
+    relayState = { ok: ok, at: Date.now() };
+    renderRelayBadge();
+    return ok;
+  }
+  async function relayFetch(urls) {
+    try {
+      var r = await fetch(RELAY + '/fetch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ urls: urls }) });
+      var j = await r.json();
+      return j && j.ok ? j.pages : null;
+    } catch (e) { relayState = { ok: false, at: Date.now() }; renderRelayBadge(); return null; }
+  }
+  /** Sunucu engellenen sitelerin adreslerini (relay_need) döndürür; yardımcı indirir, arama sayfalarla tekrarlanır (Kitapyurdu 2 tur) */
+  async function lookupViaRelay(isbn, my) {
+    var pages = {}, data = null;
+    for (var round = 0; round < 4; round++) {
+      data = await apiLookup(isbn, pages);
+      var need = (data.relay_need || []).filter(function (u) { return !(u in pages); });
+      if (!need.length || my !== seq) return data;
+      status('D&R ve Kitapyurdu bu bilgisayar üzerinden aranıyor (yerel yardımcı)… ' + (round + 1) + '. tur');
+      var got = await relayFetch(need);
+      if (!got) return data;
+      need.forEach(function (u) { pages[u] = got[u] || { code: 0, url: u, body: '' }; });
+    }
+    return data;
+  }
+  function renderRelayBadge() {
+    var el = document.getElementById('ih-relay');
+    if (!el) return;
+    if (!relayWanted()) {
+      el.innerHTML = '⚪ D&R ve Kitapyurdu sunucuyu engelleyebilir. Fiyatlarını bu bilgisayar üzerinden almak için: ' +
+        '1) <a href="isbn_yardimci_indir.php">yerel yardımcıyı indirin</a> ve çift tıklayarak açın (pencere açık kalsın), ' +
+        '2) <a href="#" id="ih-relay-on">Yardımcıyı kullan</a>\'a basın; tarayıcı “yerel ağ / bu cihazdaki uygulamalara erişim” izni sorarsa <b>İzin ver</b> deyin.';
+    } else if (relayState.ok) {
+      el.innerHTML = '🟢 Yerel yardımcı açık: D&R ve Kitapyurdu bu bilgisayar üzerinden aranıyor. <a href="#" id="ih-relay-off">Kullanma</a>';
+    } else {
+      el.innerHTML = '🟠 Yerel yardımcıya bağlanılamadı. Yardımcı penceresi açık mı? (<a href="isbn_yardimci_indir.php">indir</a>) Tarayıcı yerel ağ iznini engellediyse adres çubuğundaki kilit simgesinden izin verin. ' +
+        '<a href="#" id="ih-relay-retry">Tekrar dene</a> · <a href="#" id="ih-relay-off">Kullanma</a>';
+    }
+    var bind = function (id, fn) { var a = document.getElementById(id); if (a) a.addEventListener('click', function (e) { e.preventDefault(); fn(); }); };
+    bind('ih-relay-on', function () { relayWant(true); relayState.at = 0; relayAlive(); });
+    bind('ih-relay-retry', function () { relayState.at = 0; relayAlive(); });
+    bind('ih-relay-off', function () { relayWant(false); relayAlive(); });
   }
 
   /* ---------------- aynı ISBN kayıtlıysa ---------------- */
@@ -634,6 +709,7 @@
     if (!form || document.getElementById('ih-panel')) return;
     buildPanel();
     loadHelperConfig();
+    relayAlive();
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
 

@@ -63,15 +63,27 @@ if (!function_exists('curl_init') || !class_exists('DOMDocument')) {
     ih_json(['ok' => false, 'error' => 'Sunucuda php-curl veya php-xml (dom) eklentisi kapalı.'], 500);
 }
 
-$raw = isset($_GET['isbn']) ? (string)$_GET['isbn'] : '';
+// Yerel yardımcılı arama: POST (JSON) {isbn, relay: 1, pages: {adres: {code, url, body}}}
+$relay = null;
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $relay = json_decode((string)file_get_contents('php://input'), true);
+    if (!is_array($relay) || empty($relay['relay'])) {
+        ih_json(['ok' => false, 'error' => 'Geçersiz istek.'], 400);
+    }
+}
+$raw = $relay ? (string)($relay['isbn'] ?? '') : (isset($_GET['isbn']) ? (string)$_GET['isbn'] : '');
 $isbn = ih_normalize_isbn($raw);
 if (!$isbn) {
     ih_json(['ok' => false, 'error' => 'Geçersiz ISBN (13 haneli ISBN-13 ya da ISBN-10 girin).'], 400);
 }
+$pages = $relay && is_array($relay['pages'] ?? null) ? $relay['pages'] : [];
+if ($relay) {
+    ih_relay_start($pages);
+}
 
-// 10 dakikalık önbellek (aynı kitabı tekrar tekrar taramamak için)
-$cacheFile = sys_get_temp_dir() . '/ih_lookup_' . $isbn . '.json';
-if (empty($_GET['nocache']) && is_file($cacheFile) && (time() - filemtime($cacheFile)) < 600) {
+// 10 dakikalık önbellek (aynı kitabı tekrar tekrar taramamak için); yardımcıyla tamamlanan aramalar ayrı tutulur
+$cacheFile = sys_get_temp_dir() . '/ih_lookup_' . ($relay ? 'r_' : '') . $isbn . '.json';
+if (empty($_GET['nocache']) && !$pages && is_file($cacheFile) && (time() - filemtime($cacheFile)) < 600) {
     $c = json_decode((string)file_get_contents($cacheFile), true);
     if (is_array($c)) {
         $c['cached'] = true;
@@ -85,7 +97,8 @@ try {
 } catch (Exception $e) {
     ih_json(['ok' => false, 'error' => 'Arama sırasında hata: ' . (ih_config()['debug'] ? $e->getMessage() : 'beklenmeyen hata')], 500);
 }
-if (!empty($res['ok'])) {
+$res['relay_need'] = ih_relay_need();
+if (!empty($res['ok']) && !$res['relay_need']) {
     @file_put_contents($cacheFile, json_encode($res, JSON_UNESCAPED_UNICODE));
 }
 $res['existing'] = ih_existing_book($isbn);

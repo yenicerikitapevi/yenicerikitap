@@ -120,12 +120,73 @@ function ih_header_variants()
  * 403/429/5xx ve ağ hatalarında farklı başlıklarla en fazla 3 deneme.
  * Dönüş: anahtar => ['code'=>int,'body'=>string,'url'=>son adres,'err'=>string]
  */
+/* ---------- Yerel yardımcı (relay) ----------
+ * Bazı mağazalar (D&R, Kitapyurdu) bulut sunucularından gelen istekleri engelliyor. Panelde "yerel yardımcı" açıksa
+ * bu sitelerin sayfaları sunucudan istenmez: adresler relay_need listesine yazılır, tarayıcı bunları yöneticinin
+ * bilgisayarındaki yardımcıya indirtir ve sayfalarla birlikte aramayı tekrarlar. Ayrıştırma yine burada yapılır.
+ */
+const IH_RELAY_HOSTS = ['dr.com.tr', 'kitapyurdu.com'];
+
+function ih_relay_host($url)
+{
+    $h = strtolower((string)parse_url((string)$url, PHP_URL_HOST));
+    foreach (IH_RELAY_HOSTS as $d) {
+        if ($h === $d || substr($h, -strlen('.' . $d)) === '.' . $d) return true;
+    }
+    return false;
+}
+
+/** $pages: url => ['code','url','body'] (yardımcının indirdikleri) */
+function ih_relay_start(array $pages)
+{
+    $clean = [];
+    foreach ($pages as $u => $p) {
+        if (!is_array($p) || !ih_relay_host($u)) continue;
+        $final = isset($p['url']) && ih_relay_host($p['url']) ? (string)$p['url'] : (string)$u;
+        $clean[(string)$u] = ['code' => (int)($p['code'] ?? 0), 'body' => (string)($p['body'] ?? ''), 'url' => $final, 'err' => ''];
+    }
+    $GLOBALS['ih_relay'] = ['pages' => $clean, 'need' => []];
+}
+
+function ih_relay_on()
+{
+    return isset($GLOBALS['ih_relay']);
+}
+
+function ih_relay_need()
+{
+    return ih_relay_on() ? array_values(array_unique($GLOBALS['ih_relay']['need'])) : [];
+}
+
 function ih_fetch_many(array $reqs)
 {
     $cfg = ih_config();
     $variants = ih_header_variants();
     $out = [];
     $pending = array_keys($reqs);
+    if (ih_relay_on()) {
+        $keep = [];
+        foreach ($pending as $k) {
+            $u = is_array($reqs[$k]) ? $reqs[$k]['url'] : $reqs[$k];
+            if (ih_relay_host($u)) {
+                if (isset($GLOBALS['ih_relay']['pages'][$u])) {
+                    $out[$k] = $GLOBALS['ih_relay']['pages'][$u];
+                } else {
+                    $GLOBALS['ih_relay']['need'][] = $u;
+                    $out[$k] = ['code' => 0, 'body' => '', 'url' => $u, 'err' => 'relay'];
+                }
+                continue;
+            }
+            // Yardımcılı aramada istek birkaç tur tekrarlanır: diğer mağazaların cevapları kısa süre önbellekten verilir
+            $cf = sys_get_temp_dir() . '/ih_fc_' . md5($u) . '.json';
+            if (is_file($cf) && time() - filemtime($cf) < 300 && is_array($c = json_decode((string)file_get_contents($cf), true))) {
+                $out[$k] = $c;
+                continue;
+            }
+            $keep[] = $k;
+        }
+        $pending = $keep;
+    }
     for ($attempt = 0; $attempt < 3 && $pending; $attempt++) {
         // Genel süre sınırı (ih_set_deadline): kalan süre azsa yeniden deneme yapılmaz
         $left = ih_time_left();
@@ -172,6 +233,8 @@ function ih_fetch_many(array $reqs)
             ];
             if ($code === 0 || in_array($code, [403, 429, 500, 502, 503], true)) {
                 $next[] = $k;
+            } elseif ($code === 200 && ih_relay_on() && strlen($out[$k]['body']) < 3 * 1024 * 1024) {
+                @file_put_contents(sys_get_temp_dir() . '/ih_fc_' . md5(is_array($reqs[$k]) ? $reqs[$k]['url'] : $reqs[$k]) . '.json', json_encode($out[$k]));
             }
             curl_multi_remove_handle($mh, $ch);
             curl_close($ch);
@@ -556,6 +619,10 @@ function ih_ticimax_stage2($r, $isbn, $cand, $page)
 function ih_dr_parse($isbn, $resp)
 {
     $r = ih_res('dr', 'D&R');
+    if (($resp['err'] ?? '') === 'relay') {
+        $r['error'] = 'yerel yardımcıdan bekleniyor';
+        return $r;
+    }
     if ($resp['code'] !== 200) {
         $r['error'] = 'HTTP ' . $resp['code'] . ($resp['code'] === 403 ? ' (site sunucudan gelen istekleri engelliyor)' : '');
         return $r;
@@ -1204,7 +1271,12 @@ function ih_lookup($isbn)
         }
         $hrefs = ih_kitapyurdu_cards($hint, [$s3['a'], $s3['b']]);
         $ky = ih_res('kitapyurdu', 'Kitapyurdu');
-        if (!$hrefs) {
+        if (ih_relay_on()) {
+            $hrefs = array_slice($hrefs, 0, 4); // yardımcı sayfaları tek tek indirir; en olası 4 aday yeter
+        }
+        if (!$hrefs && ($s3['a']['err'] ?? '') === 'relay') {
+            $ky['error'] = 'yerel yardımcıdan bekleniyor';
+        } elseif (!$hrefs) {
             $codes = array_unique([$s3['a']['code'], $s3['b']['code']]);
             $ky['error'] = in_array(200, $codes, true)
                 ? 'arama sonucu yok'
@@ -1226,7 +1298,8 @@ function ih_lookup($isbn)
                 }
             }
             if (!$found) {
-                $ky['error'] = 'ürün bulunamadı (bu ISBN ile eşleşen baskı yok)';
+                $waiting = array_filter($s4, function ($p) { return ($p['err'] ?? '') === 'relay'; });
+                $ky['error'] = $waiting ? 'yerel yardımcıdan bekleniyor' : 'ürün bulunamadı (bu ISBN ile eşleşen baskı yok)';
             }
         }
         $results[] = $ky;

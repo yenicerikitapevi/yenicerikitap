@@ -445,3 +445,150 @@ function nk_sync_placeholder_id($table, $name) {
     db_query("INSERT INTO {$table} (name, slug) VALUES (?, ?)", [$name, unique_slug($table, $name)]);
     return (int)db_last_id();
 }
+
+/* =====================================================================
+ * TAM AKTARIMLA SATILANLARI DÜŞÜRME
+ * NadirKitap sunucudan gelen taramayı Cloudflare ile engelliyor; aktarım uygulaması (kit-app) ise sahafın kendi
+ * bilgisayarındaki Chrome ile okuyor. "Daha önce aktarılmış kitapları da yeniden güncelle" açık aktarımlarda
+ * uygulama mağazadaki her kitabı gönderir: hangi sayfada hangi kodların görüldüğü kaydedilir. Son 48 saatteki
+ * bu aktarımlar birlikte mağazanın tamamını kapsıyorsa, hiçbirinde görünmeyen kitaplar NadirKitap'ta satılmıştır.
+ * ===================================================================== */
+const NK_RUN_WINDOW_HOURS = 48;
+const NK_APP_LIMITS = [25, 250, 500, 1000]; // uygulamanın kitap sınırları: toplam bunlardan biriyse aktarım sınırda durmuştur
+
+$is_sqlite_nk = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite';
+$pdo->exec($is_sqlite_nk
+    ? "CREATE TABLE IF NOT EXISTS nk_runs (run_id TEXT PRIMARY KEY, store_id INTEGER, forced INTEGER DEFAULT 0, page_spec TEXT, product_type TEXT, started_at TEXT, finished_at TEXT, total INTEGER, error TEXT)"
+    : "CREATE TABLE IF NOT EXISTS nk_runs (run_id VARCHAR(80) PRIMARY KEY, store_id INT, forced TINYINT DEFAULT 0, page_spec VARCHAR(60), product_type VARCHAR(40), started_at DATETIME, finished_at DATETIME NULL, total INT NULL, error TEXT NULL) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
+$pdo->exec($is_sqlite_nk
+    ? "CREATE TABLE IF NOT EXISTS nk_run_codes (run_id TEXT, page INTEGER, code TEXT)"
+    : "CREATE TABLE IF NOT EXISTS nk_run_codes (run_id VARCHAR(80), page INT, code VARCHAR(40), INDEX (run_id)) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
+
+/** Aktarım başladı (uygulamanın /pbatch/{kod}/start isteği) */
+function nk_run_start($run_id, $store_id, $forced, $page_spec, $product_type) {
+    if (!$store_id) return;
+    $old = date('Y-m-d H:i:s', time() - 14 * 86400);
+    foreach (array_column(db_fetch_all("SELECT run_id FROM nk_runs WHERE started_at < ?", [$old]), 'run_id') as $r) {
+        db_query("DELETE FROM nk_run_codes WHERE run_id = ?", [$r]);
+        db_query("DELETE FROM nk_runs WHERE run_id = ?", [$r]);
+    }
+    db_query("INSERT INTO nk_runs (run_id, store_id, forced, page_spec, product_type, started_at) VALUES (?, ?, ?, ?, ?, ?)",
+        [$run_id, (int)$store_id, $forced ? 1 : 0, mb_substr((string)$page_spec, 0, 60), mb_substr((string)$product_type, 0, 40), date('Y-m-d H:i:s')]);
+}
+
+/** Bir sayfada gönderilen ürün kodları */
+function nk_run_page($run_id, $store_id, $page, array $codes) {
+    if (!$run_id || !db_fetch("SELECT run_id FROM nk_runs WHERE run_id = ? AND store_id = ?", [$run_id, (int)$store_id])) return;
+    db_query("DELETE FROM nk_run_codes WHERE run_id = ? AND page = ?", [$run_id, (int)$page]); // aynı sayfa tekrar gönderilirse
+    foreach (array_unique(array_filter(array_map('trim', $codes))) as $c) {
+        db_query("INSERT INTO nk_run_codes (run_id, page, code) VALUES (?, ?, ?)", [$run_id, (int)$page, mb_substr($c, 0, 40)]);
+    }
+}
+
+function nk_run_finish($run_id, $store_id, $total, $error) {
+    if (!$run_id) return;
+    db_query("UPDATE nk_runs SET finished_at = ?, total = ?, error = ? WHERE run_id = ? AND store_id = ?",
+        [date('Y-m-d H:i:s'), (int)$total, trim((string)$error) !== '' ? mb_substr((string)$error, 0, 500) : null, $run_id, (int)$store_id]);
+}
+
+/**
+ * Son 48 saatin "yeniden güncelle" açık, hatasız biten aktarımlarına göre NadirKitap'ta görünmeyen kitaplar.
+ * Dönüş: runs, pages (kapsanan sayfalar), seen (görülen kod sayısı), candidates (kitaplar), complete (1..son sayfa boşluksuz
+ * ve mağazanın sonuna gelindi), safe (otomatik düşürmeye uygun), note (açıklama)
+ */
+function nk_unseen_candidates($store_id) {
+    $store_id = (int)$store_id;
+    $since = date('Y-m-d H:i:s', time() - NK_RUN_WINDOW_HOURS * 3600);
+    $runs = db_fetch_all("SELECT * FROM nk_runs WHERE store_id = ? AND forced = 1 AND finished_at IS NOT NULL AND (error IS NULL OR error = '') AND started_at >= ? ORDER BY started_at ASC", [$store_id, $since]);
+    $out = ['runs' => $runs, 'pages' => [], 'seen' => 0, 'candidates' => [], 'complete' => false, 'safe' => false, 'note' => ''];
+    if (!$runs) {
+        $out['note'] = 'Son ' . NK_RUN_WINDOW_HOURS . ' saatte "Daha önce aktarılmış kitapları da yeniden güncelle" işaretli, hatasız biten bir aktarım yok.';
+        return $out;
+    }
+    $ids = array_column($runs, 'run_id');
+    $in = implode(',', array_fill(0, count($ids), '?'));
+    $page_rows = db_fetch_all("SELECT page, COUNT(DISTINCT code) as cnt FROM nk_run_codes WHERE run_id IN ({$in}) GROUP BY page ORDER BY page", $ids);
+    $codes = array_column(db_fetch_all("SELECT DISTINCT code FROM nk_run_codes WHERE run_id IN ({$in})", $ids), 'code');
+    $pages = array_map('intval', array_column($page_rows, 'page'));
+    $out['pages'] = $pages;
+    $out['seen'] = count($codes);
+    if (!$codes) {
+        $out['note'] = 'Aktarımlarda hiç ürün kodu görülmedi.';
+        return $out;
+    }
+
+    // 1. sayfadan son sayfaya boşluksuz mu?
+    $max = max($pages);
+    $contiguous = $pages === range(1, $max);
+    // Mağazanın sonuna gelindi mi: son sayfayı içeren aktarım kitap sınırında durmamış ve son sayfa diğerlerinden kısa
+    $counts = array_map('intval', array_column($page_rows, 'cnt', 'page'));
+    $last_run = db_fetch("SELECT r.total FROM nk_runs r JOIN nk_run_codes c ON c.run_id = r.run_id WHERE r.run_id IN ({$in}) AND c.page = ? ORDER BY r.started_at DESC LIMIT 1", array_merge($ids, [$max]));
+    $hit_limit = $last_run && in_array((int)$last_run['total'], NK_APP_LIMITS, true);
+    $last_short = count($counts) === 1 || $counts[$max] < max($counts);
+    // Son sayfa dışındaki her sayfa tam okunmuş olmalı: kitap sınırında yarıda kesilen sayfanın okunmayan kitapları "satıldı" sanılmasın
+    $short_inner = [];
+    foreach ($counts as $p => $cnt) {
+        if ($p !== $max && $cnt < max($counts)) $short_inner[] = $p;
+    }
+    $out['complete'] = $contiguous && !$hit_limit && $last_short && !$short_inner;
+
+    $first_start = $runs[0]['started_at'];
+    $active = db_fetch_all("SELECT id, title, nadirkitap_code, price FROM books WHERE store_id = ? AND is_active = 1 AND nadirkitap_code IS NOT NULL AND nadirkitap_code != '' AND created_at < ?", [$store_id, $first_start]);
+    $seen = array_fill_keys(array_map('strval', $codes), true);
+    foreach ($active as $b) {
+        if (!isset($seen[trim((string)$b['nadirkitap_code'])])) $out['candidates'][] = $b;
+    }
+    $out['safe'] = $out['complete'] && $out['candidates'] && count($out['candidates']) <= max(5, (int)floor(count($active) * 0.5));
+
+    $pg = $contiguous ? ('1–' . $max . '. sayfalar') : ('sayfalar: ' . implode(', ', $pages));
+    $out['note'] = count($runs) . ' aktarımda ' . $pg . ' okundu, ' . count($codes) . ' kitap görüldü. '
+        . ($out['complete'] ? 'Mağazanın tamamı kapsanmış görünüyor.'
+            : (!$contiguous ? 'Sayfalarda boşluk var; eksik sayfaları da aktarın.'
+                : ($short_inner ? implode(', ', $short_inner) . '. sayfa yarım okundu (kitap sınırında kesildi); aktarıma o sayfadan devam edin.'
+                : ($hit_limit ? 'Son aktarım kitap sınırında durdu; kalan sayfalar için aktarıma devam edin.' : 'Mağazanın son sayfasına gelinip gelinmediği anlaşılamadı.'))));
+    if ($out['complete'] && !$out['safe'] && $out['candidates']) {
+        $out['note'] .= ' Görünmeyen kitap sayısı beklenenden fazla; otomatik düşürülmedi, listeyi kontrol edip onaylayın.';
+    }
+    return $out;
+}
+
+/**
+ * Panel düğmeleri için ortak "satılanları düşür": önce tam aktarımlar; hiç yoksa eski sunucu taraması.
+ * $confirmed: kullanıcı görünmeyenler listesini görüp onayladı (kapsam tamsa sayı sınırı aranmaz; kapsam eksikse yine düşürülmez)
+ * Dönüş: ['success' => bool, 'message' => string]
+ */
+function nk_sold_sync($store_id, $confirmed = false) {
+    $u = nk_unseen_candidates($store_id);
+    if ($u['runs']) {
+        if ($u['complete'] && !$u['candidates']) {
+            return ['success' => true, 'message' => 'Satılmış kitap yok: sitedeki tüm NadirKitap kitapları son aktarımda görüldü. ' . $u['note']];
+        }
+        if ($u['candidates'] && ($u['safe'] || ($confirmed && $u['complete']))) {
+            $n = nk_drop_unseen($store_id, array_column($u['candidates'], 'id'));
+            return ['success' => true, 'message' => "NadirKitap'ta artık görünmeyen {$n} kitap satıştan kaldırıldı. " . $u['note']];
+        }
+        return ['success' => false, 'message' => 'Satılanlar düşürülmedi: ' . $u['note']];
+    }
+    $res = nk_sync_store($store_id, 40);
+    if (!empty($res['is_cloudflare']) || (empty($res['success']) && stripos((string)$res['message'], 'HTTP 403') !== false)) {
+        $res['message'] = 'NadirKitap sunucudan taramayı engelliyor. Satılanları düşürmek için aktarım uygulamasında "Daha önce aktarılmış kitapları da yeniden güncelle" işaretli bir aktarım yapın (250\'den fazla kitap varsa sonraki sayfalardan devam ederek), sonra tekrar deneyin.';
+    }
+    return ['success' => !empty($res['success']), 'message' => (string)$res['message']];
+}
+
+/** Görünmeyen (satılmış) kitapları satıştan kaldırır; yalnızca verilen ID'ler ve bu dükkânın kitapları */
+function nk_drop_unseen($store_id, array $book_ids) {
+    $store_id = (int)$store_id;
+    $ids = array_values(array_filter(array_map('intval', $book_ids)));
+    if (!$ids) return 0;
+    $mine = array_map('intval', array_column(db_fetch_all("SELECT id FROM books WHERE store_id = ? AND id IN (" . implode(',', $ids) . ")", [$store_id]), 'id'));
+    if (!$mine) return 0;
+    $in = implode(',', $mine);
+    db_query("UPDATE books SET is_active = 0, stock = 0 WHERE id IN ({$in})");
+    db_query("DELETE FROM book_showcase WHERE book_id IN ({$in})");
+    $n = count($mine);
+    $msg = "Tam aktarımda NadirKitap'ta görünmeyen {$n} kitap satıştan kaldırıldı.";
+    db_query("UPDATE stores SET last_sync_at = ?, last_sync_result = ? WHERE id = ?", [date('Y-m-d H:i:s'), $msg, $store_id]);
+    log_action('Satılanları Düşürme (Tam Aktarım)', 'Stores', $store_id, $msg);
+    return $n;
+}

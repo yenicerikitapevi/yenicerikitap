@@ -65,8 +65,13 @@ $report_base     = 'index.php?tab=rapor&';
 $tab             = ($_GET['tab'] ?? '') === 'rapor' ? 'rapor' : 'dukkan';
 
 // NadirKitap Senkronizasyon İsteği (Tek tıkla satılanları düşür & yeni kitapları çek)
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'sync_nk') {
-    $res = nk_sync_store($report_store_id, 40);
+// Önce son tam aktarımlara bakılır (NadirKitap sunucudan taramayı engelliyor); drop_unseen: görünmeyenler listesini onaylayarak düşür
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && in_array($_POST['action'] ?? '', ['sync_nk', 'drop_unseen'], true)) {
+    if ($_POST['action'] === 'drop_unseen' && !hash_equals($store_token, (string)($_POST['token'] ?? ''))) {
+        set_flash('warning', 'Oturum süresi doldu, tekrar deneyin.');
+        redirect('index.php');
+    }
+    $res = nk_sold_sync($report_store_id, $_POST['action'] === 'drop_unseen');
     if (!empty($res['success'])) {
         set_flash('success', $res['message']);
     } else {
@@ -92,6 +97,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 $book_count      = (int)(db_fetch("SELECT COUNT(*) as cnt FROM books WHERE store_id = ? AND is_active = 1", [$report_store_id])['cnt'] ?? 0);
 
 if ($tab === 'dukkan') {
+    $unseen = nk_unseen_candidates($report_store_id);
     $stats = db_fetch("SELECT COUNT(*) as total, SUM(CASE WHEN is_active = 1 THEN 1 ELSE 0 END) as active, SUM(CASE WHEN is_active = 1 AND stock > 0 THEN stock ELSE 0 END) as units,
                               SUM(CASE WHEN is_active = 1 AND stock > 0 THEN price * stock ELSE 0 END) as stock_value
                        FROM books WHERE store_id = ?", [$report_store_id]);
@@ -187,10 +193,23 @@ if ($tab === 'dukkan') {
                                     <span class="badge bg-light text-dark border rounded-pill px-2 py-1 fs-8">NK Mağaza No: <?= e($store['nadirkitap_code']) ?></span>
                                 <?php endif; ?>
                             </div>
-                            <h6 class="fw-bold text-dark mb-1">Satılan Kitapları Düşürme & Yeni Kitapları Çekme</h6>
-                            <p class="text-muted fs-7 mb-0">
-                                NadirKitap'ta satılan kitaplarınız otomatik tespit edilir ve bu sayfadan kaldırılır (stok sıfırlanır). Yeni eklenen kitaplar mağazanıza aktarılır.
+                            <h6 class="fw-bold text-dark mb-1">Satılan Kitapları Düşürme</h6>
+                            <p class="text-muted fs-7 mb-2">
+                                NadirKitap sunucumuzdan gelen taramayı engellediği için satılanlar <b>aktarım uygulamasıyla</b> tespit edilir:
+                                uygulamada <b>"Daha önce aktarılmış kitapları da yeniden güncelle"</b> işaretli aktarım yapın (250'den fazla kitabınız varsa
+                                sonraki sayfalardan devam ederek tüm mağazayı aktarın). Son <?= NK_RUN_WINDOW_HOURS ?> saatteki bu aktarımlarda görünmeyen kitaplar satılmış sayılır.
                             </p>
+                            <div class="fs-7 <?= $unseen['complete'] ? 'text-success' : 'text-secondary' ?>"><i class="bi bi-info-circle me-1"></i><?= e($unseen['note']) ?></div>
+                            <?php if ($unseen['candidates']): ?>
+                                <details class="fs-7 mt-2">
+                                    <summary class="fw-semibold text-danger">NadirKitap'ta görünmeyen <?= count($unseen['candidates']) ?> kitap (satılmış olabilir)</summary>
+                                    <ul class="mb-0 mt-1" style="max-height: 220px; overflow: auto;">
+                                        <?php foreach (array_slice($unseen['candidates'], 0, 200) as $cb): ?>
+                                            <li><?= e($cb['title']) ?> <span class="text-muted">— NK #<?= e($cb['nadirkitap_code']) ?>, <?= format_price($cb['price']) ?></span></li>
+                                        <?php endforeach; ?>
+                                    </ul>
+                                </details>
+                            <?php endif; ?>
                             <?php if (!empty($store['last_sync_at'])): ?>
                                 <small class="text-secondary d-block mt-2 fs-8">
                                     <i class="bi bi-clock-history text-danger me-1"></i>Son Eşitleme: <b><?= date('d.m.Y H:i', strtotime($store['last_sync_at'])) ?></b>
@@ -202,9 +221,16 @@ if ($tab === 'dukkan') {
                             <form method="POST" action="" onsubmit="var btn=this.querySelector('button'); btn.disabled=true; btn.innerHTML='<span class=\'spinner-border spinner-border-sm me-1\'></span> Eşitleniyor...';">
                                 <input type="hidden" name="action" value="sync_nk">
                                 <button type="submit" class="btn btn-danger font-semibold px-4 py-2 rounded-3 shadow">
-                                    <i class="bi bi-lightning-charge-fill me-1"></i> NadirKitap ile Eşitle & Satılanları Düşür
+                                    <i class="bi bi-lightning-charge-fill me-1"></i> Satılanları Düşür
                                 </button>
                             </form>
+                            <?php if ($unseen['candidates'] && $unseen['complete'] && !$unseen['safe']): ?>
+                                <form method="POST" action="" class="mt-2" onsubmit="return confirm('NadirKitap\'ta görünmeyen <?= count($unseen['candidates']) ?> kitap satıştan kaldırılsın mı? Listeyi kontrol ettiğinizden emin olun.');">
+                                    <input type="hidden" name="action" value="drop_unseen">
+                                    <input type="hidden" name="token" value="<?= e($store_token) ?>">
+                                    <button type="submit" class="btn btn-outline-danger btn-sm w-100"><i class="bi bi-check2-square me-1"></i> Listeyi kontrol ettim, <?= count($unseen['candidates']) ?> kitabı kaldır</button>
+                                </form>
+                            <?php endif; ?>
                         </div>
                     </div>
                 </div>

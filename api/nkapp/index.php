@@ -190,6 +190,8 @@ if (preg_match('#^/pbatch/([^/]+)/start$#i', $route, $m)) {
         $start_page = max(1, (int)$pm[1]);
     }
     $run_id = 'ync_' . ($auth_store_id ?: 0) . '_' . date('Ymd_His') . '_' . substr(bin2hex(random_bytes(4)), 0, 6);
+    // "Yeniden güncelle" açıkken uygulama her kitabı gönderir: görülen kodlar satılanları düşürmek için kaydedilir
+    nk_run_start($run_id, $auth_store_id, $force_update_flag || setting('nk_force_update', '0') === '1', $page_spec, (string)($body['productType'] ?? ''));
     nk_json_response([
         'runId'                 => $run_id,
         'batchStatus'           => 'ALL',
@@ -206,6 +208,7 @@ if (preg_match('#^/pbatch/([^/]+)/start$#i', $route, $m)) {
 if (preg_match('#^/pbatch/([^/]+)/finish$#i', $route, $m)) {
     $total = (int)($body['totalProducts'] ?? 0);
     $run_id = sanitize($body['runId'] ?? '');
+    nk_run_finish($run_id, $auth_store_id, $total, (string)($body['error'] ?? ''));
     log_action('Alt Dükkan NadirKitap Aktarımı', 'Stores', $auth_store_id, "Alt Dükkan: {$auth_store_name}, RunID: {$run_id}, Aktarılan Ürün: {$total}");
     nk_json_response(null, true, ["{$auth_store_name} alt dükkanına toplam {$total} ürün başarıyla aktarıldı."]);
 }
@@ -214,8 +217,24 @@ if (preg_match('#^/pbatch/([^/]+)/finish$#i', $route, $m)) {
 if ($route === '/sync-sold' || preg_match('#^/pbatch/([^/]+)/sync-sold$#i', $route)) {
     $active_codes = $body['activeCodes'] ?? $body['activeProductCodes'] ?? [];
     if (!is_array($active_codes) || empty($active_codes)) {
-        // İstemci kod göndermediyse sunucu tarafı tarayıcı motorunu çalıştır
+        // İstemci kod göndermedi: önce son tam aktarımlara bakılır (NadirKitap sunucudan taramayı Cloudflare ile engelliyor)
+        $unseen = nk_unseen_candidates($auth_store_id);
+        if ($unseen['safe']) {
+            $n = nk_drop_unseen($auth_store_id, array_column($unseen['candidates'], 'id'));
+            nk_json_response(['droppedCount' => $n], true, ["{$auth_store_name}: NadirKitap'ta artık görünmeyen {$n} kitap satıştan kaldırıldı. ({$unseen['note']})"]);
+        }
+        if ($unseen['runs'] && $unseen['complete'] && !$unseen['candidates']) {
+            nk_json_response(['droppedCount' => 0], true, ["{$auth_store_name}: satılmış kitap yok, sitedeki tüm NadirKitap kitapları son aktarımda görüldü. ({$unseen['note']})"]);
+        }
+        if ($unseen['runs']) {
+            $extra = $unseen['candidates'] ? ' Görünmeyen ' . count($unseen['candidates']) . ' kitap Satıcı Paneli\'nde onayınızı bekliyor.' : '';
+            nk_json_response(['droppedCount' => 0], true, ["Satılanlar düşürülmedi: {$unseen['note']}{$extra}"]);
+        }
+        // Hiç tam aktarım yoksa eski yöntem: sunucudan tarama (Cloudflare engellerse açıklama döner)
         $res = nk_sync_store($auth_store_id, 40);
+        if (!empty($res['is_cloudflare'])) {
+            $res['message'] = 'NadirKitap sunucudan taramayı engelliyor. Satılanları düşürmek için önce "Daha önce aktarılmış kitapları da yeniden güncelle" işaretli bir aktarım yapın (250\'den fazla kitabınız varsa sonraki sayfalardan devam ederek), sonra bu düğmeye tekrar basın.';
+        }
         nk_json_response($res, $res['success'], [$res['message'] ?? '']);
     } else {
         $dropped = nk_drop_sold_books($auth_store_id, $active_codes);
@@ -291,6 +310,10 @@ if (preg_match('#^/pbatch/([^/]+)/([^/]+)/(\d+)$#i', $route, $m)) {
     if (!is_array($items) || empty($items)) {
         nk_json_response(0, true);
     }
+    // Bu sayfada NadirKitap'ta görülen ürün kodları (tam aktarımla satılanları düşürmek için)
+    nk_run_page((string)($body['runId'] ?? ''), $auth_store_id, (int)$m[3], array_map(function ($it) {
+        return is_array($it) && is_array($it['meta'] ?? null) ? (string)($it['meta']['sourceProductCode'] ?? '') : '';
+    }, $items));
 
     if (!is_dir(UPLOAD_DIR)) {
         @mkdir(UPLOAD_DIR, 0775, true);
