@@ -65,7 +65,8 @@ $x_title     = trim((string)($_POST['title'] ?? ''));
 $x_author    = trim((string)($_POST['author'] ?? ''));
 $x_publisher = trim((string)($_POST['publisher'] ?? ''));
 $price       = (float)str_replace(',', '.', preg_replace('/[^\d,.]/', '', (string)($_POST['price'] ?? '0')));
-$category_id = (int)($_POST['category_id'] ?? 0) ?: null;
+$cat_auto    = ($_POST['category_id'] ?? '') === 'auto';
+$category_id = $cat_auto ? null : ((int)($_POST['category_id'] ?? 0) ?: null);
 $store_id    = (int)($_POST['store_id'] ?? 0) ?: null;
 $stock       = max(0, (int)($_POST['stock'] ?? 0));
 $is_active   = !empty($_POST['is_active']) ? 1 : 0;
@@ -115,6 +116,18 @@ if ($d && !empty($d['covers']) && function_exists('imagecreatefromstring')) {
     }
 }
 
+// Kategori "Otomatik": ISBN aramasındaki kategori adı, yoksa kitap adı/özet ve Excel'deki grup başlığı
+$cat_note = '';
+if ($cat_auto) {
+    $g = guess_category(trim((string)($d['category'] ?? '')) ?: trim((string)($_POST['note'] ?? '')), (string)($d['summary'] ?? ''), $title);
+    if ($g) {
+        $category_id = $g[0];
+        $cat_note = ' • kategori: ' . $g[1];
+    } else {
+        $cat_note = ' • kategori bulunamadı';
+    }
+}
+
 db_query("INSERT INTO books (title, original_title, isbn, author_id, publisher_id, category_id, price, old_price, stock, pages, year, summary, cover_image, is_active, store_id) VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?)", [
     $title, $d['original_title'] ?? null, $isbn, bi_entity('authors', $author), bi_entity('publishers', $publisher), $category_id,
     $price, $stock, ($d['pages'] ?? null) ?: null, ($d['year'] ?? null) ?: null, $d['summary'] ?? null, $cover, $is_active, $store_id,
@@ -128,5 +141,5 @@ bi_out([
     'ok' => true, 'status' => 'added', 'id' => $book_id, 'title' => $title,
     'cover' => $cover !== 'book_placeholder.svg', 'found' => (bool)$d,
     'message' => ($d ? 'Eklendi' . ($cover !== 'book_placeholder.svg' ? ' (kapaklı)' : ' (kapak bulunamadı)') : 'Eklendi (ISBN ile bilgi bulunamadı, Excel bilgileri kullanıldı)')
-        . ($no_price ? ' — fiyat yok, PASİF eklendi' : ''),
+        . $cat_note . ($no_price ? ' — fiyat yok, PASİF eklendi' : ''),
 ]);

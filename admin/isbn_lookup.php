@@ -49,6 +49,19 @@ function ih_existing_book($isbn)
     }
 }
 
+/** Kaynak kategori adı, kitap adı ve özete göre sitedeki kategorilerden öneri */
+function ih_category_guess($r)
+{
+    global $ih_site_db;
+    if (!$ih_site_db || !function_exists('guess_category') || empty($r['ok'])) return null;
+    try {
+        $g = guess_category((string)($r['category'] ?? ''), (string)($r['summary'] ?? ''), (string)($r['title'] ?? ''));
+    } catch (Throwable $e) {
+        return null;
+    }
+    return $g ? ['id' => $g[0], 'name' => $g[1], 'how' => $g[2]] : null;
+}
+
 // Panelin okuduğu ayarlar
 if (isset($_GET['config'])) {
     $cfg = ih_config();
@@ -88,6 +101,7 @@ if (empty($_GET['nocache']) && !$pages && is_file($cacheFile) && (time() - filem
     if (is_array($c)) {
         $c['cached'] = true;
         $c['existing'] = ih_existing_book($isbn);
+        $c['category_guess'] = ih_category_guess($c);
         ih_json($c);
     }
 }
@@ -102,4 +116,5 @@ if (!empty($res['ok']) && !$res['relay_need']) {
     @file_put_contents($cacheFile, json_encode($res, JSON_UNESCAPED_UNICODE));
 }
 $res['existing'] = ih_existing_book($isbn);
+$res['category_guess'] = ih_category_guess($res);
 ih_json($res);

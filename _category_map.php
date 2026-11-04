@@ -177,3 +177,81 @@ function nk_resolve_category_name($code, $source_url) {
     }
     return '';
 }
+
+/* ===================== KATEGORİ TAHMİNİ (ISBN yardımcısı ve Excel'den toplu ekleme) ===================== */
+
+/** Karşılaştırma için sadeleştirilmiş metin: küçük harf, Türkçe karakterler ASCII, yalnızca harf/rakam */
+function cat_norm($s) {
+    return trim(preg_replace('/[^a-z0-9]+/', ' ', str_replace('-', ' ', slugify_tr((string)$s))));
+}
+
+/**
+ * Kitaba uygun mevcut kategori: [id, ad, nasıl] ya da null.
+ *  1) kaynaktaki kategori adı birebir  2) ad kelimeleri bir kategori adının içinde ("Roman" → "Edebiyat & Roman")
+ *  3) kaynak adı (x3) / kitap adı (x2) / özet (x1) anahtar kelimeleri; açık bir kazanan yoksa null
+ *     (eşit puanda daha özel kategori seçilir: "Masal Kitapları" > "Çocuk & Gençlik")
+ * Numarayla görünen (NadirKitap) kategoriler önerilmez.
+ */
+function guess_category($source_name, $text = '', $title = '') {
+    static $cats = null;
+    if ($cats === null) {
+        $cats = [];
+        foreach (db_fetch_all("SELECT id, name FROM categories ORDER BY id") as $c) {
+            if (!is_numeric_category_name($c['name']) && cat_norm($c['name']) !== '') {
+                $cats[] = ['id' => (int)$c['id'], 'name' => $c['name'], 'n' => cat_norm($c['name'])];
+            }
+        }
+    }
+    if (!$cats) return null;
+    $src = cat_norm($source_name);
+    // Kaynak "Edebiyat > Roman > Türk Romanı" gibi yol olabilir: önce en özel parça
+    $parts = array_reverse(array_filter(array_map('cat_norm', preg_split('/\s*(?:>|\/|,|»|\|)\s*/u', (string)$source_name))));
+    foreach ($parts as $p) {
+        foreach ($cats as $c) if ($c['n'] === $p) return [$c['id'], $c['name'], 'kaynakta aynı ad'];
+    }
+    $generic = ['ve', 'kitap', 'kitaplari', 'kitaplar', 'eserler', 'genel', 'diger', 'turk', 'dunya'];
+    foreach ($parts as $p) {
+        $pw = array_values(array_diff(explode(' ', $p), $generic));
+        if (!$pw) continue;
+        foreach ($cats as $c) {
+            $cw = explode(' ', $c['n']);
+            if (!array_diff($pw, $cw)) return [$c['id'], $c['name'], 'kaynaktaki “' . trim($source_name) . '” adına en yakın'];
+        }
+    }
+    // Anahtar kelime puanı: kategori adının kendi kelimeleri + bilinen eşanlamlılar
+    $hints = [
+        'roman' => ['roman', 'romani', 'romanlari', 'oyku', 'oykuler', 'hikaye', 'hikayeler', 'siir', 'siirler', 'novel', 'fiction', 'edebiyat', 'polisiye', 'fantastik', 'bilim kurgu'],
+        'cocuk' => ['cocuk', 'cocuklar', 'cocuklara', 'masal', 'masallar', 'masallari', 'genclik', 'okul oncesi', 'boyama', 'resimli'],
+        'masal' => ['masal', 'masallar', 'masallari'],
+        'tarih' => ['tarih', 'tarihi', 'osmanli', 'imparatorluk', 'savas', 'savasi', 'cumhuriyet', 'biyografi', 'ani', 'anilar', 'hatirat', 'history'],
+        'felsefe' => ['felsefe', 'felsefesi', 'dusunce', 'psikoloji', 'sosyoloji', 'philosophy', 'nietzsche', 'ahlak'],
+        'din' => ['din', 'dini', 'islam', 'kuran', 'hadis', 'tasavvuf', 'peygamber', 'siyer', 'ilmihal'],
+        'klasik' => ['klasik', 'klasikleri', 'klasikler', 'hasan ali yucel'],
+        'siir' => ['siir', 'siirler', 'siirleri'],
+        'egitim' => ['test', 'soru bankasi', 'deneme sinavi', 'yks', 'lgs', 'kpss', 'tyt', 'ayt', 'konu anlatimli', 'ders'],
+    ];
+    $t_src = ' ' . $src . ' ';
+    $t_title = ' ' . cat_norm($title) . ' ';
+    $t_text = ' ' . cat_norm($text) . ' ';
+    if (trim($t_src . $t_title . $t_text) === '') return null;
+    $scores = [];
+    foreach ($cats as $c) {
+        $kw = array_diff(explode(' ', $c['n']), $generic);
+        foreach ($kw as $w) {
+            if (strlen($w) < 3) continue;
+            foreach ($hints as $key => $list) if (strpos($w, $key) === 0) $kw = array_merge($kw, $list);
+        }
+        $kw = array_unique(array_filter($kw, function ($w) { return strlen($w) >= 3; }));
+        $score = 0;
+        foreach ($kw as $w) {
+            $score += 3 * substr_count($t_src, ' ' . $w . ' ') + 2 * substr_count($t_title, ' ' . $w . ' ') + substr_count($t_text, ' ' . $w . ' ');
+        }
+        if ($score > 0) $scores[$c['id']] = [$score, count($kw), $c];
+    }
+    if (!$scores) return null;
+    uasort($scores, function ($a, $b) { return $b[0] <=> $a[0] ?: $a[1] <=> $b[1]; });
+    $top = array_values($scores);
+    // açık kazanan: en az 2 puan ve ikinciden belirgin fazla (eşitse daha özel olan)
+    if ($top[0][0] < 2 || (isset($top[1]) && $top[1][0] !== $top[0][0] && $top[1][0] * 1.5 > $top[0][0])) return null;
+    return [$top[0][2]['id'], $top[0][2]['name'], 'kitabın adı/özetine göre tahmin'];
+}
