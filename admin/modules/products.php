@@ -10,6 +10,8 @@ $edit_id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 $authors = db_fetch_all("SELECT * FROM authors ORDER BY name ASC");
 $publishers = db_fetch_all("SELECT * FROM publishers ORDER BY name ASC");
 $categories = db_fetch_all("SELECT * FROM categories ORDER BY name ASC");
+$categories = categories_for_select($categories); // numaralı NadirKitap kategorileri adıyla ve sonda
+$numeric_cat_count = count(array_filter($categories, function ($c) { return $c['is_numeric']; }));
 $showcases = db_fetch_all("SELECT * FROM showcases ORDER BY id ASC");
 $stores_all = db_fetch_all("SELECT id, name FROM stores ORDER BY name ASC");
 
@@ -380,6 +382,7 @@ if (($action === 'add' || $action === 'edit') && $edit_id > 0) {
                             <?php endforeach; ?>
                             <option value="__new">+ Yeni kategori ekle…</option>
                         </select>
+                        <?php if ($numeric_cat_count): ?><small class="d-block mt-1 fs-8 text-muted"><?= $numeric_cat_count ?> kategori hâlâ NadirKitap numarasıyla kayıtlı (listenin sonunda). <a href="index.php?p=NkCategories">Tek seferde adlandır</a></small><?php endif; ?>
                         <input type="text" name="new_category_name" id="newCategoryName" class="form-control mt-2 d-none" placeholder="Yeni kategorinin adı" maxlength="120">
                         <div class="form-text"><a href="index.php?p=Catalog" target="_blank">Yazar, yayınevi ve kategorileri düzenle</a></div>
                     </div>
@@ -531,7 +534,7 @@ if (($action === 'add' || $action === 'edit') && $edit_id > 0) {
                 });
             </script>
             <?php if ($action === 'add'): ?>
-                <script src="isbn_helper/isbn-helper.js?v=6" defer></script>
+                <script src="isbn_helper/isbn-helper.js?v=7" defer></script>
             <?php endif; ?>
         </div>
     </div>

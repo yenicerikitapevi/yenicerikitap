@@ -255,3 +255,30 @@ function guess_category($source_name, $text = '', $title = '') {
     if ($top[0][0] < 2 || (isset($top[1]) && $top[1][0] !== $top[0][0] && $top[1][0] * 1.5 > $top[0][0])) return null;
     return [$top[0][2]['id'], $top[0][2]['name'], 'kitabın adı/özetine göre tahmin'];
 }
+
+/**
+ * Açılır listeler için kategoriler: adlandırılmış olanlar alfabetik önce; numarayla kalmış (NadirKitap) kategoriler
+ * sonda ve tablodaki adıyla "Ad (NadirKitap #104)" olarak. Kayıtlar değişmez; kalıcı ad için NadirKitap Kategori Adları sayfası.
+ */
+function categories_for_select(array $rows) {
+    $named = $numeric = [];
+    foreach ($rows as $c) {
+        if (is_numeric_category_name($c['name'])) {
+            $label = nk_category_label($c['name']);
+            $c['name'] = ($label !== '' ? $label . ' ' : '') . '(NadirKitap #' . trim($c['name']) . ')';
+            $c['is_numeric'] = true;
+            $numeric[] = $c;
+        } else {
+            $c['is_numeric'] = false;
+            $named[] = $c;
+        }
+    }
+    $cmp = function ($a, $b) {
+        return strcmp(cat_norm($a['name']), cat_norm($b['name'])) ?: strcmp($a['name'], $b['name']);
+    };
+    usort($named, $cmp);
+    usort($numeric, function ($a, $b) use ($cmp) { // adı tabloda olmayanlar en sonda
+        return (strpos($a['name'], '(') === 0) <=> (strpos($b['name'], '(') === 0) ?: $cmp($a, $b);
+    });
+    return array_merge($named, $numeric);
+}

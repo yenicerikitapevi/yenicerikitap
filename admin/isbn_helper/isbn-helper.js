@@ -53,7 +53,7 @@
   }
   function realOptions(sel) {
     return Array.prototype.filter.call(sel.options, function (o) {
-      return ['', '0', '__new'].indexOf(o.value) < 0 && !/^\s*\d+\s*$/.test(o.text); // numaralı (NadirKitap) kategoriler hariç
+      return ['', '0', '__new'].indexOf(o.value) < 0 && !/^\s*\d+\s*$/.test(o.text) && !/\(NadirKitap #\d+\)/.test(o.text); // numaralı (NadirKitap) kategoriler hariç
     });
   }
   /** Listede BİREBİR aynı ad (büyük/küçük harf, Türkçe karakter ve noktalama farkı yok sayılır). Benzer adlar eşleşmez. */
