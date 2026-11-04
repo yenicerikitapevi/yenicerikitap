@@ -37,7 +37,20 @@ if (strpos($isbn, '978') === 0) {
 }
 $ph = implode(',', array_fill(0, count($cands), '?'));
 $ex = db_fetch("SELECT id, title FROM books WHERE REPLACE(REPLACE(UPPER(isbn), '-', ''), ' ', '') IN ($ph) LIMIT 1", $cands);
-if ($ex) bi_out(['ok' => true, 'status' => 'exists', 'id' => (int)$ex['id'], 'title' => $ex['title'], 'message' => 'Zaten kayıtlı']);
+if ($ex) {
+    // Aynı dosya ikinci kez yüklenirse kitap tekrar eklenmez. İstenirse yalnızca fiyatı Excel'dekiyle güncellenir
+    // (sahaf kitabının fiyatına dokunulmaz).
+    $new_price = (float)str_replace(',', '.', preg_replace('/[^\d,.]/', '', (string)($_POST['price'] ?? '0')));
+    if (!empty($_POST['update_price']) && $new_price > 0) {
+        $cur = db_fetch("SELECT price, store_id FROM books WHERE id = ?", [(int)$ex['id']]);
+        if ($cur && empty($cur['store_id']) && abs((float)$cur['price'] - $new_price) >= 0.01) {
+            db_query("UPDATE books SET price = ? WHERE id = ?", [$new_price, (int)$ex['id']]);
+            log_action('Excel ile Fiyat Güncellendi', 'Products', (int)$ex['id'], $ex['title'] . ': ' . $cur['price'] . ' → ' . $new_price);
+            bi_out(['ok' => true, 'status' => 'exists', 'id' => (int)$ex['id'], 'title' => $ex['title'], 'message' => 'Zaten kayıtlı — fiyat güncellendi (' . format_price($cur['price']) . ' → ' . format_price($new_price) . ')']);
+        }
+    }
+    bi_out(['ok' => true, 'status' => 'exists', 'id' => (int)$ex['id'], 'title' => $ex['title'], 'message' => 'Zaten kayıtlı, tekrar eklenmedi']);
+}
 
 /** Excel'deki BÜYÜK HARF adları Türkçe kurallarıyla "Baş Harfleri Büyük" yapar */
 function bi_title_case($s) {
