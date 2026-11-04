@@ -292,6 +292,24 @@ $header_active = '';
                 <?php endif; ?>
             </div>
 
+            <?php $my_q = db_fetch_all("SELECT q.*, b.title AS book_title, b.slug AS book_slug, s.name AS store_name FROM book_questions q LEFT JOIN books b ON b.id = q.book_id LEFT JOIN stores s ON s.id = q.store_id WHERE q.customer_id = ? ORDER BY q.id DESC LIMIT 30", [(int)$user['id']]); ?>
+            <?php if ($my_q): ?>
+                <div class="card border-0 shadow-sm rounded-4 p-4 mb-4" id="sorularim">
+                    <h2 class="h6 fw-bold mb-3"><i class="bi bi-chat-dots me-1 text-danger"></i>Sorularım</h2>
+                    <?php foreach ($my_q as $q): ?>
+                        <div class="border-bottom pb-2 mb-2 fs-7">
+                            <div class="fs-8 text-muted mb-1"><?= e(date('d.m.Y', strtotime($q['created_at']))) ?> • <?= e($q['store_name'] ?: APP_NAME) ?><?php if ($q['book_title']): ?> • <a href="<?= e(book_path(['id' => $q['book_id'], 'slug' => $q['book_slug']])) ?>" class="text-danger"><?= e($q['book_title']) ?></a><?php endif; ?></div>
+                            <div style="white-space: pre-line;"><?= e($q['message']) ?></div>
+                            <?php if ($q['reply'] !== null): ?>
+                                <div class="border-start border-3 border-danger ps-2 mt-1 text-secondary" style="white-space: pre-line;"><b>Yanıt:</b> <?= e($q['reply']) ?></div>
+                            <?php else: ?>
+                                <div class="text-muted fs-8 mt-1"><i class="bi bi-hourglass-split me-1"></i>Yanıt bekleniyor</div>
+                            <?php endif; ?>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+            <?php endif; ?>
+
             <div class="row g-4">
                 <div class="col-lg-7" id="bilgiler">
                     <form method="POST" action="hesap.php?a=bilgiler" class="card border-0 shadow-sm rounded-4 p-4 h-100">

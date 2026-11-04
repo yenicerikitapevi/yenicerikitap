@@ -689,6 +689,7 @@ require_once __DIR__ . '/_mail.php';
 
 // NadirKitap otomatik senkronizasyon ve satılan kitapları düşürme motoru
 require_once __DIR__ . '/_nk_sync.php';
+require_once __DIR__ . '/_messages.php';
 
 /**
  * Sahaf kitapları için kondisyon (durum) tanımları; vitrinde "Kondisyon durumuna dikkat ediniz" kutusunda gösterilir.
