@@ -38,6 +38,22 @@ function resolve_or_create($table, $selected, $new_name) {
 }
 $collections = db_fetch_all("SELECT * FROM collections ORDER BY id ASC");
 
+// Listeden hızlı stok değişikliği (AJAX): kitabın içine girmeden
+if ($action === 'stock' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    $sid = (int)($_POST['id'] ?? 0);
+    $sval = (int)($_POST['stock'] ?? -1);
+    while (ob_get_level()) ob_end_clean();
+    header('Content-Type: application/json; charset=utf-8');
+    if ($sid <= 0 || $sval < 0 || $sval > 100000 || !db_fetch("SELECT id FROM books WHERE id = ?", [$sid])) {
+        echo json_encode(['ok' => false, 'error' => 'Geçersiz stok']);
+        exit;
+    }
+    db_query("UPDATE books SET stock = ? WHERE id = ?", [$sval, $sid]);
+    log_action('Stok Güncellendi', 'Products', $sid, 'Yeni stok: ' . $sval);
+    echo json_encode(['ok' => true, 'stock' => $sval]);
+    exit;
+}
+
 // Toplu işlemler: seçili kitapları aktif/pasif yap, sil, kategori değiştir, vitrine ekle/çıkar
 if ($action === 'bulk' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $ids = array_values(array_unique(array_filter(array_map('intval', (array)($_POST['ids'] ?? [])))));
@@ -707,11 +723,7 @@ if (($action === 'add' || $action === 'edit') && $edit_id > 0) {
                                         <div class="fw-extrabold text-danger fs-7"><?= format_price($b['price']) ?><?php if (!empty($b['store_id'])): ?> <i class="bi bi-lock-fill text-secondary fs-8" title="Alt dükkan fiyatı, panelden değiştirilemez"></i><?php endif; ?></div>
                                     </td>
                                     <td>
-                                        <?php if ($b['stock'] < 10): ?>
-                                            <span class="badge bg-danger text-white fs-8"><?= $b['stock'] ?> Adet</span>
-                                        <?php else: ?>
-                                            <span class="badge bg-success bg-opacity-10 text-success fs-8"><?= $b['stock'] ?> Adet</span>
-                                        <?php endif; ?>
+                                        <input type="number" min="0" max="100000" class="form-control form-control-sm js-stock text-end <?= $b['stock'] < 1 ? 'border-danger text-danger' : '' ?>" style="width: 80px;" value="<?= (int)$b['stock'] ?>" data-id="<?= (int)$b['id'] ?>" data-url="index.php?p=Products&action=stock" title="Stoğu yazıp Enter'a basın ya da kutudan çıkın; hemen kaydedilir">
                                     </td>
                                     <td>
                                         <?php if ($b['is_active']): ?>
