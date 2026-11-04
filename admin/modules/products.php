@@ -224,6 +224,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_book'])) {
     db_query("UPDATE books SET meta_description = ? WHERE id = ?", [$meta_desc, $book_id]);
     book_refresh_slug($book_id);
     book_touch($book_id);
+    // Ek görseller (kapak değiştiyse galeri listesi de güncellenir)
+    $gallery_errors = book_save_gallery($book_id, $_FILES['extra_files'] ?? null, array_map('strval', (array)($_POST['remove_extra'] ?? [])));
+    if ($gallery_errors) {
+        set_flash('warning', 'Kitap kaydedildi; bazı görseller eklenemedi: ' . implode(' ', $gallery_errors));
+    }
 
     db_query("DELETE FROM book_showcase WHERE book_id = ?", [$book_id]);
     foreach ($selected_showcases as $sc_id) {
@@ -327,6 +332,7 @@ if (($action === 'add' || $action === 'edit') && $edit_id > 0) {
                             </div>
                         </div>
                     </div>
+                    <div class="col-md-12"><?= gallery_form_html($edit_id > 0 ? $book_data : null) ?></div>
 
                     <div class="col-md-6">
                         <label class="form-label fw-semibold fs-7">Kitap Adı *</label>
