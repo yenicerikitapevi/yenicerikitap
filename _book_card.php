@@ -44,6 +44,11 @@ $img_src = cover_url($b['cover_image'] ?? '');
                 <span class="old-price"><?= format_price($b['old_price']) ?></span>
             <?php endif; ?>
         </div>
+        <?php if (isset($b['stock'])): $stk = (int)$b['stock']; ?>
+            <div class="fs-8 mb-2 <?= $stk <= 0 ? 'text-secondary' : ($stk <= 3 ? 'text-danger fw-semibold' : 'text-success') ?>" style="margin-top: -0.5rem;">
+                <i class="bi <?= $stk > 0 ? 'bi-box-seam' : 'bi-x-circle' ?> me-1"></i><?= $stk <= 0 ? 'Stokta yok' : ($stk <= 3 ? 'Son ' . $stk . ' adet' : 'Stokta ' . $stk . ' adet') ?>
+            </div>
+        <?php endif; ?>
 
         <?php if ((int)$b['stock'] > 0): ?>
             <button class="btn btn-add-cart mt-auto"

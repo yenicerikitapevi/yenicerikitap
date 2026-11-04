@@ -89,8 +89,15 @@ $books = db_fetch_all("SELECT b.*, a.name as author_name, p.name as publisher_na
                        LEFT JOIN categories c ON b.category_id = c.id 
                        LEFT JOIN stores s ON b.store_id = s.id 
                        WHERE {$where_sql} 
-                       ORDER BY b.id DESC 
+                       ORDER BY " . ($seller === '' ? "(b.store_id IS NULL) DESC, " : '') . "b.id DESC 
                        LIMIT {$per_page} OFFSET {$offset}", $params);
+// Satıcı düğmelerinde sonuç sayıları; 'Tümü'nde önce Yeniçeri Kitabevi kitapları, sonra sahaflar (ayrı başlıkla)
+$seller_counts = ['' => $total_books];
+if ($seller === '') {
+    $yc = (int)(db_fetch("SELECT COUNT(*) as cnt FROM books b LEFT JOIN authors a ON b.author_id = a.id LEFT JOIN publishers p ON b.publisher_id = p.id WHERE {$where_sql} AND b.store_id IS NULL", $params)['cnt'] ?? 0);
+    $seller_counts['yeniceri'] = $yc;
+    $seller_counts['sahaf'] = $total_books - $yc;
+}
 
 $all_categories = nav_categories();
 track_view('category');
@@ -192,7 +199,7 @@ track_view('category');
                 <?php endif; ?>
                 <div class="d-flex flex-wrap gap-2 mb-4 fs-7" role="group" aria-label="Satıcı">
                     <?php foreach (['' => ['Tümü', 'bi-grid'], 'yeniceri' => ['Yeniçeri Kitabevi', 'bi-book'], 'sahaf' => ['Sahaflar (İkinci El)', 'bi-shop']] as $sv => [$sl, $si]): ?>
-                        <a href="<?= e($seller_url($sv)) ?>" rel="nofollow" class="btn btn-sm rounded-pill px-3 <?= $seller === $sv ? 'btn-danger' : 'btn-outline-secondary' ?>"><i class="bi <?= $si ?> me-1"></i><?= $sl ?></a>
+                        <a href="<?= e($seller_url($sv)) ?>" rel="nofollow" class="btn btn-sm rounded-pill px-3 <?= $seller === $sv ? 'btn-danger' : 'btn-outline-secondary' ?>"><i class="bi <?= $si ?> me-1"></i><?= $sl ?><?= isset($seller_counts[$sv]) ? ' <span class="opacity-75">(' . $seller_counts[$sv] . ')</span>' : '' ?></a>
                     <?php endforeach; ?>
                 </div>
                 <?php if ($category && trim((string)$category['description']) !== '' && $page === 1 && $query === ''): ?>
@@ -212,7 +219,11 @@ track_view('category');
                     </div>
                 <?php else: ?>
                     <div class="row g-3 row-cols-2 row-cols-md-3">
-                        <?php foreach ($books as $b): ?>
+                        <?php $grp_prev = null; foreach ($books as $b): ?>
+                            <?php $grp = empty($b['store_id']) ? 'y' : 's';
+                            if ($seller === '' && $grp !== $grp_prev && ($grp_prev !== null || ($seller_counts['yeniceri'] ?? 0) > 0) && ($seller_counts['sahaf'] ?? 0) > 0): ?>
+                                <div class="w-100 pt-2"><div class="fw-bold fs-7 text-secondary border-bottom pb-1"><i class="bi <?= $grp === 'y' ? 'bi-book' : 'bi-shop' ?> text-danger me-1"></i><?= $grp === 'y' ? 'Yeniçeri Kitabevi' : 'Sahaflar (İkinci El)' ?></div></div>
+                            <?php endif; $grp_prev = $grp; ?>
                             <div class="col">
                                 <?php include __DIR__ . '/_book_card.php'; ?>
                             </div>

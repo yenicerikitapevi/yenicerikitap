@@ -28,18 +28,20 @@ if (!$book) {
 }
 $id = (int)$book['id'];
 
+// Benzer kitaplar ve yazarın diğer kitapları aynı satıcıdan (Yeniçeri ↔ sahaf karışmasın)
+$same_seller_sql = empty($book['store_id']) ? 'b.store_id IS NULL' : 'b.store_id = ' . (int)$book['store_id'];
 $related_books = db_fetch_all("SELECT b.*, a.name as author_name, p.name as publisher_name 
                                FROM books b 
                                LEFT JOIN authors a ON b.author_id = a.id 
                                LEFT JOIN publishers p ON b.publisher_id = p.id 
-                               WHERE b.category_id = ? AND b.id != ? AND b.author_id != ? AND b.is_active = 1 
+                               WHERE b.category_id = ? AND b.id != ? AND b.author_id != ? AND b.is_active = 1 AND {$same_seller_sql} 
                                ORDER BY b.id DESC LIMIT 4", [$book['category_id'], $id, $book['author_id']]);
 // Aynı yazarın diğer kitapları (iç bağlantılar)
 $author_books = db_fetch_all("SELECT b.*, a.name as author_name, p.name as publisher_name 
                                FROM books b 
                                LEFT JOIN authors a ON b.author_id = a.id 
                                LEFT JOIN publishers p ON b.publisher_id = p.id 
-                               WHERE b.author_id = ? AND b.id != ? AND b.is_active = 1 
+                               WHERE b.author_id = ? AND b.id != ? AND b.is_active = 1 AND {$same_seller_sql} 
                                ORDER BY b.id DESC LIMIT 4", [$book['author_id'], $id]);
 
 $crumbs = [['Ana Sayfa', ''], [$book['category_name'] ?: 'Kitaplar', $book['category_slug'] && !is_numeric_category_name($book['category_name']) ? category_path(['id' => $book['category_id'], 'slug' => $book['category_slug']]) : 'category.php'], [$book['title'], null]];
@@ -135,7 +137,7 @@ track_view('detail', $book['id'], $book['store_id'] ?? null);
                 <?php endif; ?>
                 <?php if (!empty($book['summary'])): ?>
                     <p class="text-secondary fs-7 mb-1"><?= e(mb_strimwidth(trim($book['summary']), 0, 260, '…', 'UTF-8')) ?></p>
-                    <a href="#urunSekmeler" class="fs-7 text-danger fw-semibold text-decoration-none" onclick="var t = document.querySelector('[data-bs-target=&quot;#tabDesc&quot;]'); if (t && window.bootstrap) bootstrap.Tab.getOrCreateInstance(t).show();">Devamını oku <i class="bi bi-chevron-down"></i></a>
+                    <a href="<?= e(book_path($book)) ?>#urunSekmeler" class="fs-7 text-danger fw-semibold text-decoration-none" onclick="event.preventDefault(); var t = document.querySelector('[data-bs-target=&quot;#tabDesc&quot;]'); if (t && window.bootstrap) bootstrap.Tab.getOrCreateInstance(t).show(); var s = document.getElementById('urunSekmeler'); if (s) s.scrollIntoView({behavior: 'smooth', block: 'start'});">Devamını oku <i class="bi bi-chevron-down"></i></a>
                 <?php endif; ?>
             </div>
 
@@ -152,7 +154,7 @@ track_view('detail', $book['id'], $book['store_id'] ?? null);
                         <div class="display-6 fw-extrabold text-danger mb-2"><?= format_price($book['price']) ?></div>
                         <div class="fs-7 mb-3">
                             <?php if ($in_stock): ?>
-                                <span class="text-success fw-semibold"><i class="bi bi-check-circle-fill me-1"></i>Stokta<?= (int)$book['stock'] <= 3 ? ' — son ' . (int)$book['stock'] . ' adet' : '' ?></span>
+                                <span class="text-success fw-semibold"><i class="bi bi-check-circle-fill me-1"></i>Stokta: <?= (int)$book['stock'] ?> adet<?= (int)$book['stock'] <= 3 ? ' <span class="text-danger">(son ' . ((int)$book['stock'] === 1 ? 'ürün' : (int)$book['stock'] . ' adet') . ')</span>' : '' ?></span>
                             <?php else: ?>
                                 <span class="text-secondary fw-semibold"><i class="bi bi-x-circle-fill me-1"></i>Tükendi</span>
                             <?php endif; ?>
@@ -197,6 +199,7 @@ track_view('detail', $book['id'], $book['store_id'] ?? null);
                             <div class="fw-bold"><i class="bi bi-patch-check-fill text-danger me-1"></i>Yeniçeri Kitabevi</div>
                             <div class="fs-8 text-muted">Etimesgut / Ankara • Kitap kendi stoğumuzdan gönderilir</div>
                         <?php endif; ?>
+                        <button type="button" class="btn btn-sm btn-outline-danger w-100 mt-2 rounded-pill" data-bs-toggle="modal" data-bs-target="#soruModal"><i class="bi bi-chat-dots me-1"></i>Satıcıya soru sor</button>
                     </div>
                 </div>
             </div>
@@ -295,5 +298,53 @@ track_view('detail', $book['id'], $book['store_id'] ?? null);
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
     <script src="<?= asset_v('assets/js/app.js') ?>"></script>
     <?= track_script() ?>
+<?php
+if (empty($_SESSION['bq_token'])) $_SESSION['bq_token'] = bin2hex(random_bytes(16));
+$bq_me = !empty($_SESSION['customer_user']) ? db_fetch("SELECT name, email FROM users WHERE id = ? AND role = 'customer'", [(int)$_SESSION['customer_user']['id']]) : null;
+?>
+<div class="modal fade" id="soruModal" tabindex="-1" aria-labelledby="soruBaslik" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <form class="modal-content rounded-4" id="soruForm">
+            <div class="modal-header">
+                <h2 class="modal-title h6 fw-bold" id="soruBaslik"><i class="bi bi-chat-dots text-danger me-1"></i>Satıcıya soru sorun <span class="fw-normal text-muted">• <?= e($is_sahaf ? $book['store_name'] : APP_NAME) ?></span></h2>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Kapat"></button>
+            </div>
+            <div class="modal-body">
+                <div class="fs-8 text-muted mb-2">“<?= e($book['title']) ?>” hakkında. Yanıt e-posta adresinize gönderilir; adresiniz satıcıyla paylaşılmaz.</div>
+                <input type="hidden" name="token" value="<?= e($_SESSION['bq_token']) ?>">
+                <input type="hidden" name="book_id" value="<?= (int)$book['id'] ?>">
+                <div style="position:absolute;left:-9999px" aria-hidden="true"><input type="text" name="website" tabindex="-1" autocomplete="off"></div>
+                <?php if ($bq_me): ?>
+                    <div class="fs-7 mb-2"><i class="bi bi-person-check text-success me-1"></i><?= e($bq_me['name']) ?> (<?= e($bq_me['email']) ?>)</div>
+                <?php else: ?>
+                    <div class="row g-2 mb-2">
+                        <div class="col-sm-6"><input type="text" name="name" class="form-control" placeholder="Adınız" maxlength="120" required autocomplete="name"></div>
+                        <div class="col-sm-6"><input type="email" name="email" class="form-control" placeholder="E-posta adresiniz" maxlength="190" required autocomplete="email"></div>
+                    </div>
+                <?php endif; ?>
+                <textarea name="message" class="form-control" rows="4" minlength="5" maxlength="1000" required placeholder="Örn: Kitabın sayfalarında not ya da yırtık var mı?"></textarea>
+                <div id="soruSonuc" class="fs-7 mt-2" aria-live="polite"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="submit" class="btn btn-danger rounded-pill px-4 fw-semibold"><i class="bi bi-send me-1"></i>Gönder</button>
+            </div>
+        </form>
+    </div>
+</div>
+<script>
+document.getElementById('soruForm').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var f = this, btn = f.querySelector('button[type=submit]'), out = document.getElementById('soruSonuc');
+    btn.disabled = true; out.className = 'fs-7 mt-2 text-muted'; out.textContent = 'Gönderiliyor…';
+    fetch('soru.php', { method: 'POST', body: new FormData(f), credentials: 'same-origin' })
+        .then(function (r) { return r.json(); })
+        .then(function (j) {
+            out.className = 'fs-7 mt-2 ' + (j.ok ? 'text-success fw-semibold' : 'text-danger');
+            out.textContent = j.message;
+            if (j.ok) { f.querySelector('textarea').value = ''; } else { btn.disabled = false; }
+        })
+        .catch(function () { out.className = 'fs-7 mt-2 text-danger'; out.textContent = 'Bağlantı hatası, tekrar deneyin.'; btn.disabled = false; });
+});
+</script>
 </body>
 </html>

@@ -77,7 +77,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'bulk'
     redirect('index.php?' . http_build_query(array_filter(['q' => $_POST['q'] ?? '', 'durum' => $_POST['durum'] ?? '', 'page' => $_POST['page'] ?? ''])));
 }
 $report_base     = 'index.php?tab=rapor&';
-$tab             = ($_GET['tab'] ?? '') === 'rapor' ? 'rapor' : 'dukkan';
+$tab             = in_array($_GET['tab'] ?? '', ['rapor', 'mesaj'], true) ? $_GET['tab'] : 'dukkan';
+
+// Müşteri sorusuna yanıt (yalnızca bu dükkânın soruları)
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'bq_reply') {
+    if (!hash_equals($store_token, (string)($_POST['token'] ?? ''))) {
+        set_flash('warning', 'Oturum süresi doldu, tekrar deneyin.');
+    } else {
+        [$ok, $msg] = bq_reply((int)($_POST['qid'] ?? 0), $report_store_id, $_POST['reply'] ?? '');
+        set_flash($ok ? 'success' : 'danger', $msg);
+    }
+    redirect('index.php?tab=mesaj');
+}
+$bq_unread = bq_unread_count($report_store_id);
 
 // NadirKitap Senkronizasyon İsteği (Tek tıkla satılanları düşür & yeni kitapları çek)
 // Önce son tam aktarımlara bakılır (NadirKitap sunucudan taramayı engelliyor); drop_unseen: görünmeyenler listesini onaylayarak düşür
@@ -192,10 +204,16 @@ if ($tab === 'dukkan') {
         <ul class="nav nav-pills mb-4 bg-white p-2 rounded-4 shadow-sm border">
             <li class="nav-item"><a class="nav-link fw-semibold <?= $tab === 'dukkan' ? 'active bg-danger text-white' : 'text-secondary' ?>" href="index.php"><i class="bi bi-shop me-1"></i> Dükkânım</a></li>
             <li class="nav-item"><a class="nav-link fw-semibold <?= $tab === 'rapor' ? 'active bg-danger text-white' : 'text-secondary' ?>" href="index.php?tab=rapor"><i class="bi bi-graph-up-arrow me-1"></i> Ziyaret & Satış Raporu</a></li>
+            <li class="nav-item"><a class="nav-link fw-semibold <?= $tab === 'mesaj' ? 'active bg-danger text-white' : 'text-secondary' ?>" href="index.php?tab=mesaj"><i class="bi bi-chat-dots me-1"></i> Mesajlar<?= $bq_unread ? ' <span class="badge bg-warning text-dark">' . $bq_unread . '</span>' : '' ?></a></li>
         </ul>
 
         <?php if ($tab === 'rapor'): ?>
             <?php include __DIR__ . '/../admin/modules/reports.php'; ?>
+        <?php elseif ($tab === 'mesaj'): ?>
+            <div class="card border-0 shadow-sm rounded-4">
+                <div class="card-header bg-white p-3"><b>Müşteri Soruları</b> <span class="text-muted fs-8">— kitap sayfalarındaki “Satıcıya soru sor” ile gelir. Yanıtınız müşteriye e-postayla gider; müşterinin e-posta adresi gizlidir.</span></div>
+                <?= bq_list_html(bq_list($report_store_id), 'index.php?tab=mesaj', $store_token) ?>
+            </div>
         <?php else: ?>
             <!-- AKTARIM UYGULAMASI: indirme ve giriş bilgileri -->
             <?php $app_url = trim(setting('nk_app_download_url', '')) ?: 'https://github.com/yenicerikitapevi/yenicerikitap/releases/download/kitapekapp-v1.4.2/kitapekapp-1.4.2-dagitim.zip'; // Site Ayarları'nda adres girilmediyse GitHub sürümü ?>

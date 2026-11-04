@@ -17,6 +17,8 @@ $rand = $GLOBALS['pdo']->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite' ? 'RAN
 
 $sel = "SELECT b.id, b.title, b.slug, b.price, b.old_price, b.cover_image, b.stock, a.name as author_name FROM books b LEFT JOIN authors a ON a.id = b.author_id
         WHERE b.is_active = 1 AND b.stock > 0 AND b.id NOT IN ({$ex})";
+// Öneriler eklenen kitabın satıcısından (Yeniçeri ↔ sahaf karışmasın)
+if ($book) $sel .= empty($book['store_id']) ? " AND b.store_id IS NULL" : " AND b.store_id = " . (int)$book['store_id'];
 $out = [];
 $add = function ($rows) use (&$out) {
     foreach ($rows as $r) {
