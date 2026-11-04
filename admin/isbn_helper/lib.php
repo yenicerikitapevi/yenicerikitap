@@ -527,6 +527,37 @@ function ih_product_data($html)
     return $out;
 }
 
+/**
+ * Kitap ebadı ("13,5 x 21 cm"): önce ürün özellik tablosundaki "Ebat/Boyut" alanı, yoksa sayfa metni.
+ * $maps: ayrıştırıcının bulduğu alan => değer dizileri (anahtar adları farklı yazılabilir).
+ */
+function ih_dimensions($html, array $map = [])
+{
+    $cands = [];
+    foreach ($map as $k => $v) {
+        if (preg_match('/ebat|boyut|olcu|ölçü|dimension/iu', (string)$k)) $cands[] = (string)$v;
+    }
+    if ($html) {
+        $txt = html_entity_decode(strip_tags(preg_replace('#<(script|style)[^>]*>.*?</\1>#is', ' ', (string)$html)), ENT_QUOTES, 'UTF-8');
+        if (preg_match_all('/(?:Ebat|Ebatlar|Boyut|Boyutlar|Kitap Boyutu|Ölçüler)\s*:?\s*([^\n\r]{3,40})/iu', $txt, $m)) {
+            $cands = array_merge($cands, $m[1]);
+        }
+    }
+    foreach ($cands as $c) {
+        if (preg_match('/(?<![\d.,])(\d{1,3}(?:[.,]\d{1,2})?)\s*(?:cm|mm)?\s*[xX×*]\s*(\d{1,3}(?:[.,]\d{1,2})?)(?:\s*(?:cm|mm)?\s*[xX×*]\s*(\d{1,3}(?:[.,]\d{1,2})?))?\s*(cm|mm|centimeters?)?/u', $c, $d)) {
+            $a = (float)str_replace(',', '.', $d[1]);
+            $b = (float)str_replace(',', '.', $d[2]);
+            if ((!empty($d[4]) && stripos($d[4], 'mm') === 0) || ($a > 60 && $b > 60)) { $a /= 10; $b /= 10; }
+            if ($a < 5 || $b < 5 || $a > 60 || $b > 60) continue; // kitap ölçüsü değil
+            $w = min($a, $b);
+            $h = max($a, $b);
+            $f = function ($n) { return rtrim(rtrim(number_format($n, 1, ',', ''), '0'), ','); };
+            return $f($w) . ' x ' . $f($h) . ' cm';
+        }
+    }
+    return null;
+}
+
 function ih_pairs($extra)
 {
     $d = [];
@@ -605,6 +636,7 @@ function ih_ticimax_stage2($r, $isbn, $cand, $page)
         $meta['year'] = (int)$m[1];
     }
     $r['meta'] = $meta;
+    $r['meta']['dimensions'] = ih_dimensions($html, $ex);
     $price = ih_parse_tl(isset($cand['total_sale_price']) && $cand['total_sale_price'] ? $cand['total_sale_price'] : (isset($cand['sale_price']) ? $cand['sale_price'] : null));
     $lst = ih_parse_tl(isset($cand['total_base_price']) ? $cand['total_base_price'] : null);
     if ($price) {
@@ -654,6 +686,7 @@ function ih_dr_parse($isbn, $resp)
         $meta['category'] = json_decode('"' . end($cm[1]) . '"') ?: end($cm[1]);
     }
     $r['meta'] = $meta;
+    $r['meta']['dimensions'] = ih_dimensions($html);
     $off = isset($book['offers']) ? $book['offers'] : [];
     if (is_array($off) && isset($off[0])) {
         $off = $off[0];
@@ -719,6 +752,7 @@ function ih_kitapambari_parse($isbn, $resp)
         'summary'   => $desc ? ih_good_summary($desc->textContent) : '',
         'cover_urls' => array_slice($imgs, 0, 1),
     ];
+    $r['meta']['dimensions'] = ih_dimensions($resp['body'], $fields);
     $price = ih_parse_tl($v->getAttribute('data-prd-final-price'));
     $lst = ih_parse_tl($v->getAttribute('data-prd-price'));
     if ($price) {
@@ -801,6 +835,7 @@ function ih_kitapyurdu_parse($isbn, $hint, $href, $html)
         'summary'   => ih_good_summary(isset($book['description']) ? $book['description'] : ''),
         'cover_urls' => array_slice($imgs, 0, 1),
     ];
+    $r['meta']['dimensions'] = ih_dimensions($html, $attrs);
     // Kategori: "İlgili Kategoriler" bölümündeki ilk yolun son halkası (Kitap > Edebiyat > Roman > ...)
     $catBlock = $x->query('//*[' . ih_cls('ky-pd-attributes__category') . ']')->item(0);
     if ($catBlock) {
@@ -872,6 +907,9 @@ function ih_openlibrary_parse($isbn, $resp, $edResp, $workResp)
         if (!empty($ed['number_of_pages']) && !$meta['pages']) {
             $meta['pages'] = $ed['number_of_pages'];
         }
+    }
+    if (!empty($ed['physical_dimensions'])) {
+        $meta['dimensions'] = ih_dimensions('Ebat: ' . $ed['physical_dimensions']);
     }
     $r['meta'] = $meta;
     return $r;
@@ -1311,7 +1349,7 @@ function ih_lookup($isbn)
 
     $book = ['isbn' => $isbn];
     $src = [];
-    foreach (['title', 'author', 'publisher', 'pages', 'year', 'category'] as $f) {
+    foreach (['title', 'author', 'publisher', 'pages', 'year', 'category', 'dimensions'] as $f) {
         list($book[$f], $src[$f]) = ih_pick($results, $f);
     }
     list($book['summary'], $src['summary']) = ih_pick($results, 'summary', IH_SUMMARY_PRIORITY);
@@ -1383,7 +1421,7 @@ function ih_lookup($isbn)
         'error' => $found ? null : 'Bu ISBN için hiçbir kaynakta kayıt bulunamadı.',
         'isbn'  => $isbn,
         'title' => $book['title'], 'original_title' => $book['original_title'], 'author' => $book['author'],
-        'publisher' => $book['publisher'], 'pages' => $book['pages'], 'year' => $book['year'],
+        'publisher' => $book['publisher'], 'pages' => $book['pages'], 'year' => $book['year'], 'dimensions' => $book['dimensions'],
         'summary' => $book['summary'], 'category' => $book['category'],
         'cover_url' => $covers ? $covers[0]['url'] : null,
         'covers' => $covers, 'summaries' => $summaries,

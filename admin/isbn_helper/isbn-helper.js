@@ -422,6 +422,7 @@
     setVal('isbn', d.isbn);
     if (d.pages && setVal('pages', d.pages)) markFromMeta(d, 'pages');
     if (d.year && setVal('year', d.year)) markFromMeta(d, 'year');
+    if (d.dimensions && field('dimensions') && !field('dimensions').value && setVal('dimensions', d.dimensions)) mark('dimensions', false, 'kaynak: ' + esc((d.field_sources && d.sources && (d.sources.filter(function (x) { return x.key === d.field_sources.dimensions; })[0] || {}).store) || 'kitapçı sayfası'));
     if (d.summary && setVal('summary', d.summary)) markFromMeta(d, 'summary');
     var tr = opt.ai && opt.ai.fields && opt.ai.fields.translator;
     if (tr && field('translator') && !field('translator').value) { setVal('translator', trTitle(tr)); mark('translator', true, 'fotoğraftan okundu'); }

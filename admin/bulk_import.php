@@ -128,9 +128,9 @@ if ($cat_auto) {
     }
 }
 
-db_query("INSERT INTO books (title, original_title, isbn, author_id, publisher_id, category_id, price, old_price, stock, pages, year, summary, cover_image, is_active, store_id) VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?)", [
+db_query("INSERT INTO books (title, original_title, isbn, author_id, publisher_id, category_id, price, old_price, stock, pages, year, summary, cover_image, is_active, store_id, dimensions) VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?)", [
     $title, $d['original_title'] ?? null, $isbn, bi_entity('authors', $author), bi_entity('publishers', $publisher), $category_id,
-    $price, $stock, ($d['pages'] ?? null) ?: null, ($d['year'] ?? null) ?: null, $d['summary'] ?? null, $cover, $is_active, $store_id,
+    $price, $stock, ($d['pages'] ?? null) ?: null, ($d['year'] ?? null) ?: null, $d['summary'] ?? null, $cover, $is_active, $store_id, ($d['dimensions'] ?? null) ?: null,
 ]);
 $book_id = (int)db_last_id();
 book_refresh_slug($book_id);
