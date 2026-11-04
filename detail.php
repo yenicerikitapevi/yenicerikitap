@@ -154,7 +154,7 @@ track_view('detail', $book['id'], $book['store_id'] ?? null);
                         <div class="display-6 fw-extrabold text-danger mb-2"><?= format_price($book['price']) ?></div>
                         <div class="fs-7 mb-3">
                             <?php if ($in_stock): ?>
-                                <span class="text-success fw-semibold"><i class="bi bi-check-circle-fill me-1"></i>Stokta<?= (int)$book['stock'] <= 3 ? ' — son ' . (int)$book['stock'] . ' adet' : '' ?></span>
+                                <span class="text-success fw-semibold"><i class="bi bi-check-circle-fill me-1"></i>Stokta: <?= (int)$book['stock'] ?> adet<?= (int)$book['stock'] <= 3 ? ' <span class="text-danger">(son ' . ((int)$book['stock'] === 1 ? 'ürün' : (int)$book['stock'] . ' adet') . ')</span>' : '' ?></span>
                             <?php else: ?>
                                 <span class="text-secondary fw-semibold"><i class="bi bi-x-circle-fill me-1"></i>Tükendi</span>
                             <?php endif; ?>
