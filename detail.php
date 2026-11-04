@@ -28,18 +28,20 @@ if (!$book) {
 }
 $id = (int)$book['id'];
 
+// Benzer kitaplar ve yazarın diğer kitapları aynı satıcıdan (Yeniçeri ↔ sahaf karışmasın)
+$same_seller_sql = empty($book['store_id']) ? 'b.store_id IS NULL' : 'b.store_id = ' . (int)$book['store_id'];
 $related_books = db_fetch_all("SELECT b.*, a.name as author_name, p.name as publisher_name 
                                FROM books b 
                                LEFT JOIN authors a ON b.author_id = a.id 
                                LEFT JOIN publishers p ON b.publisher_id = p.id 
-                               WHERE b.category_id = ? AND b.id != ? AND b.author_id != ? AND b.is_active = 1 
+                               WHERE b.category_id = ? AND b.id != ? AND b.author_id != ? AND b.is_active = 1 AND {$same_seller_sql} 
                                ORDER BY b.id DESC LIMIT 4", [$book['category_id'], $id, $book['author_id']]);
 // Aynı yazarın diğer kitapları (iç bağlantılar)
 $author_books = db_fetch_all("SELECT b.*, a.name as author_name, p.name as publisher_name 
                                FROM books b 
                                LEFT JOIN authors a ON b.author_id = a.id 
                                LEFT JOIN publishers p ON b.publisher_id = p.id 
-                               WHERE b.author_id = ? AND b.id != ? AND b.is_active = 1 
+                               WHERE b.author_id = ? AND b.id != ? AND b.is_active = 1 AND {$same_seller_sql} 
                                ORDER BY b.id DESC LIMIT 4", [$book['author_id'], $id]);
 
 $crumbs = [['Ana Sayfa', ''], [$book['category_name'] ?: 'Kitaplar', $book['category_slug'] && !is_numeric_category_name($book['category_name']) ? category_path(['id' => $book['category_id'], 'slug' => $book['category_slug']]) : 'category.php'], [$book['title'], null]];
