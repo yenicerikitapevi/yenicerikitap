@@ -135,7 +135,7 @@ track_view('detail', $book['id'], $book['store_id'] ?? null);
                 <?php endif; ?>
                 <?php if (!empty($book['summary'])): ?>
                     <p class="text-secondary fs-7 mb-1"><?= e(mb_strimwidth(trim($book['summary']), 0, 260, '…', 'UTF-8')) ?></p>
-                    <a href="#urunSekmeler" class="fs-7 text-danger fw-semibold text-decoration-none" onclick="var t = document.querySelector('[data-bs-target=&quot;#tabDesc&quot;]'); if (t && window.bootstrap) bootstrap.Tab.getOrCreateInstance(t).show();">Devamını oku <i class="bi bi-chevron-down"></i></a>
+                    <a href="<?= e(book_path($book)) ?>#urunSekmeler" class="fs-7 text-danger fw-semibold text-decoration-none" onclick="event.preventDefault(); var t = document.querySelector('[data-bs-target=&quot;#tabDesc&quot;]'); if (t && window.bootstrap) bootstrap.Tab.getOrCreateInstance(t).show(); var s = document.getElementById('urunSekmeler'); if (s) s.scrollIntoView({behavior: 'smooth', block: 'start'});">Devamını oku <i class="bi bi-chevron-down"></i></a>
                 <?php endif; ?>
             </div>
 
