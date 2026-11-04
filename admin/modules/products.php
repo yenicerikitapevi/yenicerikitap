@@ -408,7 +408,7 @@ if (($action === 'add' || $action === 'edit') && $edit_id > 0) {
 
                     <div class="col-md-4">
                         <label class="form-label fw-semibold fs-7">Stok Adedi *</label>
-                        <input type="number" name="stock" class="form-control" value="<?= $book_data['stock'] ?? 50 ?>" required min="0">
+                        <input type="number" name="stock" class="form-control" value="<?= $book_data['stock'] ?? 1 ?>" required min="0">
                     </div>
 
                     <div class="col-md-4">

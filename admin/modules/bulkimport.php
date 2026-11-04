@@ -40,7 +40,7 @@ $stores_all = db_fetch_all("SELECT id, name FROM stores WHERE approval_status = 
         </div>
         <div class="col-lg-2">
             <label class="form-label fw-semibold fs-7" for="biStock">Stok</label>
-            <input type="number" id="biStock" class="form-control" value="0" min="0">
+            <input type="number" id="biStock" class="form-control" value="1" min="0">
         </div>
         <div class="col-lg-4">
             <label class="form-label fw-semibold fs-7" for="biStore">Satıcı</label>
