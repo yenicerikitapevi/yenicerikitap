@@ -121,7 +121,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_campaign'])) {
 }
 
 $stores_l = db_fetch_all("SELECT id, name, commission_rate FROM stores ORDER BY name");
-$cats_l   = db_fetch_all("SELECT id, name FROM categories ORDER BY name");
+$cats_l   = categories_for_select(db_fetch_all("SELECT id, name FROM categories ORDER BY name"));
 $pubs_l   = db_fetch_all("SELECT id, name FROM publishers ORDER BY name");
 $auths_l  = db_fetch_all("SELECT id, name FROM authors ORDER BY name");
 $scope_lists = ['store' => $stores_l, 'category' => $cats_l, 'publisher' => $pubs_l, 'author' => $auths_l];

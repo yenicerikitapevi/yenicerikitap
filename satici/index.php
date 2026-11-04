@@ -22,6 +22,21 @@ if (empty($_SESSION['store_form_token'])) {
 }
 $store_token = $_SESSION['store_form_token'];
 
+// Listeden hızlı stok değişikliği (AJAX): yalnızca bu dükkânın kitabı
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'stock') {
+    header('Content-Type: application/json; charset=utf-8');
+    $sid = (int)($_POST['id'] ?? 0);
+    $sval = (int)($_POST['stock'] ?? -1);
+    if (!hash_equals($store_token, (string)($_POST['token'] ?? '')) || $sval < 0 || $sval > 100000
+        || !db_fetch("SELECT id FROM books WHERE id = ? AND store_id = ?", [$sid, $report_store_id])) {
+        echo json_encode(['ok' => false, 'error' => 'Stok kaydedilemedi, sayfayı yenileyin.']);
+        exit;
+    }
+    db_query("UPDATE books SET stock = ? WHERE id = ? AND store_id = ?", [$sval, $sid, $report_store_id]);
+    echo json_encode(['ok' => true, 'stock' => $sval]);
+    exit;
+}
+
 // Toplu işlem: yalnızca bu dükkânın kitapları etkilenir
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'bulk' && hash_equals($store_token, (string)($_POST['token'] ?? ''))) {
     $ids = array_values(array_filter(array_map('intval', (array)($_POST['ids'] ?? []))));
@@ -354,7 +369,7 @@ if ($tab === 'dukkan') {
                                         </td>
                                         <td class="fs-8"><?= e(is_numeric_category_name($b['category_name']) ? '—' : $b['category_name']) ?><?= $b['shelf_code'] ? '<div><span class="badge bg-warning text-dark">Raf: ' . e($b['shelf_code']) . '</span></div>' : '' ?></td>
                                         <td class="text-end fw-bold text-danger"><?= format_price($b['price']) ?></td>
-                                        <td class="text-end"><?= (int)$b['stock'] ?></td>
+                                        <td class="text-end"><input type="number" min="0" max="100000" class="form-control form-control-sm js-stock text-end ms-auto" style="width: 76px;" value="<?= (int)$b['stock'] ?>" data-id="<?= (int)$b['id'] ?>" data-url="index.php" data-token="<?= e($store_token) ?>" title="Stoğu yazıp Enter'a basın; hemen kaydedilir"></td>
                                         <td class="text-end"><?= (int)$b['sold'] ?></td>
                                         <td><?= !$b['is_active'] ? '<span class="badge bg-secondary">Kaldırıldı</span>' : ((int)$b['stock'] > 0 ? '<span class="badge bg-success">Satışta</span>' : '<span class="badge bg-warning text-dark">Stok yok</span>') ?></td>
                                         <td class="pe-3 text-end text-nowrap"><a href="kitap.php?id=<?= (int)$b['id'] ?>" class="btn btn-sm btn-outline-danger" title="Düzenle"><i class="bi bi-pencil"></i></a><?php if ($b['is_active']): ?> <a href="../<?= e(book_path($b)) ?>" target="_blank" class="btn btn-sm btn-outline-dark" title="Sitede gör"><i class="bi bi-eye"></i></a><?php endif; ?></td>
@@ -391,5 +406,6 @@ if ($tab === 'dukkan') {
             </script>
         <?php endif; ?>
     </main>
+<script src="../assets/js/stock-edit.js?v=1" defer></script>
 </body>
 </html>

@@ -112,6 +112,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         book_refresh_slug($book_id);
         book_touch($book_id);
+        $gallery_errors = book_save_gallery($book_id, $_FILES['extra_files'] ?? null, array_map('strval', (array)($_POST['remove_extra'] ?? [])));
+        if ($gallery_errors) set_flash('warning', 'Kitap kaydedildi; bazı görseller eklenemedi: ' . implode(' ', $gallery_errors));
         // Yeni kitaptan sonra boş form açılır (kategori ve kondisyon korunur); düzenlemeden sonra listeye dönülür
         redirect($book ? 'index.php' : 'kitap.php?kat=' . $category_id . '&kond=' . rawurlencode($f['condition_text']));
     }
@@ -160,6 +162,7 @@ if (!$book && $_SERVER['REQUEST_METHOD'] !== 'POST') {
                     <input type="file" name="cover_file" id="coverFile" class="form-control form-control-sm" accept="image/jpeg,image/png,image/webp">
                     <div class="text-muted fs-8 mt-1">JPG, PNG veya WEBP, en fazla 5 MB</div>
                 </div>
+                <div class="col-12 order-last"><?= gallery_form_html($book) ?></div>
                 <div class="col-md-9">
                     <div class="row g-3">
                         <div class="col-12"><label class="form-label fw-semibold fs-7">Kitap Adı *</label><input type="text" name="title" class="form-control" value="<?= e($f['title']) ?>" required maxlength="250"></div>

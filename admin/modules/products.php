@@ -10,6 +10,8 @@ $edit_id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 $authors = db_fetch_all("SELECT * FROM authors ORDER BY name ASC");
 $publishers = db_fetch_all("SELECT * FROM publishers ORDER BY name ASC");
 $categories = db_fetch_all("SELECT * FROM categories ORDER BY name ASC");
+$categories = categories_for_select($categories); // numaralı NadirKitap kategorileri adıyla ve sonda
+$numeric_cat_count = count(array_filter($categories, function ($c) { return $c['is_numeric']; }));
 $showcases = db_fetch_all("SELECT * FROM showcases ORDER BY id ASC");
 $stores_all = db_fetch_all("SELECT id, name FROM stores ORDER BY name ASC");
 
@@ -37,6 +39,22 @@ function resolve_or_create($table, $selected, $new_name) {
     return $id;
 }
 $collections = db_fetch_all("SELECT * FROM collections ORDER BY id ASC");
+
+// Listeden hızlı stok değişikliği (AJAX): kitabın içine girmeden
+if ($action === 'stock' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    $sid = (int)($_POST['id'] ?? 0);
+    $sval = (int)($_POST['stock'] ?? -1);
+    while (ob_get_level()) ob_end_clean();
+    header('Content-Type: application/json; charset=utf-8');
+    if ($sid <= 0 || $sval < 0 || $sval > 100000 || !db_fetch("SELECT id FROM books WHERE id = ?", [$sid])) {
+        echo json_encode(['ok' => false, 'error' => 'Geçersiz stok']);
+        exit;
+    }
+    db_query("UPDATE books SET stock = ? WHERE id = ?", [$sval, $sid]);
+    log_action('Stok Güncellendi', 'Products', $sid, 'Yeni stok: ' . $sval);
+    echo json_encode(['ok' => true, 'stock' => $sval]);
+    exit;
+}
 
 // Toplu işlemler: seçili kitapları aktif/pasif yap, sil, kategori değiştir, vitrine ekle/çıkar
 if ($action === 'bulk' && $_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -206,6 +224,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_book'])) {
     db_query("UPDATE books SET meta_description = ? WHERE id = ?", [$meta_desc, $book_id]);
     book_refresh_slug($book_id);
     book_touch($book_id);
+    // Ek görseller (kapak değiştiyse galeri listesi de güncellenir)
+    $gallery_errors = book_save_gallery($book_id, $_FILES['extra_files'] ?? null, array_map('strval', (array)($_POST['remove_extra'] ?? [])));
+    if ($gallery_errors) {
+        set_flash('warning', 'Kitap kaydedildi; bazı görseller eklenemedi: ' . implode(' ', $gallery_errors));
+    }
 
     db_query("DELETE FROM book_showcase WHERE book_id = ?", [$book_id]);
     foreach ($selected_showcases as $sc_id) {
@@ -309,6 +332,7 @@ if (($action === 'add' || $action === 'edit') && $edit_id > 0) {
                             </div>
                         </div>
                     </div>
+                    <div class="col-md-12"><?= gallery_form_html($edit_id > 0 ? $book_data : null) ?></div>
 
                     <div class="col-md-6">
                         <label class="form-label fw-semibold fs-7">Kitap Adı *</label>
@@ -364,6 +388,7 @@ if (($action === 'add' || $action === 'edit') && $edit_id > 0) {
                             <?php endforeach; ?>
                             <option value="__new">+ Yeni kategori ekle…</option>
                         </select>
+                        <?php if ($numeric_cat_count): ?><small class="d-block mt-1 fs-8 text-muted"><?= $numeric_cat_count ?> kategori hâlâ NadirKitap numarasıyla kayıtlı (listenin sonunda). <a href="index.php?p=NkCategories">Tek seferde adlandır</a></small><?php endif; ?>
                         <input type="text" name="new_category_name" id="newCategoryName" class="form-control mt-2 d-none" placeholder="Yeni kategorinin adı" maxlength="120">
                         <div class="form-text"><a href="index.php?p=Catalog" target="_blank">Yazar, yayınevi ve kategorileri düzenle</a></div>
                     </div>
@@ -383,7 +408,7 @@ if (($action === 'add' || $action === 'edit') && $edit_id > 0) {
 
                     <div class="col-md-4">
                         <label class="form-label fw-semibold fs-7">Stok Adedi *</label>
-                        <input type="number" name="stock" class="form-control" value="<?= $book_data['stock'] ?? 50 ?>" required min="0">
+                        <input type="number" name="stock" class="form-control" value="<?= $book_data['stock'] ?? 1 ?>" required min="0">
                     </div>
 
                     <div class="col-md-4">
@@ -515,7 +540,7 @@ if (($action === 'add' || $action === 'edit') && $edit_id > 0) {
                 });
             </script>
             <?php if ($action === 'add'): ?>
-                <script src="isbn_helper/isbn-helper.js?v=5" defer></script>
+                <script src="isbn_helper/isbn-helper.js?v=8" defer></script>
             <?php endif; ?>
         </div>
     </div>
@@ -707,11 +732,7 @@ if (($action === 'add' || $action === 'edit') && $edit_id > 0) {
                                         <div class="fw-extrabold text-danger fs-7"><?= format_price($b['price']) ?><?php if (!empty($b['store_id'])): ?> <i class="bi bi-lock-fill text-secondary fs-8" title="Alt dükkan fiyatı, panelden değiştirilemez"></i><?php endif; ?></div>
                                     </td>
                                     <td>
-                                        <?php if ($b['stock'] < 10): ?>
-                                            <span class="badge bg-danger text-white fs-8"><?= $b['stock'] ?> Adet</span>
-                                        <?php else: ?>
-                                            <span class="badge bg-success bg-opacity-10 text-success fs-8"><?= $b['stock'] ?> Adet</span>
-                                        <?php endif; ?>
+                                        <input type="number" min="0" max="100000" class="form-control form-control-sm js-stock text-end <?= $b['stock'] < 1 ? 'border-danger text-danger' : '' ?>" style="width: 80px;" value="<?= (int)$b['stock'] ?>" data-id="<?= (int)$b['id'] ?>" data-url="index.php?p=Products&action=stock" title="Stoğu yazıp Enter'a basın ya da kutudan çıkın; hemen kaydedilir">
                                     </td>
                                     <td>
                                         <?php if ($b['is_active']): ?>

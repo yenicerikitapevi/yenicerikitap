@@ -29,8 +29,9 @@ $stores_all = db_fetch_all("SELECT id, name FROM stores WHERE approval_status = 
         <div class="col-lg-3">
             <label class="form-label fw-semibold fs-7" for="biCat">Kategori</label>
             <select id="biCat" class="form-select">
+                <option value="auto" selected>Otomatik (ISBN bilgisinden / kitap adından)</option>
                 <option value="0">-- Kategorisiz --</option>
-                <?php foreach ($categories as $c): ?><option value="<?= (int)$c['id'] ?>"><?= e($c['name']) ?></option><?php endforeach; ?>
+                <?php foreach ($categories as $c): if (is_numeric_category_name($c['name'])) continue; ?><option value="<?= (int)$c['id'] ?>"><?= e($c['name']) ?></option><?php endforeach; ?>
             </select>
         </div>
         <div class="col-lg-3">
@@ -39,7 +40,7 @@ $stores_all = db_fetch_all("SELECT id, name FROM stores WHERE approval_status = 
         </div>
         <div class="col-lg-2">
             <label class="form-label fw-semibold fs-7" for="biStock">Stok</label>
-            <input type="number" id="biStock" class="form-control" value="0" min="0">
+            <input type="number" id="biStock" class="form-control" value="1" min="0">
         </div>
         <div class="col-lg-4">
             <label class="form-label fw-semibold fs-7" for="biStore">Satıcı</label>
@@ -51,6 +52,8 @@ $stores_all = db_fetch_all("SELECT id, name FROM stores WHERE approval_status = 
         <div class="col-lg-8 d-flex flex-wrap gap-4 fs-7">
             <div class="form-check"><input class="form-check-input" type="checkbox" id="biLookup" checked><label class="form-check-label" for="biLookup">ISBN ile kapak, yazar ve özet çek <span class="text-muted">(yavaş: kitap başına birkaç saniye)</span></label></div>
             <div class="form-check"><input class="form-check-input" type="checkbox" id="biActive" checked><label class="form-check-label" for="biActive">Sitede görünsün</label></div>
+            <div class="form-check"><input class="form-check-input" type="checkbox" id="biUpdPrice"><label class="form-check-label" for="biUpdPrice">Zaten kayıtlı kitapların fiyatını Excel'deki fiyatla güncelle</label></div>
+            <div class="w-100 text-muted fs-8">Aynı dosyayı tekrar yüklerseniz kayıtlı ISBN'ler <b>tekrar eklenmez</b> ("zaten kayıtlı" yazar); yalnızca yeni ISBN'ler eklenir. Kutu işaretliyse kayıtlı kitapların yalnızca fiyatı güncellenir (stok, bilgiler ve sahaf kitapları değişmez).</div>
         </div>
     </div>
 </div>
@@ -175,7 +178,7 @@ $stores_all = db_fetch_all("SELECT id, name FROM stores WHERE approval_status = 
         st.innerHTML = '<span class="spinner-border spinner-border-sm text-secondary"></span> ekleniyor…';
         const fd = new FormData();
         Object.entries({token: TOKEN, isbn: r.isbn, title: r.title, price: r.price, author: r.author, publisher: r.pub || $('biPub').value.trim(),
-            category_id: $('biCat').value, store_id: $('biStore').value, stock: $('biStock').value, is_active: $('biActive').checked ? 1 : 0, lookup: $('biLookup').checked ? 1 : 0})
+            category_id: $('biCat').value, note: r.note, store_id: $('biStore').value, stock: $('biStock').value, is_active: $('biActive').checked ? 1 : 0, lookup: $('biLookup').checked ? 1 : 0, update_price: $('biUpdPrice').checked ? 1 : 0})
             .forEach(([k, v]) => fd.append(k, v));
         try {
             const res = await fetch('bulk_import.php', {method: 'POST', body: fd, credentials: 'same-origin'});

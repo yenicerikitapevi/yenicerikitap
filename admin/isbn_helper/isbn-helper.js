@@ -53,7 +53,7 @@
   }
   function realOptions(sel) {
     return Array.prototype.filter.call(sel.options, function (o) {
-      return ['', '0', '__new'].indexOf(o.value) < 0 && !/^\s*\d+\s*$/.test(o.text); // numaralı (NadirKitap) kategoriler hariç
+      return ['', '0', '__new'].indexOf(o.value) < 0 && !/^\s*\d+\s*$/.test(o.text) && !/\(NadirKitap #\d+\)/.test(o.text); // numaralı (NadirKitap) kategoriler hariç
     });
   }
   /** Listede BİREBİR aynı ad (büyük/küçük harf, Türkçe karakter ve noktalama farkı yok sayılır). Benzer adlar eşleşmez. */
@@ -375,10 +375,18 @@
   }
 
   /** Kategori: birebir aynı ad seçilir; yoksa en yakın öneri otomatik seçilir (sarı işaretle); o da yoksa boş bırakılır */
-  function chooseCategory(catName, srcText) {
+  function chooseCategory(catName, srcText, guess) {
     var cs = field('category_id');
     if (!cs) return '';
-    if (!catName) { mark('category_id', true, 'kategori bilgisi gelmedi — listeden seçin'); return '⚠ <b>Dikkat:</b> kategori bilgisi gelmedi, listeden seçin.'; }
+    // Sunucunun önerisi (kaynak adı + kitap adı/özet): birebir eşleşme yoksa kullanılır
+    var useGuess = function () {
+      if (!guess || !cs.querySelector('option[value="' + guess.id + '"]')) return null;
+      cs.value = String(guess.id); fire(cs, 'change');
+      mark('category_id', true, 'otomatik seçildi (' + esc(guess.how) + ') — kontrol edin');
+      return '✔ Kategori: <b>' + esc(guess.name) + '</b> (otomatik: ' + esc(guess.how) + ')';
+    };
+    if (!catName) {
+      var g0 = useGuess(); if (g0) return g0; mark('category_id', true, 'kategori bilgisi gelmedi — listeden seçin'); return '⚠ <b>Dikkat:</b> kategori bilgisi gelmedi, listeden seçin.'; }
     var m = matchOption(cs, catName);
     if (m) { cs.value = m.value; fire(cs, 'change'); mark('category_id', false, srcText || ''); return '✔ Kategori: <b>' + esc(m.text) + '</b>'; }
     var sug = suggestCategory(cs, catName);
@@ -387,6 +395,7 @@
       mark('category_id', true, 'kaynakta “' + esc(catName) + '” yazıyor; en yakın kategori otomatik seçildi — kontrol edin');
       return '✔ Kategori: <b>' + esc(sug.text) + '</b> (otomatik seçildi, kaynak: “' + esc(catName) + '”)';
     }
+    var g1 = useGuess(); if (g1) return g1;
     cs.value = ''; fire(cs, 'change');
     mark('category_id', true, 'kaynakta “' + esc(catName) + '” yazıyor; listede karşılığı yok — listeden seçin');
     return '⚠ <b>Dikkat:</b> kategori boş bırakıldı (kaynak: “' + esc(catName) + '”). Listeden seçin.';
@@ -413,6 +422,7 @@
     setVal('isbn', d.isbn);
     if (d.pages && setVal('pages', d.pages)) markFromMeta(d, 'pages');
     if (d.year && setVal('year', d.year)) markFromMeta(d, 'year');
+    if (d.dimensions && field('dimensions') && !field('dimensions').value && setVal('dimensions', d.dimensions)) mark('dimensions', false, 'kaynak: ' + esc((d.field_sources && d.sources && (d.sources.filter(function (x) { return x.key === d.field_sources.dimensions; })[0] || {}).store) || 'kitapçı sayfası'));
     if (d.summary && setVal('summary', d.summary)) markFromMeta(d, 'summary');
     var tr = opt.ai && opt.ai.fields && opt.ai.fields.translator;
     if (tr && field('translator') && !field('translator').value) { setVal('translator', trTitle(tr)); mark('translator', true, 'fotoğraftan okundu'); }
@@ -435,7 +445,7 @@
     notes.push(p || '⚠ <b>Dikkat:</b> yayınevi bulunamadı, elle seçin.');
     if (p) markFromMeta(d, field('publisher_id').value === '__new' ? 'new_publisher_name' : 'publisher_id', 'publisher');
     var cm = d.field_meta && d.field_meta.category;
-    notes.push(chooseCategory(trTitle(d.category), cm ? 'kaynak: ' + esc(cm.source) : ''));
+    notes.push(chooseCategory(trTitle(d.category), cm ? 'kaynak: ' + esc(cm.source) : '', d.category_guess));
     checkShowcases();
     var AIMAP = { title: 'title', original_title: 'original_title', year: 'year',
       author: field('author_id') && field('author_id').value === '__new' ? 'new_author_name' : 'author_id',

@@ -283,6 +283,66 @@ function save_cover_upload($file, &$error) {
     return $name;
 }
 
+/** Kitabın kapak dışındaki görselleri (extra_images: kapak dahil tüm görsellerin JSON listesi) */
+function book_extra_images($book) {
+    $all = json_decode((string)($book['extra_images'] ?? ''), true);
+    if (!is_array($all)) return [];
+    $cover = (string)($book['cover_image'] ?? '');
+    return array_values(array_filter(array_unique(array_map('strval', $all)), function ($x) use ($cover) {
+        // yerel dosyası silinmiş görsel (ör. değiştirilen eski kapak) gösterilmez
+        return $x !== '' && $x !== $cover && $x !== 'book_placeholder.svg' && (strpos($x, 'cover_') !== 0 || is_file(UPLOAD_DIR . '/' . basename($x)));
+    }));
+}
+
+/**
+ * Ek görselleri kaydeder: $remove listesindekiler çıkarılır, yüklenen dosyalar ($_FILES[...] çoklu) eklenir.
+ * Kapak + ek görseller en fazla 8. Dönüş: hata mesajları.
+ */
+function book_save_gallery($book_id, $files, array $remove = []) {
+    $errors = [];
+    $book = db_fetch("SELECT cover_image, extra_images FROM books WHERE id = ?", [(int)$book_id]);
+    if (!$book) return $errors;
+    $extras = book_extra_images($book);
+    foreach ($extras as $i => $x) {
+        if (in_array($x, $remove, true)) {
+            if (strpos($x, 'cover_') === 0) @unlink(UPLOAD_DIR . '/' . basename($x));
+            unset($extras[$i]);
+        }
+    }
+    $extras = array_values($extras);
+    if (is_array($files) && isset($files['name']) && is_array($files['name'])) {
+        foreach (array_keys($files['name']) as $k) {
+            if (count($extras) >= 7) { $errors[] = 'En fazla 8 görsel (kapak + 7) yüklenebilir; fazlası eklenmedi.'; break; }
+            $one = ['name' => $files['name'][$k], 'type' => $files['type'][$k], 'tmp_name' => $files['tmp_name'][$k], 'error' => $files['error'][$k], 'size' => $files['size'][$k]];
+            $err = '';
+            $saved = save_cover_upload($one, $err);
+            if ($saved) $extras[] = $saved;
+            elseif ($err !== '') $errors[] = $files['name'][$k] . ': ' . str_replace('Kapak resmi', 'Görsel', $err);
+        }
+    }
+    $cover = (string)$book['cover_image'];
+    $all = ($cover !== '' && $cover !== 'book_placeholder.svg') ? array_merge([$cover], $extras) : $extras;
+    db_query("UPDATE books SET extra_images = ? WHERE id = ?", [count($all) > 1 ? json_encode($all, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) : null, (int)$book_id]);
+    return $errors;
+}
+
+/** Formdaki ek görsel alanı (yönetici ve satıcı paneli) */
+function gallery_form_html($book, $prefix = '../') {
+    $extras = $book ? book_extra_images($book) : [];
+    $h = '<label class="form-label fw-semibold fs-7">Ek Görseller <span class="text-muted fw-normal">(arka kapak, iç sayfa, kondisyon fotoğrafları — en fazla 7)</span></label>';
+    if ($extras) {
+        $h .= '<div class="d-flex flex-wrap gap-2 mb-2">';
+        foreach ($extras as $x) {
+            $h .= '<label class="text-center border rounded p-1 bg-white" style="width: 84px; cursor: pointer;"><img src="' . e(strpos(cover_url($x), 'http') === 0 ? cover_url($x) : $prefix . cover_url($x)) . '" alt="" style="width: 72px; height: 100px; object-fit: cover;" class="rounded" loading="lazy">'
+                . '<span class="d-block fs-8"><input type="checkbox" class="form-check-input me-1" name="remove_extra[]" value="' . e($x) . '">Kaldır</span></label>';
+        }
+        $h .= '</div>';
+    }
+    $h .= '<input type="file" name="extra_files[]" class="form-control" accept="image/jpeg,image/png,image/webp" multiple>'
+        . '<small class="text-muted d-block mt-1">Birden fazla dosya seçebilirsiniz (her biri en fazla 5 MB). Ürün sayfasında kapakla birlikte galeri olarak görünür.</small>';
+    return $h;
+}
+
 /**
  * WhatsApp bağlantısı: "0555 000 00 00" gibi numaraları wa.me'nin istediği 905550000000 biçimine çevirir
  */
