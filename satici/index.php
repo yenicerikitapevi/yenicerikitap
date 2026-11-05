@@ -223,15 +223,19 @@ if ($tab === 'dukkan') {
                         <h6 class="fw-bold text-dark mb-1"><i class="bi bi-pc-display text-danger me-1"></i> Aktarım Uygulaması (kitapekapp)</h6>
                         <p class="text-muted fs-7 mb-2">NadirKitap'taki kitaplarınızı bilgisayarınızdan dükkânınıza aktarır ve günceller. Windows bilgisayarda çalışır; Google Chrome kurulu olmalıdır.</p>
                         <ol class="fs-7 mb-0 ps-3">
-                            <li>Uygulamayı indirip zip dosyasını bir klasöre çıkarın, <b>kitapekapp-chrome.bat</b> ile açın.</li>
+                            <li>Uygulamayı indirin. Zip dosyasına <b>sağ tıklayıp "Tümünü ayıkla"</b> deyin ve bir klasöre (ör. Masaüstü) çıkarın; çıkan klasörden <b>kitapekapp-chrome.bat</b> ile açın.
+                                <div class="text-danger fs-8 mt-1"><i class="bi bi-exclamation-triangle-fill me-1"></i>Uygulamayı zip'in içinden çift tıklayarak açmayın ve <b>kitapekapp.exe</b> dosyasının adını değiştirmeyin; ikisi de "Error opening … kitapekapp.cfg" hatası verir.</div></li>
                             <li>Giriş bilgileri: <b>Kullanıcı adı</b> <code><?= e($store['username']) ?></code> • <b>Şifre</b> bu panelin şifresi • <b>NadirKitap kodu</b> <code><?= e($store['nadirkitap_code'] ?: '—') ?></code></li>
                             <li>Açılan Chrome penceresinde NadirKitap güvenlik doğrulaması çıkarsa siz tamamlayın, aktarım kendiliğinden devam eder.</li>
+                            <li><b>1.4.3 güncellemesi:</b> kitap sayısında <b>500</b> ve <b>Sınırsız</b> (mağazadaki tüm kitaplar) seçenekleri gelir. Uygulamayı indirip çıkardıktan sonra
+                                <a href="/downloads/kitapekapp-1.4.3-guncelleme.zip">güncelleme dosyasını</a> da indirin; içindeki <b>app</b> klasörünü uygulama klasörüne kopyalayıp "dosyaları değiştir" deyin.</li>
                         </ol>
                     </div>
                     <div class="text-center">
                         <?php if ($app_url !== ''): ?>
                             <a href="<?= e($app_url) ?>" class="btn btn-dark fw-semibold px-4 py-2 rounded-3" target="_blank" rel="noopener"><i class="bi bi-download me-1"></i> Aktarım uygulamasını indir</a>
                             <div class="text-muted fs-8 mt-1">Windows • yaklaşık 380 MB</div>
+                            <a href="/downloads/kitapekapp-1.4.3-guncelleme.zip" class="btn btn-outline-dark btn-sm fw-semibold mt-2 rounded-3"><i class="bi bi-arrow-up-circle me-1"></i> 1.4.3 güncellemesi (180 KB)</a>
                         <?php else: ?>
                             <div class="text-muted fs-7">İndirme bağlantısı henüz eklenmedi;<br>site yöneticisinden isteyin.</div>
                         <?php endif; ?>
@@ -253,8 +257,8 @@ if ($tab === 'dukkan') {
                             <h6 class="fw-bold text-dark mb-1">Satılan Kitapları Düşürme</h6>
                             <p class="text-muted fs-7 mb-2">
                                 NadirKitap sunucumuzdan gelen taramayı engellediği için satılanlar <b>aktarım uygulamasıyla</b> tespit edilir:
-                                uygulamada <b>"Daha önce aktarılmış kitapları da yeniden güncelle"</b> işaretli aktarım yapın (250'den fazla kitabınız varsa
-                                sonraki sayfalardan devam ederek tüm mağazayı aktarın). Son <?= NK_RUN_WINDOW_HOURS ?> saatteki bu aktarımlarda görünmeyen kitaplar satılmış sayılır.
+                                uygulamada <b>"Daha önce aktarılmış kitapları da yeniden güncelle"</b> işaretli ve kitap sayısı <b>Sınırsız</b> seçili aktarım yapın
+                                (uygulama 1.4.3; eski sürümde 250'den fazla kitabınız varsa sonraki sayfalardan devam ederek tüm mağazayı aktarın). Son <?= NK_RUN_WINDOW_HOURS ?> saatteki bu aktarımlarda görünmeyen kitaplar satılmış sayılır.
                             </p>
                             <div class="fs-7 <?= $unseen['complete'] ? 'text-success' : 'text-secondary' ?>"><i class="bi bi-info-circle me-1"></i><?= e($unseen['note']) ?></div>
                             <?php if ($unseen['candidates']): ?>

@@ -35,6 +35,9 @@ if ($slug !== '') {
     }
 }
 
+// Numarayla kalmış (NadirKitap) kategoride ziyaretçiye tablodaki ad gösterilir
+if ($category) $category['name'] = category_display_name($category['name']);
+
 $where = ["b.is_active = 1"];
 $params = [];
 
