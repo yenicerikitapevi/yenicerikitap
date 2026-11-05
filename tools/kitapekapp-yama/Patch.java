@@ -21,13 +21,19 @@ public class Patch {
     static void patch(Path f) throws Exception {
         System.out.println(f.getFileName());
         ClassReader cr = new ClassReader(Files.readAllBytes(f));
-        ClassWriter cw = new ClassWriter(cr, 0);
+        ClassWriter cw = new ClassWriter(cr, ClassWriter.COMPUTE_MAXS);
         String cls = cr.getClassName();
         cr.accept(new ClassVisitor(Opcodes.ASM9, cw) {
             public MethodVisitor visitMethod(int acc, String name, String desc, String sig, String[] ex) {
                 MethodVisitor mv = super.visitMethod(acc, name, desc, sig, ex);
                 return new MethodVisitor(Opcodes.ASM9, mv) {
-                    boolean enableNext = false, unlimitedNext = false;
+                    boolean enableNext = false, unlimitedNext = false, idleNext = false;
+
+                    public void visitFieldInsn(int op, String owner, String fname, String fdesc) {
+                        super.visitFieldInsn(op, owner, fname, fdesc);
+                        // updateControlStates: 500/1000 her zaman kapatılıyordu → 25/250 gibi yalnızca aktarım sürerken kapalı
+                        if (op == Opcodes.GETFIELD && name.equals("updateControlStates") && (fname.equals("limit500Btn") || fname.equals("limit1000Btn"))) idleNext = true;
+                    }
 
                     public void visitLdcInsn(Object v) {
                         if (v instanceof String s && name.equals("start") && cls.endsWith("NkUploaderApp")) {
@@ -59,6 +65,10 @@ public class Patch {
                     }
 
                     public void visitInsn(int op) {
+                        if (idleNext && op == Opcodes.ICONST_1) {
+                            idleNext = false; log("updateControlStates: setDisable(true) → setDisable(!idle)");
+                            super.visitInsn(Opcodes.ICONST_1); super.visitVarInsn(Opcodes.ILOAD, 1); super.visitInsn(Opcodes.ISUB); return;
+                        }
                         if (op == Opcodes.DDIV && cls.endsWith("NkUploaderApp$2") && name.equals("lambda$call$1")) {
                             log("ilerleme oranı → LimitText.ratio");
                             super.visitMethodInsn(Opcodes.INVOKESTATIC, H, "ratio", "(DD)D", false); return;
