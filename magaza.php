@@ -241,7 +241,7 @@ track_view('store', null, $store['id'] ?? null);
                                     </a>
                                     <?php foreach ($store_categories as $sc_cat): ?>
                                         <a href="magaza.php?s=<?= urlencode($store['slug']) ?>&cat=<?= $sc_cat['id'] ?>" class="list-group-item px-0 py-1.5 border-0 d-flex justify-content-between align-items-center text-decoration-none <?= $cat_id === (int)$sc_cat['id'] ? 'fw-bold text-danger' : 'text-secondary' ?>">
-                                            <span class="text-truncate me-2"><?= e($sc_cat['name']) ?></span>
+                                            <span class="text-truncate me-2"><?= e(category_display_name($sc_cat['name'])) ?></span>
                                             <span class="badge bg-light text-dark border"><?= (int)$sc_cat['book_cnt'] ?></span>
                                         </a>
                                     <?php endforeach; ?>

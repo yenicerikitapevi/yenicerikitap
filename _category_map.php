@@ -87,6 +87,13 @@ function category_with_children_ids($category_id) {
     return $ids;
 }
 
+/** Ziyaretçiye gösterilecek kategori adı: numarayla kalmış (NadirKitap) kategoride tablodaki ad, o da yoksa "Diğer" */
+function category_display_name($name) {
+    if (!is_numeric_category_name($name)) return (string)$name;
+    $label = nk_category_label($name);
+    return $label !== '' ? $label : 'Diğer';
+}
+
 /** Site menüsündeki kategoriler: yalnızca adı olan (numara olmayan) ana kategoriler */
 function nav_categories() {
     return array_values(array_filter(
