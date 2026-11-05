@@ -223,7 +223,8 @@ if ($tab === 'dukkan') {
                         <h6 class="fw-bold text-dark mb-1"><i class="bi bi-pc-display text-danger me-1"></i> Aktarım Uygulaması (kitapekapp)</h6>
                         <p class="text-muted fs-7 mb-2">NadirKitap'taki kitaplarınızı bilgisayarınızdan dükkânınıza aktarır ve günceller. Windows bilgisayarda çalışır; Google Chrome kurulu olmalıdır.</p>
                         <ol class="fs-7 mb-0 ps-3">
-                            <li>Uygulamayı indirip zip dosyasını bir klasöre çıkarın, <b>kitapekapp-chrome.bat</b> ile açın.</li>
+                            <li>Uygulamayı indirin. Zip dosyasına <b>sağ tıklayıp "Tümünü ayıkla"</b> deyin ve bir klasöre (ör. Masaüstü) çıkarın; çıkan klasörden <b>kitapekapp-chrome.bat</b> ile açın.
+                                <div class="text-danger fs-8 mt-1"><i class="bi bi-exclamation-triangle-fill me-1"></i>Uygulamayı zip'in içinden çift tıklayarak açmayın ve <b>kitapekapp.exe</b> dosyasının adını değiştirmeyin; ikisi de "Error opening … kitapekapp.cfg" hatası verir.</div></li>
                             <li>Giriş bilgileri: <b>Kullanıcı adı</b> <code><?= e($store['username']) ?></code> • <b>Şifre</b> bu panelin şifresi • <b>NadirKitap kodu</b> <code><?= e($store['nadirkitap_code'] ?: '—') ?></code></li>
                             <li>Açılan Chrome penceresinde NadirKitap güvenlik doğrulaması çıkarsa siz tamamlayın, aktarım kendiliğinden devam eder.</li>
                         </ol>
