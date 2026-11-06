@@ -272,7 +272,8 @@ if (preg_match('#^/pbatch/([^/]+)/start$#i', $route, $m)) {
         'productStatus'         => 'ALL',
         'startPage'             => $start_page,
         'blockedCategories'     => [],
-        'requestIntervalMs'     => 800
+        // NadirKitap çok sık istekte bilgisayarı geçici engelliyor (Cloudflare 429): istekler arası bekleme
+        'requestIntervalMs'     => max(800, (int)setting('nk_request_interval_ms', '2000'))
     ], true);
 }
 
@@ -321,6 +322,18 @@ if ($route === '/sync-sold' || preg_match('#^/pbatch/([^/]+)/sync-sold$#i', $rou
 
 // 5. POST /pbatch/{storeCode}/error-report
 if (preg_match('#^/pbatch/([^/]+)/error-report$#i', $route, $m)) {
+    // Uygulama bunu yalnızca NadirKitap (Cloudflare) istekleri sınırladığında gönderir; panel günlüğüne yazılır
+    try {
+        $dir = nk_client_log_dir();
+        if (is_dir($dir) || @mkdir($dir, 0775, true)) {
+            $f = fn($k) => str_replace(["\r", "\n"], ' ', mb_substr((string)($body[$k] ?? ''), 0, 500));
+            $line = date('d.m H:i:s') . ' HATA  [' . ($username !== '' ? preg_replace('/[^\p{L}\p{N}_.@-]/u', '', $username) : '?') . '] '
+                . 'NADİRKİTAP ERİŞİMİ SINIRLADI (' . $f('errorType') . ') HTTP ' . $f('httpStatus') . ', Retry-After: ' . ($f('retryAfterHeader') ?: '-')
+                . ', istek sayısı: ' . $f('totalRequestCount') . ', adres: ' . $f('url') . ' | ' . $f('message') . ' ' . $f('details') . "\n";
+            @file_put_contents($dir . '/' . date('Ymd') . '.log', $line, FILE_APPEND | LOCK_EX);
+        }
+    } catch (Throwable $e) {
+    }
     nk_json_response(null, true);
 }
 
