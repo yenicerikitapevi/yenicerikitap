@@ -39,4 +39,30 @@ public final class LimitText {
     public static double ratio(double uploaded, double limit) {
         return limit >= SINIRSIZ ? uploaded / (uploaded + 150.0) : uploaded / limit;
     }
+
+    // --- Saatlik aktarım sınırı (1.4.6) ---
+    private static volatile int pendingPause = 0;
+
+    /** Sunucunun sayfa yanıtı: bekle (dakika). Sayı değilse 0. */
+    public static void rememberPause(Object payload) {
+        int m = 0;
+        if (payload instanceof Number) m = ((Number) payload).intValue();
+        pendingPause = (m > 0 && m <= 24 * 60) ? m : 0;
+    }
+    /** UploadClient sayfa gönderiminin dönüşü: uygulamanın kendi değeri yerine sunucunun bekleme süresi */
+    public static Integer withPause(Integer original) {
+        int m = pendingPause;
+        pendingPause = 0;
+        if (m > 0) return m;
+        return original;
+    }
+    public static String pauseStart(Integer minutes) {
+        int m = minutes == null ? 0 : minutes;
+        java.time.LocalTime t = java.time.LocalTime.now().plusMinutes(m);
+        return String.format("Saatlik aktarım sınırı doldu (NadirKitap engellemesin diye). %d dakika beklenecek; "
+            + "saat %02d:%02d civarında kaldığı yerden kendiliğinden devam edecek. Uygulamayı kapatmayın.", m, t.getHour(), t.getMinute());
+    }
+    public static String pauseEnd() {
+        return "Bekleme bitti, aktarım kaldığı yerden devam ediyor.";
+    }
 }

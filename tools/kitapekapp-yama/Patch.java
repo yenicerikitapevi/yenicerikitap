@@ -3,7 +3,8 @@ import java.nio.file.*;
 import java.util.*;
 
 /** kitapekapp 1.4.2 → 1.4.5: 500 seçeneği açılır, 1000 yerine "Sınırsız" (100000) gelir; yazılar LimitText ile;
- *  filigran temizliği WmAlign ile (şablon her görselde hizalanır). */
+ *  filigran temizliği WmAlign ile (şablon her görselde hizalanır);
+ *  1.4.6: sunucunun sayfa yanıtındaki "bekle (dakika)" değeri kullanılır (saatlik aktarım sınırı). */
 public class Patch {
     static final String H = "com/netarti/nkapp/ui/LimitText";
     static int changes = 0;
@@ -15,6 +16,7 @@ public class Patch {
         patch(root.resolve("com/netarti/nkapp/ui/NkUploaderApp$2$1.class"));
         patch(root.resolve("com/netarti/nkapp/core/UploadClient.class"));
         patch(root.resolve("com/netarti/nkapp/utility/ImageUtil.class"));
+        patch(root.resolve("com/netarti/nkapp/core/UploadProcessor.class"));
         System.out.println("TOPLAM DEĞİŞİKLİK: " + changes);
     }
 
@@ -30,9 +32,18 @@ public class Patch {
                 MethodVisitor mv = super.visitMethod(acc, name, desc, sig, ex);
                 return new MethodVisitor(Opcodes.ASM9, mv) {
                     boolean enableNext = false, unlimitedNext = false, idleNext = false;
+                    boolean batchPostNext = false, waitMsgNext = false, resumeMsgNext = false;
+                    final boolean batchMethod = cls.endsWith("UploadClient") && name.equals("a")
+                        && desc.equals("(Lcom/netarti/nkapp/dto/ProductsBatchRequest;Ljava/lang/String;Lcom/netarti/nkapp/enums/ProductType;I)Ljava/lang/Integer;");
+                    final boolean stageMethod = cls.endsWith("UploadProcessor") && name.equals("a") && desc.startsWith("(Lcom/netarti/nkapp/core/UploadProcessor$CategoryStage;Lcom/netarti/nkapp/enums/PageMode;III");
 
                     public void visitFieldInsn(int op, String owner, String fname, String fdesc) {
                         super.visitFieldInsn(op, owner, fname, fdesc);
+                        // Bekleme mesajları ("Sunucu bağlantısı tekrar kuruluyor" yerine saatlik sınır açıklaması)
+                        if (stageMethod && op == Opcodes.GETSTATIC && owner.equals("com/netarti/nkapp/utility/UiMessage")) {
+                            if (fname.equals("v")) waitMsgNext = true;
+                            if (fname.equals("w")) resumeMsgNext = true;
+                        }
                         // updateControlStates: 500/1000 her zaman kapatılıyordu → 25/250 gibi yalnızca aktarım sürerken kapalı
                         if (op == Opcodes.GETFIELD && name.equals("updateControlStates") && (fname.equals("limit500Btn") || fname.equals("limit1000Btn"))) idleNext = true;
                     }
@@ -59,6 +70,23 @@ public class Patch {
                     }
 
                     public void visitMethodInsn(int op, String owner, String mname, String mdesc, boolean itf) {
+                        if (stageMethod && (waitMsgNext || resumeMsgNext) && owner.equals("com/netarti/nkapp/utility/UiMessage") && mname.equals("a")) {
+                            super.visitMethodInsn(op, owner, mname, mdesc, itf);
+                            super.visitInsn(Opcodes.POP);
+                            if (waitMsgNext) {
+                                waitMsgNext = false; log("bekleme mesajı → LimitText.pauseStart");
+                                super.visitVarInsn(Opcodes.ALOAD, 22);
+                                super.visitMethodInsn(Opcodes.INVOKESTATIC, H, "pauseStart", "(Ljava/lang/Integer;)Ljava/lang/String;", false);
+                            } else {
+                                resumeMsgNext = false; log("devam mesajı → LimitText.pauseEnd");
+                                super.visitMethodInsn(Opcodes.INVOKESTATIC, H, "pauseEnd", "()Ljava/lang/String;", false);
+                            }
+                            return;
+                        }
+                        if (batchMethod && op == Opcodes.INVOKEVIRTUAL && owner.equals("com/netarti/nkapp/core/UploadHelper") && mname.equals("a")
+                                && mdesc.equals("(Lokhttp3/Request;Ljava/lang/String;Lcom/netarti/nkapp/core/UploadHelper$Handler;)Ljava/lang/Object;")) {
+                            batchPostNext = true;
+                        }
                         if (op == Opcodes.INVOKESTATIC && name.equals("removeWatermarkBytes") && owner.equals("com/netarti/nkapp/utility/ImageUtil") && mname.equals("cleanWatermark")) {
                             log("removeWatermarkBytes: cleanWatermark → WmAlign.clean");
                             super.visitMethodInsn(op, "com/netarti/nkapp/utility/WmAlign", "clean", mdesc, false); return;
@@ -71,6 +99,14 @@ public class Patch {
                     }
 
                     public void visitInsn(int op) {
+                        if (batchMethod && batchPostNext && op == Opcodes.POP) {
+                            batchPostNext = false; log("sayfa yanıtı (bekle dakikası) saklanıyor → LimitText.rememberPause");
+                            super.visitMethodInsn(Opcodes.INVOKESTATIC, H, "rememberPause", "(Ljava/lang/Object;)V", false); return;
+                        }
+                        if (batchMethod && op == Opcodes.ARETURN) {
+                            log("dönüş değeri → LimitText.withPause");
+                            super.visitMethodInsn(Opcodes.INVOKESTATIC, H, "withPause", "(Ljava/lang/Integer;)Ljava/lang/Integer;", false);
+                        }
                         if (idleNext && op == Opcodes.ICONST_1) {
                             idleNext = false; log("updateControlStates: setDisable(true) → setDisable(!idle)");
                             super.visitInsn(Opcodes.ICONST_1); super.visitVarInsn(Opcodes.ILOAD, 1); super.visitInsn(Opcodes.ISUB); return;
