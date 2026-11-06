@@ -79,6 +79,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['op'])) {
         }
         log_action('Eski Yedekler Silindi', 'Storage', null, $n . ' dosya, ' . $fmt_bytes($freed));
         set_flash('success', "{$n} eski veritabanı yedeği silindi, " . $fmt_bytes($freed) . ' yer açıldı.');
+    } elseif ($op === 'refresh_images') {
+        db_query("DELETE FROM settings WHERE setting_key = 'nk_image_refresh_at'");
+        db_query("INSERT INTO settings (setting_key, setting_value) VALUES ('nk_image_refresh_at', ?)", [(string)time()]);
+        log_action('Aktarım Görselleri Yenilenecek', 'Storage', null, date('d.m.Y H:i'));
+        set_flash('success', 'Tamam. Bundan sonraki aktarımda, sitede zaten olan kitapların fotoğrafları da bir kez yeniden çekilecek (yeni filigran temizliğiyle). Eski fotoğraflar otomatik silinir.');
     } elseif ($op === 'vacuum' && $is_sqlite) {
         $before = (int)@filesize(SQLITE_PATH);
         try {
@@ -166,6 +171,18 @@ foreach (['books', 'analytics_events', 'nk_run_codes', 'action_logs', 'orders', 
                 <?php endif; ?>
             </tbody>
         </table>
+    </div>
+</div>
+<?php $refresh_at = (int)setting('nk_image_refresh_at', '0'); ?>
+<div class="card border-0 shadow-sm rounded-4 p-4 mb-4">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
+        <div>
+            <b>Aktarılan kitap fotoğraflarını yenile</b>
+            <div class="text-muted fs-7">Aktarım, sitede fotoğrafı olan kitabın fotoğraflarını yeniden çekmez. Filigran temizliği iyileşince (ör. uygulama 1.4.5) buna basın:
+                sonraki aktarımda var olan kitapların fotoğrafları da <b>bir kez</b> yeniden çekilir, sonra yine dokunulmaz.</div>
+            <?php if ($refresh_at): ?><div class="fs-8 text-muted mt-1">Son yenileme isteği: <?= date('d.m.Y H:i', $refresh_at) ?></div><?php endif; ?>
+        </div>
+        <form method="POST" onsubmit="return confirm('Sonraki aktarımda var olan kitapların fotoğrafları bir kez yeniden çekilsin mi? Aktarım bu sefer daha uzun sürer.');"><input type="hidden" name="op" value="refresh_images"><button class="btn btn-sm btn-outline-primary"><i class="bi bi-arrow-repeat me-1"></i>Görselleri yenile</button></form>
     </div>
 </div>
 <p class="text-muted fs-8">Önce kullanılmayan görselleri ve yedekleri silin, sonra veritabanını sıkıştırın (sıkıştırma için diskte veritabanı kadar boş yer gerekir).</p>

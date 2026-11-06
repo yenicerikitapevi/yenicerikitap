@@ -2,7 +2,8 @@ import net.bytebuddy.jar.asm.*;
 import java.nio.file.*;
 import java.util.*;
 
-/** kitapekapp 1.4.2 → 1.4.3: 500 seçeneği açılır, 1000 yerine "Sınırsız" (100000) gelir; yazılar LimitText ile. */
+/** kitapekapp 1.4.2 → 1.4.5: 500 seçeneği açılır, 1000 yerine "Sınırsız" (100000) gelir; yazılar LimitText ile;
+ *  filigran temizliği WmAlign ile (şablon her görselde hizalanır). */
 public class Patch {
     static final String H = "com/netarti/nkapp/ui/LimitText";
     static int changes = 0;
@@ -13,6 +14,7 @@ public class Patch {
         patch(root.resolve("com/netarti/nkapp/ui/NkUploaderApp$2.class"));
         patch(root.resolve("com/netarti/nkapp/ui/NkUploaderApp$2$1.class"));
         patch(root.resolve("com/netarti/nkapp/core/UploadClient.class"));
+        patch(root.resolve("com/netarti/nkapp/utility/ImageUtil.class"));
         System.out.println("TOPLAM DEĞİŞİKLİK: " + changes);
     }
 
@@ -57,6 +59,10 @@ public class Patch {
                     }
 
                     public void visitMethodInsn(int op, String owner, String mname, String mdesc, boolean itf) {
+                        if (op == Opcodes.INVOKESTATIC && name.equals("removeWatermarkBytes") && owner.equals("com/netarti/nkapp/utility/ImageUtil") && mname.equals("cleanWatermark")) {
+                            log("removeWatermarkBytes: cleanWatermark → WmAlign.clean");
+                            super.visitMethodInsn(op, "com/netarti/nkapp/utility/WmAlign", "clean", mdesc, false); return;
+                        }
                         if (enableNext && mname.equals("setDisable") && owner.equals("javafx/scene/control/ToggleButton")) {
                             enableNext = false; log("setDisable(true) → false");
                             super.visitInsn(Opcodes.POP); super.visitInsn(Opcodes.ICONST_0);

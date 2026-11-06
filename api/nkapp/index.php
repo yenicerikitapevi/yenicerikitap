@@ -440,8 +440,34 @@ if (preg_match('#^/pbatch/([^/]+)/([^/]+)/(\d+)$#i', $route, $m)) {
 
             $summary = nk_clean_description($meta['description'] ?? '');
 
-            // Görselleri kaydet
+            // Mevcut kaydı kontrol et (nadirkitap_code ile). Başka bir alt dükkanın kitabı devralınmaz;
+            // yalnızca bu dükkanın veya henüz dükkana bağlanmamış eski kayıtlar güncellenir.
+            $existing_book = null;
+            if ($nk_code !== '') {
+                if ($auth_store_id) {
+                    $existing_book = db_fetch("SELECT id, cover_image, extra_images, shelf_code, isbn FROM books WHERE nadirkitap_code = ? AND (store_id = ? OR store_id IS NULL) ORDER BY store_id DESC", [$nk_code, $auth_store_id]);
+                } else {
+                    $existing_book = db_fetch("SELECT id, cover_image, extra_images, shelf_code, isbn FROM books WHERE nadirkitap_code = ? AND store_id IS NULL", [$nk_code]);
+                }
+            }
+
+            // Görselleri kaydet. Sitede zaten görseli olan kitabın fotoğrafları yeniden yazılmaz
+            // (yeniden aktarımda disk dolmasın; yalnızca fiyat/stok/bilgiler güncellenir).
+            $keep_images = false;
+            if ($existing_book) {
+                $old_cover = basename((string)$existing_book['cover_image']);
+                // Panelde "Görselleri yenile" denildiyse ondan önce yazılmış fotoğraflar bir kez yeniden çekilir
+                $refresh_at = (int)setting('nk_image_refresh_at', '0');
+                $keep_images = $old_cover !== '' && $old_cover !== 'book_placeholder.svg'
+                    && (preg_match('#^https?://#i', (string)$existing_book['cover_image'])
+                        || (is_file(UPLOAD_DIR . '/' . $old_cover) && @filemtime(UPLOAD_DIR . '/' . $old_cover) >= $refresh_at));
+            }
             $saved_images = [];
+            if ($keep_images) {
+                $images = []; // gelen fotoğraflar çözülmez/yazılmaz
+                $saved_images = array_values(array_filter(array_merge([(string)$existing_book['cover_image']], (array)(json_decode((string)($existing_book['extra_images'] ?? ''), true) ?: []))));
+                $saved_images = array_values(array_unique($saved_images));
+            }
             $allowed_exts = ['jpg' => 'jpg', 'jpeg' => 'jpg', 'png' => 'png', 'webp' => 'webp', 'gif' => 'gif'];
             if (is_array($images)) {
                 foreach ($images as $idx => $img) {
@@ -470,17 +496,6 @@ if (preg_match('#^/pbatch/([^/]+)/([^/]+)/(\d+)$#i', $route, $m)) {
 
             $cover_image = !empty($saved_images) ? $saved_images[0] : null;
             $extra_images_json = count($saved_images) > 1 ? json_encode($saved_images, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) : null;
-
-            // Mevcut kaydı kontrol et (nadirkitap_code ile). Başka bir alt dükkanın kitabı devralınmaz;
-            // yalnızca bu dükkanın veya henüz dükkana bağlanmamış eski kayıtlar güncellenir.
-            $existing_book = null;
-            if ($nk_code !== '') {
-                if ($auth_store_id) {
-                    $existing_book = db_fetch("SELECT id, cover_image, extra_images, shelf_code, isbn FROM books WHERE nadirkitap_code = ? AND (store_id = ? OR store_id IS NULL) ORDER BY store_id DESC", [$nk_code, $auth_store_id]);
-                } else {
-                    $existing_book = db_fetch("SELECT id, cover_image, extra_images, shelf_code, isbn FROM books WHERE nadirkitap_code = ? AND store_id IS NULL", [$nk_code]);
-                }
-            }
 
             // ISBN çakışma kontrolü
             $db_isbn = $isbn;
