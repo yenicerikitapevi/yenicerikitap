@@ -351,6 +351,7 @@ if (preg_match('#^/pbatch/([^/]+)/([^/]+)/(\d+)$#i', $route, $m)) {
 
     $entity_cache = ['authors' => [], 'publishers' => [], 'categories' => []];
     $saved_count = 0;
+    $stale_images = [];
 
     global $pdo;
     $in_tx = false;
@@ -475,9 +476,9 @@ if (preg_match('#^/pbatch/([^/]+)/([^/]+)/(\d+)$#i', $route, $m)) {
             $existing_book = null;
             if ($nk_code !== '') {
                 if ($auth_store_id) {
-                    $existing_book = db_fetch("SELECT id, cover_image, shelf_code, isbn FROM books WHERE nadirkitap_code = ? AND (store_id = ? OR store_id IS NULL) ORDER BY store_id DESC", [$nk_code, $auth_store_id]);
+                    $existing_book = db_fetch("SELECT id, cover_image, extra_images, shelf_code, isbn FROM books WHERE nadirkitap_code = ? AND (store_id = ? OR store_id IS NULL) ORDER BY store_id DESC", [$nk_code, $auth_store_id]);
                 } else {
-                    $existing_book = db_fetch("SELECT id, cover_image, shelf_code, isbn FROM books WHERE nadirkitap_code = ? AND store_id IS NULL", [$nk_code]);
+                    $existing_book = db_fetch("SELECT id, cover_image, extra_images, shelf_code, isbn FROM books WHERE nadirkitap_code = ? AND store_id IS NULL", [$nk_code]);
                 }
             }
 
@@ -497,6 +498,14 @@ if (preg_match('#^/pbatch/([^/]+)/([^/]+)/(\d+)$#i', $route, $m)) {
             if ($existing_book) {
                 $book_id = (int)$existing_book['id'];
                 $final_cover = $cover_image ?: ($existing_book['cover_image'] ?: 'book_placeholder.svg');
+                // Yeniden aktarımda yeni fotoğraflar geldiyse eskileri (aktarımın yazdığı nk_ dosyaları) commit sonrası silinir
+                if ($saved_images) {
+                    $old_files = array_merge([(string)$existing_book['cover_image']], (array)(json_decode((string)($existing_book['extra_images'] ?? ''), true) ?: []));
+                    foreach ($old_files as $of) {
+                        $of = basename((string)$of);
+                        if (strpos($of, 'nk_') === 0 && !in_array($of, $saved_images, true)) $stale_images[] = $of;
+                    }
+                }
                 $final_shelf = $shelf_code ?: ($existing_book['shelf_code'] ?? null);
                 db_query(
                     "UPDATE books SET store_id = ?, title = ?, isbn = ?, author_id = ?, publisher_id = ?, category_id = ?, price = ?, stock = ?, pages = ?, year = ?, summary = ?, cover_image = ?, is_active = 1, shelf_code = ?, condition_text = ?, cover_type = ?, dimensions = ?, language = ?, translator = ?, publish_place = ?, extra_images = ?, source_url = ? WHERE id = ?",
@@ -529,6 +538,11 @@ if (preg_match('#^/pbatch/([^/]+)/([^/]+)/(\d+)$#i', $route, $m)) {
 
         $pdo->commit();
         $in_tx = false;
+        // Artık hiçbir kitapta kullanılmayan eski fotoğraflar diskten silinir (disk dolmasın)
+        foreach (array_unique($stale_images) as $of) {
+            $still = db_fetch("SELECT id FROM books WHERE cover_image = ? OR extra_images LIKE ? LIMIT 1", [$of, '%"' . $of . '"%']);
+            if (!$still) @unlink(UPLOAD_DIR . '/' . $of);
+        }
     } catch (Throwable $e) {
         if ($in_tx) {
             @$pdo->rollBack();

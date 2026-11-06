@@ -21,6 +21,7 @@ $allowed_pages = [
     'ActionLogs'   => 'actionlogs.php',
     'DataQuality'  => 'dataquality.php',
     'Cleanup'      => 'cleanup.php',
+    'Storage'      => 'storage.php',
     'NkCategories' => 'nkcategories.php',
     'Settings'     => 'settings.php'
 ];
@@ -122,6 +123,9 @@ $pending_sellers = db_fetch("SELECT COUNT(*) as cnt FROM stores WHERE approval_s
                 <a href="index.php?p=Cleanup" class="nav-link <?= $current_p === 'Cleanup' ? 'active' : '' ?>">
                     <i class="bi bi-trash3"></i> Örnek Veri Temizliği
                 </a>
+                <a href="index.php?p=Storage" class="nav-link <?= $current_p === 'Storage' ? 'active' : '' ?>">
+                    <i class="bi bi-hdd"></i> Disk Kullanımı
+                </a>
 
                 <a href="index.php?p=ActionLogs" class="nav-link <?= $current_p === 'ActionLogs' ? 'active' : '' ?>">
                     <i class="bi bi-journal-text"></i> İşlem Logları
@@ -161,6 +165,7 @@ $pending_sellers = db_fetch("SELECT COUNT(*) as cnt FROM stores WHERE approval_s
                             'ActionLogs' => 'Sistem ve Denetim Logları',
                             'DataQuality' => 'Veri Kontrolü (SEO)',
                             'Cleanup' => 'Örnek Veri Temizliği',
+                            'Storage' => 'Disk Kullanımı',
                             'NkCategories' => 'NadirKitap Kategori Adları',
                             'Settings' => 'Genel Site Ayarları'
                         ];
