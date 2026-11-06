@@ -71,6 +71,39 @@ $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
 
 // İstemci logları her zaman kabul edilir
 if ($route === '/client-logs' || strpos($route, '/client-logs') === 0) {
+    // Uygulamanın kendi günlüğü: panelde (Disk Kullanımı → Aktarım günlüğü) görmek için diske yazılır
+    try {
+        $in = json_decode((string)file_get_contents('php://input'), true);
+        $entries = is_array($in['entries'] ?? null) ? $in['entries'] : [];
+        $who = '';
+        $hk = trim($_SERVER['HTTP_X_API_KEY'] ?? '');
+        if (stripos($hk, 'YNCAUTH:') === 0) {
+            $j = json_decode((string)base64_decode(strtr(substr($hk, 8), '-_', '+/')), true);
+            $who = is_array($j) ? (string)($j['username'] ?? '') : '';
+        }
+        $who = preg_replace('/[^\p{L}\p{N}_.@-]/u', '', $who) ?: '?';
+        $ver = preg_replace('/[^0-9A-Za-z._-]/', '', (string)($in['appVersion'] ?? ''));
+        $dir = nk_client_log_dir();
+        if ($entries && (is_dir($dir) || @mkdir($dir, 0775, true))) {
+            $file = $dir . '/' . date('Ymd') . '.log';
+            if (@filesize($file) < 15 * 1024 * 1024) {
+                $out = '';
+                foreach (array_slice($entries, 0, 2000) as $e) {
+                    if (!is_array($e)) continue;
+                    $ts = (int)(($e['timestamp'] ?? 0) / 1000) ?: time();
+                    $msg = str_replace(["\r", "\n"], ' ', mb_substr((string)($e['message'] ?? ''), 0, 1000));
+                    $st = trim((string)($e['stackTrace'] ?? ''));
+                    if ($st !== '') $msg .= ' | ' . str_replace(["\r", "\n", "\t"], ' ', mb_substr($st, 0, 600));
+                    $out .= date('d.m H:i:s', $ts) . ' ' . str_pad(substr((string)($e['level'] ?? ''), 0, 5), 5) . " [{$who} v{$ver}] " . $msg . "\n";
+                }
+                @file_put_contents($file, $out, FILE_APPEND | LOCK_EX);
+            }
+            foreach (glob($dir . '/*.log') ?: [] as $old) {
+                if (@filemtime($old) < time() - 4 * 86400) @unlink($old);
+            }
+        }
+    } catch (Throwable $e) {
+    }
     nk_json_response(null, true);
 }
 
@@ -198,13 +231,22 @@ if ($route === '/existing-product-codes') {
         nk_json_response([], true);
     }
     if ($auth_store_id) {
-        $rows = db_fetch_all("SELECT nadirkitap_code FROM books WHERE store_id = ? AND nadirkitap_code IS NOT NULL AND nadirkitap_code != ''", [$auth_store_id]);
+        $rows = db_fetch_all("SELECT nadirkitap_code, cover_image FROM books WHERE store_id = ? AND nadirkitap_code IS NOT NULL AND nadirkitap_code != ''", [$auth_store_id]);
     } else {
-        $rows = db_fetch_all("SELECT nadirkitap_code FROM books WHERE nadirkitap_code IS NOT NULL AND nadirkitap_code != ''");
+        $rows = db_fetch_all("SELECT nadirkitap_code, cover_image FROM books WHERE nadirkitap_code IS NOT NULL AND nadirkitap_code != ''");
     }
+    // "Görselleri yenile" sonrası: fotoğrafı o tarihten eski kitaplar listeye konmaz, uygulama onları yeniden gönderir
+    $refresh_at = (int)setting('nk_image_refresh_at', '0');
     $codes = [];
     foreach ($rows as $r) {
         $c = trim((string)$r['nadirkitap_code']);
+        if ($refresh_at > 0) {
+            $cv = basename((string)$r['cover_image']);
+            if ($cv !== '' && $cv !== 'book_placeholder.svg' && !preg_match('#^https?://#i', (string)$r['cover_image'])) {
+                $mt = @filemtime(UPLOAD_DIR . '/' . $cv);
+                if ($mt !== false && $mt < $refresh_at) continue;
+            }
+        }
         if ($c !== '') {
             $codes[] = $c;
         }

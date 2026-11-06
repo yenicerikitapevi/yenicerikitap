@@ -185,4 +185,38 @@ foreach (['books', 'analytics_events', 'nk_run_codes', 'action_logs', 'orders', 
         <form method="POST" onsubmit="return confirm('Sonraki aktarımda var olan kitapların fotoğrafları bir kez yeniden çekilsin mi? Aktarım bu sefer daha uzun sürer.');"><input type="hidden" name="op" value="refresh_images"><button class="btn btn-sm btn-outline-primary"><i class="bi bi-arrow-repeat me-1"></i>Görselleri yenile</button></form>
     </div>
 </div>
+<?php
+$log_files = glob(nk_client_log_dir() . '/*.log') ?: [];
+rsort($log_files);
+$log_pick = basename((string)($_GET['log'] ?? ''));
+$log_file = ($log_pick !== '' && in_array(nk_client_log_dir() . '/' . $log_pick, $log_files, true)) ? nk_client_log_dir() . '/' . $log_pick : ($log_files[0] ?? '');
+$log_lines = [];
+if ($log_file) {
+    $fh = @fopen($log_file, 'rb');
+    if ($fh) {
+        $sz = filesize($log_file);
+        fseek($fh, max(0, $sz - 200000));
+        $chunk = stream_get_contents($fh);
+        fclose($fh);
+        $log_lines = array_slice(explode("\n", trim((string)$chunk)), -400);
+        $log_lines = array_reverse($log_lines);
+    }
+}
+?>
+<div class="card border-0 shadow-sm rounded-4 p-4 mb-4" id="aktarim-gunlugu">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+        <div><b>Aktarım uygulaması günlüğü</b> <span class="text-muted fs-8">(uygulamanın yaptığı her adım; en yenisi üstte, son 4 gün tutulur)</span></div>
+        <div class="d-flex gap-1 flex-wrap">
+            <?php foreach ($log_files as $lf): $b = basename($lf); ?>
+                <a href="index.php?p=Storage&log=<?= e($b) ?>#aktarim-gunlugu" class="btn btn-sm <?= $lf === $log_file ? 'btn-dark' : 'btn-outline-dark' ?>"><?= e(substr($b, 6, 2) . '.' . substr($b, 4, 2)) ?></a>
+            <?php endforeach; ?>
+            <a href="index.php?p=Storage<?= $log_pick !== '' ? '&log=' . e($log_pick) : '' ?>#aktarim-gunlugu" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-clockwise"></i></a>
+        </div>
+    </div>
+    <?php if ($log_lines): ?>
+        <pre class="bg-light border rounded-3 p-2 mb-0 fs-8" style="max-height: 420px; overflow: auto; white-space: pre-wrap;"><?= e(implode("\n", $log_lines)) ?></pre>
+    <?php else: ?>
+        <div class="text-muted fs-7">Henüz günlük yok. Uygulama (1.4.2 ve sonrası) aktarım sırasında günlüğünü birkaç saniyede bir buraya gönderir.</div>
+    <?php endif; ?>
+</div>
 <p class="text-muted fs-8">Önce kullanılmayan görselleri ve yedekleri silin, sonra veritabanını sıkıştırın (sıkıştırma için diskte veritabanı kadar boş yer gerekir).</p>
