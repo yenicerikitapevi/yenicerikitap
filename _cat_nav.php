@@ -29,24 +29,6 @@ $nav_active = isset($nav_active) ? (string)$nav_active : '';
                     <a class="nav-link" href="contact.php"><i class="bi bi-envelope-fill me-1"></i> İletişim</a>
                 </li>
             </ul>
-            <script>
-            // Geniş ekranda sığmayan kategoriler gizlenir (hepsi "Tüm Kategoriler"de); telefonda menü yana kaydırılır
-            (function () {
-                var ul = document.currentScript.previousElementSibling;
-                function fit() {
-                    var cats = ul.querySelectorAll('.cat-nav-cat');
-                    cats.forEach(function (li) { li.classList.remove('d-none'); });
-                    if (window.innerWidth < 768) return;
-                    for (var i = cats.length - 1; i >= 0 && ul.scrollWidth > ul.clientWidth + 1; i--) {
-                        if (cats[i].querySelector('.active')) continue;
-                        cats[i].classList.add('d-none');
-                    }
-                }
-                fit();
-                var t; window.addEventListener('resize', function () { clearTimeout(t); t = setTimeout(fit, 100); });
-                if (document.fonts && document.fonts.ready) document.fonts.ready.then(fit);
-            })();
-            </script>
             <?php if (count($nav_all) > count($nav_top)): ?>
             <div class="dropdown cat-nav-all">
                 <button class="nav-link dropdown-toggle h-100" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false">
@@ -84,5 +66,24 @@ $nav_active = isset($nav_active) ? (string)$nav_active : '';
             })();
             </script>
             <?php endif; ?>
+            <script>
+            // ("Tüm Kategoriler" düğmesinden sonra çalışır, ölçüm onun yeriyle yapılır) Geniş ekranda sığmayan kategoriler gizlenir (hepsi "Tüm Kategoriler"de); telefonda menü yana kaydırılır
+            (function () {
+                var ul = document.currentScript.parentNode.querySelector('.cat-nav-scroll');
+                function fit() {
+                    var cats = ul.querySelectorAll('.cat-nav-cat');
+                    cats.forEach(function (li) { li.classList.remove('d-none'); });
+                    if (window.innerWidth < 768) return;
+                    for (var i = cats.length - 1; i >= 0 && ul.scrollWidth > ul.clientWidth + 1; i--) {
+                        if (cats[i].querySelector('.active')) continue;
+                        cats[i].classList.add('d-none');
+                    }
+                }
+                fit();
+                var t; window.addEventListener('resize', function () { clearTimeout(t); t = setTimeout(fit, 100); });
+                window.addEventListener('load', fit);
+                if (document.fonts && document.fonts.ready) document.fonts.ready.then(fit);
+            })();
+            </script>
         </div>
     </nav>
