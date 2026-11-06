@@ -11,11 +11,40 @@
  *   POST /api/nkapp/pbatch/{storeCode}/error-report
  *   POST /api/nkapp/client-logs
  */
+// Uygulama yalnızca JSON okur: PHP uyarıları/hataları yanıta karışmasın (sunucu loguna yazılır).
+// Araya giren her çıktı tamponda tutulur ve JSON gönderilmeden önce atılır; ölümcül hatada da JSON döner.
+ini_set('display_errors', '0');
+ini_set('log_errors', '1');
+ob_start();
+register_shutdown_function(function () {
+    $err = error_get_last();
+    if ($err && in_array($err['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR, E_USER_ERROR, E_RECOVERABLE_ERROR], true) && empty($GLOBALS['nk_json_sent'])) {
+        while (ob_get_level()) ob_end_clean();
+        error_log('[nkapp] Ölümcül hata: ' . $err['message'] . ' (' . basename($err['file']) . ':' . $err['line'] . ')');
+        if (!headers_sent()) {
+            http_response_code(500);
+            header('Content-Type: application/json; charset=utf-8');
+        }
+        echo json_encode([
+            'messageList' => ['Sunucu hatası: ' . $err['message'] . ' (' . basename($err['file']) . ':' . $err['line'] . ')'],
+            'success' => false, 'payload' => null, 'error' => 'SERVER_ERROR',
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    }
+});
+
 require_once __DIR__ . '/../../config.php';
 
 header('Content-Type: application/json; charset=utf-8');
 
 function nk_json_response($payload = null, $success = true, $messages = [], $error = null, $status = 200) {
+    // Yanıttan önce basılmış istenmeyen çıktı (uyarı, boşluk, BOM) atılır ve loga yazılır
+    $stray = '';
+    while (ob_get_level()) $stray .= (string)ob_get_clean();
+    if (trim($stray) !== '') {
+        error_log('[nkapp] JSON öncesi çıktı atıldı: ' . mb_substr(trim(strip_tags($stray)), 0, 500, 'UTF-8'));
+    }
+    $GLOBALS['nk_json_sent'] = true;
+    if (!headers_sent()) header('Content-Type: application/json; charset=utf-8');
     http_response_code($status);
     echo json_encode([
         'messageList' => array_values($messages),
