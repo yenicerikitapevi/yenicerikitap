@@ -27,7 +27,8 @@ register_shutdown_function(function () {
         }
         echo json_encode([
             'messageList' => ['Sunucu hatası: ' . $err['message'] . ' (' . basename($err['file']) . ':' . $err['line'] . ')'],
-            'success' => false, 'payload' => null, 'error' => 'SERVER_ERROR',
+            // Uygulama hata penceresinde 'error' alanını gösteriyor: gerçek sebep orada görünsün
+            'success' => false, 'payload' => null, 'error' => 'Sunucu hatası: ' . $err['message'] . ' (' . basename($err['file']) . ':' . $err['line'] . ')',
         ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     }
 });
@@ -533,7 +534,8 @@ if (preg_match('#^/pbatch/([^/]+)/([^/]+)/(\d+)$#i', $route, $m)) {
             @$pdo->rollBack();
         }
         error_log('[Yeniceri nkapp] Batch kaydetme hatasi: ' . $e->getMessage());
-        nk_json_response(null, false, ['Ürün kaydı sırasında sunucu hatası: ' . $e->getMessage()], 'SERVER_ERROR', 500);
+        $why = 'Ürün kaydı sırasında sunucu hatası: ' . $e->getMessage() . ' (' . basename($e->getFile()) . ':' . $e->getLine() . ')';
+        nk_json_response(null, false, [$why], $why, 500);
     }
 
     nk_json_response($saved_count, true);
