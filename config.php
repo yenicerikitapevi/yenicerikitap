@@ -207,6 +207,11 @@ function extract_nadirkitap_code($input) {
     return '';
 }
 
+/** Aktarım uygulamasının gönderdiği günlüklerin klasörü (kalıcı diskte, veritabanının yanında) */
+function nk_client_log_dir() {
+    return dirname(SQLITE_PATH) . '/nk_logs';
+}
+
 /**
  * Site ayarlarını (settings tablosu) bir kez okuyup döndürür
  */
