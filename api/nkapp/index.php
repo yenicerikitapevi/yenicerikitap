@@ -456,8 +456,11 @@ if (preg_match('#^/pbatch/([^/]+)/([^/]+)/(\d+)$#i', $route, $m)) {
             $keep_images = false;
             if ($existing_book) {
                 $old_cover = basename((string)$existing_book['cover_image']);
+                // Panelde "Görselleri yenile" denildiyse ondan önce yazılmış fotoğraflar bir kez yeniden çekilir
+                $refresh_at = (int)setting('nk_image_refresh_at', '0');
                 $keep_images = $old_cover !== '' && $old_cover !== 'book_placeholder.svg'
-                    && (preg_match('#^https?://#i', (string)$existing_book['cover_image']) || is_file(UPLOAD_DIR . '/' . $old_cover));
+                    && (preg_match('#^https?://#i', (string)$existing_book['cover_image'])
+                        || (is_file(UPLOAD_DIR . '/' . $old_cover) && @filemtime(UPLOAD_DIR . '/' . $old_cover) >= $refresh_at));
             }
             $saved_images = [];
             if ($keep_images) {
