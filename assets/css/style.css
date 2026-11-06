@@ -119,6 +119,39 @@ header {
     background-color: var(--accent-color);
 }
 
+/* Tek satır menü: sığmayan kısım yana kayar; tüm kategoriler sağdaki açılır listede */
+.cat-nav-scroll {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    white-space: nowrap;
+    scrollbar-width: none;
+}
+.cat-nav-scroll::-webkit-scrollbar { display: none; }
+.cat-nav-scroll .nav-link { padding: 0.8rem 1rem; }
+.cat-nav-all { flex: 0 0 auto; border-left: 1px solid #2a2a35; }
+.cat-nav-all > .nav-link { border: 0; background: transparent; white-space: nowrap; }
+.cat-nav-all > .nav-link.show { color: #fff; background-color: var(--accent-color); }
+.cat-mega {
+    width: min(920px, calc(100vw - 24px));
+    max-height: 70vh;
+    overflow-y: auto;
+    border-radius: 0.75rem;
+}
+.cat-mega-grid { columns: 4 190px; column-gap: 1.25rem; }
+.cat-mega-link {
+    display: block;
+    break-inside: avoid;
+    padding: 0.3rem 0.5rem;
+    border-radius: 0.4rem;
+    color: #1f2937;
+    text-decoration: none;
+    font-size: 0.9rem;
+}
+.cat-mega-link:hover, .cat-mega-link.active { background: #fde8e8; color: var(--accent-color); }
+.cat-mega-count { color: #9ca3af; font-size: 0.75rem; }
+
 /* 4. SECTION TITLES */
 .section-title {
     position: relative;

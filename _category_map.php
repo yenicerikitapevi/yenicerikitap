@@ -102,6 +102,72 @@ function nav_categories() {
     ));
 }
 
+/**
+ * Üst menü için kategoriler: [öne çıkanlar, tümü].
+ * Öne çıkanlar en çok aktif kitabı olan $limit kategori (ada göre sıralı); açık sayfanın kategorisi listede yoksa eklenir.
+ * Tümü: kitabı olan ya da alt kategorisi bulunan tüm adlı ana kategoriler (ada göre).
+ */
+/** Türkçe alfabe sırası için karşılaştırma anahtarı (Ç, C'lerden sonra; I, H'den sonra İ'den önce...) */
+function tr_sort_key($s) {
+    $s = strtr((string)$s, ['İ' => 'i', 'I' => 'ı']);
+    $s = mb_strtolower($s, 'UTF-8');
+    return strtr($s, ['ç' => 'c{', 'ğ' => 'g{', 'ı' => 'h{', 'ö' => 'o{', 'ş' => 's{', 'ü' => 'u{', 'â' => 'a', 'î' => 'i', 'û' => 'u']);
+}
+
+function nav_menu_categories($active = '', $limit = 8) {
+    static $cache = null;
+    if ($cache === null) {
+        $cats = nav_categories();
+        $counts = [];
+        try {
+            foreach (db_fetch_all("SELECT category_id, COUNT(*) AS c FROM books WHERE is_active = 1 AND category_id IS NOT NULL GROUP BY category_id") as $r) {
+                $counts[(int)$r['category_id']] = (int)$r['c'];
+            }
+            $parents = [];
+            foreach (db_fetch_all("SELECT id, parent_id FROM categories WHERE parent_id IS NOT NULL") as $r) {
+                $parents[(int)$r['id']] = (int)$r['parent_id'];
+            }
+            // Alt kategorilerdeki kitaplar ana kategoriye sayılır
+            foreach ($counts as $cid => $c) {
+                $seen = [];
+                $p = $parents[$cid] ?? 0;
+                while ($p && !isset($seen[$p])) {
+                    $seen[$p] = true;
+                    $counts[$p] = ($counts[$p] ?? 0) + $c;
+                    $p = $parents[$p] ?? 0;
+                }
+            }
+        } catch (Throwable $e) {
+        }
+        foreach ($cats as &$c) {
+            $c['book_count'] = $counts[(int)$c['id']] ?? 0;
+        }
+        unset($c);
+        usort($cats, function ($a, $b) { return strcmp(tr_sort_key($a['name']), tr_sort_key($b['name'])); });
+        $cache = $cats;
+    }
+    $all = $cache;
+    $ranked = $all;
+    usort($ranked, function ($a, $b) { return $b['book_count'] <=> $a['book_count'] ?: strcmp(tr_sort_key($a['name']), tr_sort_key($b['name'])); });
+    $top = array_slice(array_values(array_filter($ranked, function ($c) { return $c['book_count'] > 0; })), 0, $limit);
+    if (count($top) < $limit) {
+        // Henüz kitap yoksa (yeni kurulum) ilk kategoriler gösterilir
+        foreach ($all as $c) {
+            if (count($top) >= $limit) break;
+            if (!in_array($c, $top, true)) $top[] = $c;
+        }
+    }
+    if ($active !== '' && $active !== 'home') {
+        $in = false;
+        foreach ($top as $c) { if ((string)$c['id'] === (string)$active) { $in = true; break; } }
+        if (!$in) {
+            foreach ($all as $c) { if ((string)$c['id'] === (string)$active) { $top[] = $c; break; } }
+        }
+    }
+    usort($top, function ($a, $b) { return strcmp(tr_sort_key($a['name']), tr_sort_key($b['name'])); });
+    return [$top, $all];
+}
+
 /** NadirKitap kitap sayfasından, verilen numaraya ait kategori adını bulmaya çalışır. [ad, güven('yüksek'|'tahmini')] */
 function nk_category_name_from_html($html, $code) {
     $code = preg_quote((string)$code, '/');
