@@ -378,6 +378,52 @@ function nk_parse_price($val) {
     return max(0.0, round($num, 2));
 }
 
+/**
+ * Saatlik aktarım sınırı (NadirKitap uygulamayı engellemesin diye).
+ * Mağaza başına 1 saatlik pencerede gelen kitap sayısı sayılır; sınır dolunca pencerenin bitmesine kalan dakika döner.
+ * Uygulama (1.4.6+) bu sayfa yanıtındaki sayıyı "bekle" süresi olarak kullanır, bekler ve kaldığı sayfadan devam eder.
+ * Eski sürümler bu sayıyı yok sayar. Ayar: nk_hourly_limit (0 = kapalı).
+ */
+function nk_hourly_pause_minutes($store_id, $n) {
+    $limit = (int)setting('nk_hourly_limit', '1000');
+    if ($limit <= 0 || $n <= 0) return 0;
+    $key = 'nk_hour_win_' . (int)$store_id;
+    $now = time();
+    $row = db_fetch("SELECT setting_value FROM settings WHERE setting_key = ?", [$key]);
+    [$start, $count] = array_map('intval', array_pad(explode(':', (string)($row['setting_value'] ?? '')), 2, 0));
+    $wait = 0;
+    if ($start > $now) {
+        // Bekleme sürerken uygulama yeniden başlatılmış: bekleme bitene kadar beklemesi söylenir
+        $count += (int)$n;
+        $wait = max(1, (int)ceil(($start - $now) / 60));
+    } else {
+        if ($start <= 0 || $now - $start >= 3600) {
+            $start = $now;
+            $count = 0;
+        }
+        $count += (int)$n;
+    }
+    if ($wait === 0 && $count >= $limit) {
+        $wait = max(1, (int)ceil(($start + 3600 - $now) / 60));
+        // Bekleme bitince yeni pencere başlar
+        $start = $start + 3600;
+        $count = 0;
+    }
+    try {
+        db_query("DELETE FROM settings WHERE setting_key = ?", [$key]);
+        db_query("INSERT INTO settings (setting_key, setting_value) VALUES (?, ?)", [$key, $start . ':' . $count]);
+    } catch (Throwable $e) {
+        return 0;
+    }
+    if ($wait > 0) {
+        $dir = nk_client_log_dir();
+        if (is_dir($dir) || @mkdir($dir, 0775, true)) {
+            @file_put_contents($dir . '/' . date('Ymd') . '.log', date('d.m H:i:s') . " BİLGİ [mağaza {$store_id}] Saatlik sınır ({$limit} kitap) doldu: uygulama {$wait} dakika bekleyip kaldığı yerden devam edecek (" . date('H:i', $now + $wait * 60) . ").\n", FILE_APPEND | LOCK_EX);
+        }
+    }
+    return $wait;
+}
+
 function nk_clean_description($html) {
     $text = (string)$html;
     $text = preg_replace('/<br\s*\/?>/i', "\n", $text);
@@ -622,7 +668,8 @@ if (preg_match('#^/pbatch/([^/]+)/([^/]+)/(\d+)$#i', $route, $m)) {
         nk_json_response(null, false, [$why], $why, 500);
     }
 
-    nk_json_response($saved_count, true);
+    // Yanıt: uygulamanın beklemesi gereken dakika (0 = beklemeden devam). Eski sürümler bu sayıyı kullanmaz.
+    nk_json_response(nk_hourly_pause_minutes($auth_store_id, count($items)), true);
 }
 
 nk_json_response(null, false, ['Bilinmeyen API uç noktası: ' . $route], 'NOT_FOUND', 404);

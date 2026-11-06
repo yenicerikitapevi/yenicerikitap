@@ -39,4 +39,52 @@ public final class LimitText {
     public static double ratio(double uploaded, double limit) {
         return limit >= SINIRSIZ ? uploaded / (uploaded + 150.0) : uploaded / limit;
     }
+
+    // --- Saatlik aktarım sınırı (1.4.6) ---
+    private static volatile int pendingPause = 0;
+    /** Sunucunun istediği beklemenin bittiği an (ms); uygulama sayfa arasında bekleyemediyse sonraki bölümün başında beklenir */
+    private static volatile long pauseUntil = 0;
+    private static volatile boolean waitedAtStage = false;
+
+    /** Sunucunun sayfa yanıtı: bekle (dakika). Sayı değilse 0. */
+    public static void rememberPause(Object payload) {
+        int m = 0;
+        if (payload instanceof Number) m = ((Number) payload).intValue();
+        pendingPause = (m > 0 && m <= 24 * 60) ? m : 0;
+        if (pendingPause > 0) pauseUntil = System.currentTimeMillis() + pendingPause * 60_000L;
+    }
+    /** UploadClient sayfa gönderiminin dönüşü: uygulamanın kendi değeri yerine sunucunun bekleme süresi */
+    public static Integer withPause(Integer original, boolean limitReached) {
+        int m = pendingPause;
+        pendingPause = 0;
+        if (limitReached) { pauseUntil = 0; return original; } // seçilen kitap sayısı doldu, aktarım bitiyor
+        if (m > 0) return m;
+        return original;
+    }
+    /** Sayfa arasında bekleme başlıyor (uygulamanın kendi beklemesi) */
+    public static String pauseStart(Integer minutes) {
+        pauseUntil = 0;
+        int m = minutes == null ? 0 : minutes;
+        java.time.LocalTime t = java.time.LocalTime.now().plusMinutes(m);
+        return String.format("Saatlik aktarım sınırı doldu (NadirKitap engellemesin diye). %d dakika beklenecek; "
+            + "saat %02d:%02d civarında kaldığı yerden kendiliğinden devam edecek. Uygulamayı kapatmayın.", m, t.getHour(), t.getMinute());
+    }
+    public static String pauseEnd() {
+        return "Bekleme bitti, aktarım kaldığı yerden devam ediyor.";
+    }
+    /** Bölüm başı: önceki bölümün son sayfasında gelen bekleme hâlâ sürüyorsa kalan süre (ms), yoksa 0 */
+    public static long pendingWaitStart(com.netarti.nkapp.ui.ProgressSink sink) {
+        long left = pauseUntil - System.currentTimeMillis();
+        pauseUntil = 0;
+        waitedAtStage = left > 0;
+        if (left <= 0) return 0;
+        int m = (int) Math.ceil(left / 60_000.0);
+        try { if (sink != null) sink.b(pauseStart(m)); } catch (Throwable ignored) {}
+        return left;
+    }
+    public static void pendingWaitEnd(com.netarti.nkapp.ui.ProgressSink sink) {
+        if (!waitedAtStage) return;
+        waitedAtStage = false;
+        try { if (sink != null) sink.b(pauseEnd()); } catch (Throwable ignored) {}
+    }
 }

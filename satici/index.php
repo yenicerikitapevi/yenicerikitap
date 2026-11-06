@@ -227,15 +227,15 @@ if ($tab === 'dukkan') {
                                 <div class="text-danger fs-8 mt-1"><i class="bi bi-exclamation-triangle-fill me-1"></i>Uygulamayı zip'in içinden çift tıklayarak açmayın ve <b>kitapekapp.exe</b> dosyasının adını değiştirmeyin; ikisi de "Error opening … kitapekapp.cfg" hatası verir.</div></li>
                             <li>Giriş bilgileri: <b>Kullanıcı adı</b> <code><?= e($store['username']) ?></code> • <b>Şifre</b> bu panelin şifresi • <b>NadirKitap kodu</b> <code><?= e($store['nadirkitap_code'] ?: '—') ?></code></li>
                             <li>Açılan Chrome penceresinde NadirKitap güvenlik doğrulaması çıkarsa siz tamamlayın, aktarım kendiliğinden devam eder.</li>
-                            <li><b>1.4.5 güncellemesi:</b> kitap sayısında <b>500</b> ve <b>Sınırsız</b> (mağazadaki tüm kitaplar) seçenekleri gelir; görsellerdeki filigran daha iyi temizlenir. Uygulamayı indirip çıkardıktan sonra
-                                <a href="/downloads/kitapekapp-1.4.5-guncelleme.zip">güncelleme dosyasını</a> da indirin; içindeki <b>app</b> klasörünü uygulama klasörüne kopyalayıp "dosyaları değiştir" deyin.</li>
+                            <li><b>1.4.6 güncellemesi:</b> kitap sayısında <b>500</b> ve <b>Sınırsız</b> (mağazadaki tüm kitaplar) seçenekleri gelir; görsellerdeki filigran daha iyi temizlenir. NadirKitap engellemesin diye saatte en fazla 1000 kitap aktarılır: sınır dolunca uygulama bekler, saat dolunca kaldığı yerden kendiliğinden devam eder (bu sırada uygulamayı kapatmayın). Uygulamayı indirip çıkardıktan sonra
+                                <a href="/downloads/kitapekapp-1.4.6-guncelleme.zip">güncelleme dosyasını</a> da indirin; içindeki <b>app</b> klasörünü uygulama klasörüne kopyalayıp "dosyaları değiştir" deyin.</li>
                         </ol>
                     </div>
                     <div class="text-center">
                         <?php if ($app_url !== ''): ?>
                             <a href="<?= e($app_url) ?>" class="btn btn-dark fw-semibold px-4 py-2 rounded-3" target="_blank" rel="noopener"><i class="bi bi-download me-1"></i> Aktarım uygulamasını indir</a>
                             <div class="text-muted fs-8 mt-1">Windows • yaklaşık 380 MB</div>
-                            <a href="/downloads/kitapekapp-1.4.5-guncelleme.zip" class="btn btn-outline-dark btn-sm fw-semibold mt-2 rounded-3"><i class="bi bi-arrow-up-circle me-1"></i> 1.4.5 güncellemesi (185 KB)</a>
+                            <a href="/downloads/kitapekapp-1.4.6-guncelleme.zip" class="btn btn-outline-dark btn-sm fw-semibold mt-2 rounded-3"><i class="bi bi-arrow-up-circle me-1"></i> 1.4.6 güncellemesi (170 KB)</a>
                         <?php else: ?>
                             <div class="text-muted fs-7">İndirme bağlantısı henüz eklenmedi;<br>site yöneticisinden isteyin.</div>
                         <?php endif; ?>
@@ -258,7 +258,7 @@ if ($tab === 'dukkan') {
                             <p class="text-muted fs-7 mb-2">
                                 NadirKitap sunucumuzdan gelen taramayı engellediği için satılanlar <b>aktarım uygulamasıyla</b> tespit edilir:
                                 uygulamada <b>"Daha önce aktarılmış kitapları da yeniden güncelle"</b> işaretli ve kitap sayısı <b>Sınırsız</b> seçili aktarım yapın
-                                (uygulama 1.4.5; eski sürümde 250'den fazla kitabınız varsa sonraki sayfalardan devam ederek tüm mağazayı aktarın). Son <?= NK_RUN_WINDOW_HOURS ?> saatteki bu aktarımlarda görünmeyen kitaplar satılmış sayılır.
+                                (uygulama 1.4.6; eski sürümde 250'den fazla kitabınız varsa sonraki sayfalardan devam ederek tüm mağazayı aktarın). Son <?= NK_RUN_WINDOW_HOURS ?> saatteki bu aktarımlarda görünmeyen kitaplar satılmış sayılır.
                             </p>
                             <div class="fs-7 <?= $unseen['complete'] ? 'text-success' : 'text-secondary' ?>"><i class="bi bi-info-circle me-1"></i><?= e($unseen['note']) ?></div>
                             <?php if ($unseen['candidates']): ?>
