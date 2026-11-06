@@ -37,6 +37,19 @@ public class Patch {
                         && desc.equals("(Lcom/netarti/nkapp/dto/ProductsBatchRequest;Ljava/lang/String;Lcom/netarti/nkapp/enums/ProductType;I)Ljava/lang/Integer;");
                     final boolean stageMethod = cls.endsWith("UploadProcessor") && name.equals("a") && desc.startsWith("(Lcom/netarti/nkapp/core/UploadProcessor$CategoryStage;Lcom/netarti/nkapp/enums/PageMode;III");
 
+                    public void visitCode() {
+                        super.visitCode();
+                        if (stageMethod) {
+                            // Önceki bölümün (ör. Kitap&Dergi) son sayfasında gelen bekleme, sonraki bölüm başlamadan uygulanır
+                            log("bölüm başında bekleyen saatlik bekleme → LimitText.pendingWaitStart/End");
+                            super.visitVarInsn(Opcodes.ALOAD, 11);
+                            super.visitMethodInsn(Opcodes.INVOKESTATIC, H, "pendingWaitStart", "(Lcom/netarti/nkapp/ui/ProgressSink;)J", false);
+                            super.visitMethodInsn(Opcodes.INVOKESTATIC, "com/netarti/nkapp/core/UploadProcessor", "a", "(J)V", false);
+                            super.visitVarInsn(Opcodes.ALOAD, 11);
+                            super.visitMethodInsn(Opcodes.INVOKESTATIC, H, "pendingWaitEnd", "(Lcom/netarti/nkapp/ui/ProgressSink;)V", false);
+                        }
+                    }
+
                     public void visitFieldInsn(int op, String owner, String fname, String fdesc) {
                         super.visitFieldInsn(op, owner, fname, fdesc);
                         // Bekleme mesajları ("Sunucu bağlantısı tekrar kuruluyor" yerine saatlik sınır açıklaması)
@@ -104,8 +117,11 @@ public class Patch {
                             super.visitMethodInsn(Opcodes.INVOKESTATIC, H, "rememberPause", "(Ljava/lang/Object;)V", false); return;
                         }
                         if (batchMethod && op == Opcodes.ARETURN) {
+                            // Seçilen kitap sınırı (25/250/500) dolduysa beklemeye gerek yok: aktarım zaten bitiyor
                             log("dönüş değeri → LimitText.withPause");
-                            super.visitMethodInsn(Opcodes.INVOKESTATIC, H, "withPause", "(Ljava/lang/Integer;)Ljava/lang/Integer;", false);
+                            super.visitVarInsn(Opcodes.ALOAD, 0);
+                            super.visitFieldInsn(Opcodes.GETFIELD, "com/netarti/nkapp/core/UploadClient", "limitReached", "Z");
+                            super.visitMethodInsn(Opcodes.INVOKESTATIC, H, "withPause", "(Ljava/lang/Integer;Z)Ljava/lang/Integer;", false);
                         }
                         if (idleNext && op == Opcodes.ICONST_1) {
                             idleNext = false; log("updateControlStates: setDisable(true) → setDisable(!idle)");

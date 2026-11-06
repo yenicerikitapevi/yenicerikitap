@@ -36,6 +36,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_settings'])) {
             if ($key === 'paytr_test_mode') {
                 $val = ($val === '0') ? '0' : '1';
             }
+            if (in_array($key, ['nk_hourly_limit', 'nk_request_interval_ms'], true) && trim((string)$val) === '') {
+                continue; // boş bırakılırsa kayıtlı değer (ya da varsayılan) kalır
+            }
             if ($key === 'nk_hourly_limit') {
                 $val = (string)max(0, (int)$val);
             }
@@ -201,12 +204,12 @@ foreach ($setting_rows as $row) {
                         </div>
                         <div class="col-md-6">
                             <label class="form-label fw-semibold fs-7">Aktarım: saatte en fazla kitap</label>
-                            <input type="number" min="0" step="50" name="nk_hourly_limit" class="form-control" value="<?= e($s['nk_hourly_limit'] ?? '1000') ?>">
+                            <input type="number" min="0" step="1" name="nk_hourly_limit" class="form-control" value="<?= e($s['nk_hourly_limit'] ?? '1000') ?>">
                             <div class="text-muted fs-8">NadirKitap engellemesin diye: bir sahaf 1 saatte bu kadar kitap aktarınca uygulama saatin dolmasını bekler, sonra kaldığı yerden kendiliğinden devam eder (uygulama 1.4.6 ve sonrası). 0 = sınır yok.</div>
                         </div>
                         <div class="col-md-6">
                             <label class="form-label fw-semibold fs-7">Aktarım: NadirKitap istekleri arası (saniye)</label>
-                            <input type="number" min="0.8" step="0.5" name="nk_request_interval_ms" class="form-control" value="<?= e(rtrim(rtrim(number_format(((int)($s['nk_request_interval_ms'] ?? 2000)) / 1000, 1, '.', ''), '0'), '.')) ?>">
+                            <input type="number" min="0.8" step="any" name="nk_request_interval_ms" class="form-control" value="<?= e(rtrim(rtrim(number_format(((int)($s['nk_request_interval_ms'] ?? 2000)) / 1000, 1, '.', ''), '0'), '.')) ?>">
                             <div class="text-muted fs-8">Uygulama NadirKitap'tan iki sayfayı en az bu kadar arayla çeker. Engel sık gelirse artırın (ör. 3-4).</div>
                         </div>
                         <div class="col-12">
