@@ -5,17 +5,16 @@
  */
 if (!defined('SITE_URL')) exit;
 
-$header_categories = isset($categories) && is_array($categories) ? $categories : nav_categories();
 $header_active = $header_active ?? '';
 ?>
     <div class="top-bar py-2 border-bottom border-dark">
         <div class="container d-flex align-items-center justify-content-between">
             <div class="d-flex align-items-center gap-3">
-                <span><i class="bi bi-geo-alt-fill text-danger me-1"></i> Etimesgut / Ankara</span>
+                <span class="d-none d-sm-inline text-nowrap"><i class="bi bi-geo-alt-fill text-danger me-1"></i> Etimesgut / Ankara</span>
                 <span class="d-none d-md-inline"><i class="bi bi-telephone-fill text-danger me-1"></i> Müşteri Destek: <?= e(setting('site_phone', '0312 245 00 00')) ?></span>
                 <span class="d-none d-lg-inline text-warning"><i class="bi bi-truck me-1"></i> <?= format_price(setting('shipping_free_limit', '350')) ?> ve Üzeri Ücretsiz Kargo!</span>
             </div>
-            <div class="d-flex align-items-center gap-3 fs-7">
+            <div class="d-flex align-items-center justify-content-end flex-wrap column-gap-3 row-gap-1 fs-7 text-nowrap">
                 <a href="siparis-takip.php"><i class="bi bi-truck me-1"></i>Sipariş Takip</a>
                 <a href="legal.php?p=teslimat-iade" class="d-none d-md-inline">Teslimat Şartları</a>
                 <a href="contact.php" class="d-none d-md-inline">İletişim</a>
@@ -62,25 +61,4 @@ $header_active = $header_active ?? '';
         </div>
     </header>
 
-    <nav class="cat-nav">
-        <div class="container">
-            <ul class="nav">
-                <li class="nav-item">
-                    <a class="nav-link <?= $header_active === 'home' ? 'active' : '' ?>" href="index.php"><i class="bi bi-house-door-fill me-1"></i> Anasayfa</a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link fw-bold" href="magaza.php"><i class="bi bi-shop me-1 text-danger"></i> Alt Dükkanlar (Sahaflar)</a>
-                </li>
-                <?php foreach ($header_categories as $hcat): ?>
-                    <li class="nav-item">
-                        <a class="nav-link <?= (string)$header_active === (string)$hcat['id'] ? 'active' : '' ?>" href="<?= e(category_path($hcat)) ?>">
-                            <i class="bi <?= e($hcat['icon'] ?? 'bi-book') ?> me-1 text-danger"></i> <?= e($hcat['name']) ?>
-                        </a>
-                    </li>
-                <?php endforeach; ?>
-                <li class="nav-item">
-                    <a class="nav-link" href="contact.php"><i class="bi bi-envelope-fill me-1"></i> İletişim</a>
-                </li>
-            </ul>
-        </div>
-    </nav>
+    <?php $nav_active = $header_active; include __DIR__ . '/_cat_nav.php'; ?>
