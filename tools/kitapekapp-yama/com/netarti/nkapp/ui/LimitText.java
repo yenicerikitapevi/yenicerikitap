@@ -54,7 +54,8 @@ public final class LimitText {
         if (pendingPause > 0) pauseUntil = System.currentTimeMillis() + pendingPause * 60_000L;
     }
     /** UploadClient sayfa gönderiminin dönüşü: uygulamanın kendi değeri yerine sunucunun bekleme süresi */
-    public static Integer withPause(Integer original, boolean limitReached) {
+    public static Integer withPause(Integer original, boolean limitReached, int uploadedSoFar) {
+        uploadedTotal = uploadedSoFar;
         int m = pendingPause;
         pendingPause = 0;
         if (limitReached) { pauseUntil = 0; return original; } // seçilen kitap sayısı doldu, aktarım bitiyor
@@ -86,5 +87,23 @@ public final class LimitText {
         if (!waitedAtStage) return;
         waitedAtStage = false;
         try { if (sink != null) sink.b(pauseEnd()); } catch (Throwable ignored) {}
+    }
+
+    // --- Sayfa günlüğü (1.4.7) ---
+    private static volatile int lastUploadedSeen = 0;
+    private static volatile int uploadedTotal = 0;
+
+    /** Her sayfa işlendikten sonra: "Sayfa 12 / 180 tarandı" (ilk sayfada ve her 5 sayfada bir ya da yeni kitap gönderildiyse) */
+    public static void pageLog(ProgressSink sink, int page, Integer lastPage) {
+        try {
+            int total = lastPage == null ? 0 : lastPage;
+            int up = uploadedTotal;
+            boolean news = up != lastUploadedSeen;
+            lastUploadedSeen = up;
+            if (!(page <= 1 || page % 5 == 0 || page >= total || news)) return;
+            String s = "Sayfa " + page + (total > 0 ? " / " + total : "") + " tarandı"
+                + (up > 0 ? " — bu aktarımda gönderilen yeni kitap: " + up : " — henüz yeni kitap yok (sitede olanlar atlanıyor)");
+            if (sink != null) sink.b(s);
+        } catch (Throwable ignored) {}
     }
 }
