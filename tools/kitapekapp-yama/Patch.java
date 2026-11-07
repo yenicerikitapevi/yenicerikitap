@@ -5,7 +5,8 @@ import java.util.*;
 /** kitapekapp 1.4.2 → 1.4.5: 500 seçeneği açılır, 1000 yerine "Sınırsız" (100000) gelir; yazılar LimitText ile;
  *  filigran temizliği WmAlign ile (şablon her görselde hizalanır);
  *  1.4.6: sunucunun sayfa yanıtındaki "bekle (dakika)" değeri kullanılır (saatlik aktarım sınırı);
- *  1.4.7: her taranan sayfa günlüğe yazılır (sitede olan kitaplar atlanırken uygulama donmuş görünmesin). */
+ *  1.4.7: her taranan sayfa günlüğe yazılır (sitede olan kitaplar atlanırken uygulama donmuş görünmesin);
+ *  1.4.8: NadirKitap liste sayfası açılamazsa (ör. HTTP 504) bekleyip yeniden denenir; aktarım durursa kısa Türkçe mesaj. */
 public class Patch {
     static final String H = "com/netarti/nkapp/ui/LimitText";
     static int changes = 0;
@@ -33,7 +34,8 @@ public class Patch {
                 MethodVisitor mv = super.visitMethod(acc, name, desc, sig, ex);
                 return new MethodVisitor(Opcodes.ASM9, mv) {
                     boolean enableNext = false, unlimitedNext = false, idleNext = false;
-                    boolean batchPostNext = false, waitMsgNext = false, resumeMsgNext = false, pageMsgNext = false;
+                    boolean batchPostNext = false, waitMsgNext = false, resumeMsgNext = false, pageMsgNext = false, failMsgNext = false;
+                    final boolean failLambda = cls.endsWith("NkUploaderApp$2") && name.equals("lambda$failed$6");
                     final boolean batchMethod = cls.endsWith("UploadClient") && name.equals("a")
                         && desc.equals("(Lcom/netarti/nkapp/dto/ProductsBatchRequest;Ljava/lang/String;Lcom/netarti/nkapp/enums/ProductType;I)Ljava/lang/Integer;");
                     final boolean stageMethod = cls.endsWith("UploadProcessor") && name.equals("a") && desc.startsWith("(Lcom/netarti/nkapp/core/UploadProcessor$CategoryStage;Lcom/netarti/nkapp/enums/PageMode;III");
@@ -62,7 +64,16 @@ public class Patch {
                         if (op == Opcodes.GETFIELD && name.equals("updateControlStates") && (fname.equals("limit500Btn") || fname.equals("limit1000Btn"))) idleNext = true;
                     }
 
+                    public void visitVarInsn(int op, int var) {
+                        if (failLambda && failMsgNext && op == Opcodes.ASTORE && var == 2) {
+                            failMsgNext = false; log("aktarım hatası mesajı → LimitText.shortError");
+                            super.visitMethodInsn(Opcodes.INVOKESTATIC, H, "shortError", "(Ljava/lang/String;)Ljava/lang/String;", false);
+                        }
+                        super.visitVarInsn(op, var);
+                    }
+
                     public void visitLdcInsn(Object v) {
+                        if (failLambda && "Bilinmeyen hata".equals(v)) failMsgNext = true;
                         if (stageMethod && "%s yükleniyor...".equals(v)) pageMsgNext = true;
                         if (v instanceof String s && name.equals("start") && cls.endsWith("NkUploaderApp")) {
                             switch (s) {
@@ -85,6 +96,15 @@ public class Patch {
                     }
 
                     public void visitMethodInsn(int op, String owner, String mname, String mdesc, boolean itf) {
+                        if (stageMethod && op == Opcodes.INVOKEVIRTUAL && owner.equals("com/netarti/nkapp/core/UploadProcessor") && mname.equals("a")
+                                && mdesc.equals("(Ljava/lang/String;I)Lcom/netarti/nkapp/dto/SearchPageResult;")) {
+                            // Liste sayfası: açılamazsa (NadirKitap 5xx / bağlantı) bekleyip yeniden dene, hemen aktarımı bitirme
+                            log("liste sayfası çekimi → LimitText.fetchPage (bekleyip yeniden dener)");
+                            super.visitVarInsn(Opcodes.ALOAD, 11);
+                            super.visitMethodInsn(Opcodes.INVOKESTATIC, H, "fetchPage", "(Ljava/lang/Object;Ljava/lang/String;ILcom/netarti/nkapp/ui/ProgressSink;)Ljava/lang/Object;", false);
+                            super.visitTypeInsn(Opcodes.CHECKCAST, "com/netarti/nkapp/dto/SearchPageResult");
+                            return;
+                        }
                         if (stageMethod && pageMsgNext && owner.equals("com/netarti/nkapp/ui/ProgressSink") && mname.equals("a") && mdesc.equals("(Ljava/lang/String;)V")) {
                             // "Kitap&Dergi yükleniyor..." durum yazısının hemen ardından: taranan sayfa günlüğe yazılır
                             pageMsgNext = false; log("her sayfa sonrası günlük satırı → LimitText.pageLog");

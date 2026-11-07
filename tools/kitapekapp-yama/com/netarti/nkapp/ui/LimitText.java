@@ -75,6 +75,8 @@ public final class LimitText {
     }
     /** Bölüm başı: önceki bölümün son sayfasında gelen bekleme hâlâ sürüyorsa kalan süre (ms), yoksa 0 */
     public static long pendingWaitStart(com.netarti.nkapp.ui.ProgressSink sink) {
+        lastDonePage = 0;
+        lastTotalPages = 0;
         long left = pauseUntil - System.currentTimeMillis();
         pauseUntil = 0;
         waitedAtStage = left > 0;
@@ -97,6 +99,8 @@ public final class LimitText {
     public static void pageLog(ProgressSink sink, int page, Integer lastPage) {
         try {
             int total = lastPage == null ? 0 : lastPage;
+            lastDonePage = page;
+            lastTotalPages = total;
             int up = uploadedTotal;
             boolean news = up != lastUploadedSeen;
             lastUploadedSeen = up;
@@ -105,5 +109,79 @@ public final class LimitText {
                 + (up > 0 ? " — bu aktarımda gönderilen yeni kitap: " + up : " — henüz yeni kitap yok (sitede olanlar atlanıyor)");
             if (sink != null) sink.b(s);
         } catch (Throwable ignored) {}
+    }
+
+    // --- Liste sayfası yeniden deneme ve kısa hata mesajı (1.4.8) ---
+    private static volatile int lastDonePage = 0;
+    private static volatile int lastTotalPages = 0;
+    private static final long[] RETRY_WAIT_MIN = {3, 10, 20};
+
+    /** UploadProcessor'ın liste sayfası çekimi (private a(String,int)); IO/HTTP hatasında bekleyip en fazla 3 kez daha dener */
+    public static Object fetchPage(Object processor, String url, int page, ProgressSink sink) throws Throwable {
+        java.lang.reflect.Method m = processor.getClass().getDeclaredMethod("a", String.class, int.class);
+        m.setAccessible(true);
+        for (int i = 0; ; i++) {
+            try {
+                return m.invoke(processor, url, page);
+            } catch (java.lang.reflect.InvocationTargetException e) {
+                Throwable c = e.getCause() == null ? e : e.getCause();
+                if (i >= RETRY_WAIT_MIN.length || !retryable(c) || Thread.currentThread().isInterrupted()) throw c;
+                long min = RETRY_WAIT_MIN[i];
+                java.time.LocalTime t = java.time.LocalTime.now().plusMinutes(min);
+                try {
+                    if (sink != null) sink.b(String.format("%d. sayfa açılamadı (%s). %d dakika sonra (saat %02d:%02d) yeniden denenecek, aktarım devam edecek (deneme %d/%d).",
+                        page, reason(c), min, t.getHour(), t.getMinute(), i + 1, RETRY_WAIT_MIN.length));
+                } catch (Throwable ignored) {}
+                try {
+                    Thread.sleep(min * Long.getLong("kitapekapp.retryUnitMs", 60_000L));
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    throw new com.netarti.nkapp.exception.UserCancelledException("Aktarım kullanıcı tarafından durduruldu.");
+                }
+            }
+        }
+    }
+
+    static boolean retryable(Throwable c) {
+        for (Throwable x = c; x != null; x = x.getCause()) {
+            if (x instanceof RuntimeException && x.getClass().getSimpleName().contains("Cancelled")) return false;
+            if (x.getClass().getSimpleName().contains("SessionExpired")) return false;
+            if (x instanceof java.io.IOException) return true;
+            if (x.getCause() == x) break;
+        }
+        return false;
+    }
+
+    static String reason(Throwable c) {
+        String msg = c.getMessage() == null ? "" : c.getMessage();
+        java.util.regex.Matcher mm = java.util.regex.Pattern.compile("code=(\\d+)").matcher(msg);
+        if (mm.find()) return "NadirKitap HTTP " + mm.group(1);
+        return "bağlantı hatası";
+    }
+
+    /** Aktarım durduğunda gösterilen mesaj: HTML ve uzun teknik ayrıntı yerine kısa açıklama + kaldığı sayfa */
+    public static String shortError(String msg) {
+        try {
+            if (msg == null) msg = "Bilinmeyen hata";
+            String base;
+            java.util.regex.Matcher mm = java.util.regex.Pattern.compile("HTTP failed code=(\\d+)").matcher(msg);
+            if (mm.find()) {
+                int code = Integer.parseInt(mm.group(1));
+                if (code == 429 || code == 403) base = "NadirKitap erişimi geçici olarak sınırladı (HTTP " + code + "). 1-2 saat bekleyip yeniden deneyin.";
+                else if (code >= 500) base = "NadirKitap sunucusu yanıt vermedi (HTTP " + code + "). Bu NadirKitap'taki geçici bir yoğunluk; uygulama birkaç kez bekleyip yeniden denedi.";
+                else base = "NadirKitap sayfası açılamadı (HTTP " + code + ").";
+            } else {
+                base = msg.replaceAll("<[^>]*>", " ").replaceAll("\\s+", " ").trim();
+                if (base.length() > 250) base = base.substring(0, 250) + "...";
+            }
+            int done = lastDonePage, total = lastTotalPages;
+            if (done > 0) {
+                base += "\n\nAktarım " + done + ". sayfadan sonra durdu; o ana kadar gönderilen kitaplar sitede kayıtlı. "
+                    + "Kaldığınız yerden devam etmek için \"Sayfa\" seçeneğine " + (done + 1) + (total > 0 ? " ve " + total : "") + " yazıp aktarımı yeniden başlatın.";
+            }
+            return base;
+        } catch (Throwable t) {
+            return msg;
+        }
     }
 }
