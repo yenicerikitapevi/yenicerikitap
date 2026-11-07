@@ -4,7 +4,8 @@ import java.util.*;
 
 /** kitapekapp 1.4.2 → 1.4.5: 500 seçeneği açılır, 1000 yerine "Sınırsız" (100000) gelir; yazılar LimitText ile;
  *  filigran temizliği WmAlign ile (şablon her görselde hizalanır);
- *  1.4.6: sunucunun sayfa yanıtındaki "bekle (dakika)" değeri kullanılır (saatlik aktarım sınırı). */
+ *  1.4.6: sunucunun sayfa yanıtındaki "bekle (dakika)" değeri kullanılır (saatlik aktarım sınırı);
+ *  1.4.7: her taranan sayfa günlüğe yazılır (sitede olan kitaplar atlanırken uygulama donmuş görünmesin). */
 public class Patch {
     static final String H = "com/netarti/nkapp/ui/LimitText";
     static int changes = 0;
@@ -32,7 +33,7 @@ public class Patch {
                 MethodVisitor mv = super.visitMethod(acc, name, desc, sig, ex);
                 return new MethodVisitor(Opcodes.ASM9, mv) {
                     boolean enableNext = false, unlimitedNext = false, idleNext = false;
-                    boolean batchPostNext = false, waitMsgNext = false, resumeMsgNext = false;
+                    boolean batchPostNext = false, waitMsgNext = false, resumeMsgNext = false, pageMsgNext = false;
                     final boolean batchMethod = cls.endsWith("UploadClient") && name.equals("a")
                         && desc.equals("(Lcom/netarti/nkapp/dto/ProductsBatchRequest;Ljava/lang/String;Lcom/netarti/nkapp/enums/ProductType;I)Ljava/lang/Integer;");
                     final boolean stageMethod = cls.endsWith("UploadProcessor") && name.equals("a") && desc.startsWith("(Lcom/netarti/nkapp/core/UploadProcessor$CategoryStage;Lcom/netarti/nkapp/enums/PageMode;III");
@@ -62,6 +63,7 @@ public class Patch {
                     }
 
                     public void visitLdcInsn(Object v) {
+                        if (stageMethod && "%s yükleniyor...".equals(v)) pageMsgNext = true;
                         if (v instanceof String s && name.equals("start") && cls.endsWith("NkUploaderApp")) {
                             switch (s) {
                                 case "✓ 250 Kitap (Aktif)": log("etiket: 250 Kitap"); super.visitLdcInsn("250 Kitap"); return;
@@ -83,6 +85,16 @@ public class Patch {
                     }
 
                     public void visitMethodInsn(int op, String owner, String mname, String mdesc, boolean itf) {
+                        if (stageMethod && pageMsgNext && owner.equals("com/netarti/nkapp/ui/ProgressSink") && mname.equals("a") && mdesc.equals("(Ljava/lang/String;)V")) {
+                            // "Kitap&Dergi yükleniyor..." durum yazısının hemen ardından: taranan sayfa günlüğe yazılır
+                            pageMsgNext = false; log("her sayfa sonrası günlük satırı → LimitText.pageLog");
+                            super.visitMethodInsn(op, owner, mname, mdesc, itf);
+                            super.visitVarInsn(Opcodes.ALOAD, 11);
+                            super.visitVarInsn(Opcodes.ILOAD, 5);
+                            super.visitVarInsn(Opcodes.ALOAD, 18);
+                            super.visitMethodInsn(Opcodes.INVOKESTATIC, H, "pageLog", "(Lcom/netarti/nkapp/ui/ProgressSink;ILjava/lang/Integer;)V", false);
+                            return;
+                        }
                         if (stageMethod && (waitMsgNext || resumeMsgNext) && owner.equals("com/netarti/nkapp/utility/UiMessage") && mname.equals("a")) {
                             super.visitMethodInsn(op, owner, mname, mdesc, itf);
                             super.visitInsn(Opcodes.POP);
@@ -121,7 +133,10 @@ public class Patch {
                             log("dönüş değeri → LimitText.withPause");
                             super.visitVarInsn(Opcodes.ALOAD, 0);
                             super.visitFieldInsn(Opcodes.GETFIELD, "com/netarti/nkapp/core/UploadClient", "limitReached", "Z");
-                            super.visitMethodInsn(Opcodes.INVOKESTATIC, H, "withPause", "(Ljava/lang/Integer;Z)Ljava/lang/Integer;", false);
+                            super.visitVarInsn(Opcodes.ALOAD, 0);
+                            super.visitFieldInsn(Opcodes.GETFIELD, "com/netarti/nkapp/core/UploadClient", "currentRunUploaded", "Ljava/util/concurrent/atomic/AtomicInteger;");
+                            super.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/concurrent/atomic/AtomicInteger", "get", "()I", false);
+                            super.visitMethodInsn(Opcodes.INVOKESTATIC, H, "withPause", "(Ljava/lang/Integer;ZI)Ljava/lang/Integer;", false);
                         }
                         if (idleNext && op == Opcodes.ICONST_1) {
                             idleNext = false; log("updateControlStates: setDisable(true) → setDisable(!idle)");
