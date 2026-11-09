@@ -22,6 +22,9 @@ try {
             db_query("UPDATE analytics_events SET duration_sec = ? WHERE id = ? AND visitor_hash = ? AND event_type = 'view' AND duration_sec < ?", [$sec, $id, $ids['visitor'], $sec]);
         }
     } elseif ($action === 'cart') {
+        if (!analytics_write_allowed($ids['session'])) {
+            exit;
+        }
         $book = db_fetch("SELECT id, store_id FROM books WHERE id = ?", [(int)($_POST['book'] ?? 0)]);
         if ($book) {
             db_query(

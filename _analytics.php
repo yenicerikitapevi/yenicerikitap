@@ -9,22 +9,93 @@
  */
 if (!defined('SITE_URL')) exit;
 
-if ($pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite') {
-    $pdo->exec("CREATE TABLE IF NOT EXISTS analytics_events (id INTEGER PRIMARY KEY AUTOINCREMENT, event_type TEXT NOT NULL, page_type TEXT, book_id INTEGER, store_id INTEGER, visitor_hash TEXT, session_hash TEXT, referrer_host TEXT, duration_sec INTEGER DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP);");
-} else {
-    $pdo->exec("CREATE TABLE IF NOT EXISTS analytics_events (id INT AUTO_INCREMENT PRIMARY KEY, event_type VARCHAR(20) NOT NULL, page_type VARCHAR(20) NULL, book_id INT NULL, store_id INT NULL, visitor_hash CHAR(40) NULL, session_hash CHAR(40) NULL, referrer_host VARCHAR(120) NULL, duration_sec INT DEFAULT 0, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, INDEX idx_ae_created (created_at), INDEX idx_ae_book (book_id), INDEX idx_ae_store (store_id), INDEX idx_ae_session (session_hash)) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;");
+/*
+ * GÜVENLİK / MALİYET SİGORTALARI
+ * - ANALYTICS_ENABLED=0 ortam değişkeni ile kayıt tamamen kapatılabilir (acil durum anahtarı).
+ * - Dakikada site genelinde ANALYTICS_MAX_PER_MINUTE'den fazla görüntüleme varsa (bot/saldırı) kayıt durur.
+ * - Aynı oturum dakikada ANALYTICS_MAX_PER_SESSION_MINUTE'den fazla kayıt yazamaz.
+ * - Tablo ANALYTICS_MAX_ROWS satırı aşarsa en eski kayıtlar silinir; disk dolmaz.
+ * - Tablo/indeks oluşturma artık her istekte değil, yalnızca tablo yokken çalışır (SQLite yazma kilidi).
+ */
+define('ANALYTICS_ENABLED', getenv('ANALYTICS_ENABLED') === false ? true : (getenv('ANALYTICS_ENABLED') !== '0'));
+define('ANALYTICS_MAX_PER_MINUTE', max(50, (int)(getenv('ANALYTICS_MAX_PER_MINUTE') ?: 600)));
+define('ANALYTICS_MAX_PER_SESSION_MINUTE', max(5, (int)(getenv('ANALYTICS_MAX_PER_SESSION_MINUTE') ?: 40)));
+define('ANALYTICS_MAX_ROWS', max(10000, (int)(getenv('ANALYTICS_MAX_ROWS') ?: 1000000)));
+
+function analytics_ensure_schema() {
+    global $pdo;
+    try {
+        $pdo->query("SELECT 1 FROM analytics_events LIMIT 1");
+        return; // tablo var, dokunma
+    } catch (Throwable $e) {
+        // tablo yok, oluştur
+    }
+    if ($pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite') {
+        $pdo->exec("CREATE TABLE IF NOT EXISTS analytics_events (id INTEGER PRIMARY KEY AUTOINCREMENT, event_type TEXT NOT NULL, page_type TEXT, book_id INTEGER, store_id INTEGER, visitor_hash TEXT, session_hash TEXT, referrer_host TEXT, duration_sec INTEGER DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP);");
+        $pdo->exec("CREATE INDEX IF NOT EXISTS idx_ae_created ON analytics_events(created_at);");
+        $pdo->exec("CREATE INDEX IF NOT EXISTS idx_ae_book ON analytics_events(book_id);");
+        $pdo->exec("CREATE INDEX IF NOT EXISTS idx_ae_store ON analytics_events(store_id);");
+        $pdo->exec("CREATE INDEX IF NOT EXISTS idx_ae_session ON analytics_events(session_hash);");
+    } else {
+        $pdo->exec("CREATE TABLE IF NOT EXISTS analytics_events (id INT AUTO_INCREMENT PRIMARY KEY, event_type VARCHAR(20) NOT NULL, page_type VARCHAR(20) NULL, book_id INT NULL, store_id INT NULL, visitor_hash CHAR(40) NULL, session_hash CHAR(40) NULL, referrer_host VARCHAR(120) NULL, duration_sec INT DEFAULT 0, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, INDEX idx_ae_created (created_at), INDEX idx_ae_book (book_id), INDEX idx_ae_store (store_id), INDEX idx_ae_session (session_hash)) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;");
+    }
 }
-if ($pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite') {
-    $pdo->exec("CREATE INDEX IF NOT EXISTS idx_ae_created ON analytics_events(created_at);");
-    $pdo->exec("CREATE INDEX IF NOT EXISTS idx_ae_book ON analytics_events(book_id);");
-    $pdo->exec("CREATE INDEX IF NOT EXISTS idx_ae_store ON analytics_events(store_id);");
-    $pdo->exec("CREATE INDEX IF NOT EXISTS idx_ae_session ON analytics_events(session_hash);");
+if (ANALYTICS_ENABLED) {
+    try { analytics_ensure_schema(); } catch (Throwable $e) { /* raporlama sayfayı bozmasın */ }
+}
+
+/**
+ * Yazma sigortası: bu istek için kayıt açılabilir mi?
+ * $session_hash verilirse oturum başına sınır da denetlenir.
+ */
+function analytics_write_allowed($session_hash = null) {
+    if (!ANALYTICS_ENABLED) {
+        return false;
+    }
+    try {
+        $since = gmdate('Y-m-d H:i:s', time() - 60);
+        $row = db_fetch("SELECT COUNT(*) AS c FROM analytics_events WHERE created_at >= ?", [$since]);
+        if ((int)($row['c'] ?? 0) >= ANALYTICS_MAX_PER_MINUTE) {
+            return false; // site geneli dakikalık tavan: bot dalgası / saldırı
+        }
+        if ($session_hash !== null) {
+            $row = db_fetch("SELECT COUNT(*) AS c FROM analytics_events WHERE session_hash = ? AND created_at >= ?", [$session_hash, $since]);
+            if ((int)($row['c'] ?? 0) >= ANALYTICS_MAX_PER_SESSION_MINUTE) {
+                return false; // tek oturumdan aşırı istek
+            }
+        }
+    } catch (Throwable $e) {
+        return false; // şüphede kayıt yazma
+    }
+    return true;
+}
+
+/**
+ * Tablo tavanı: satır sayısı sınırı aşarsa en eskileri siler (nadiren çağrılır).
+ */
+function analytics_prune() {
+    try {
+        db_query("DELETE FROM analytics_events WHERE created_at < ?", [gmdate('Y-m-d H:i:s', strtotime('-400 days'))]);
+        $row = db_fetch("SELECT COUNT(*) AS c FROM analytics_events");
+        $excess = (int)($row['c'] ?? 0) - ANALYTICS_MAX_ROWS;
+        if ($excess > 0) {
+            $excess += (int)(ANALYTICS_MAX_ROWS * 0.1); // %10 pay bırak, her seferinde silmesin
+            $edge = db_fetch("SELECT id FROM analytics_events ORDER BY id ASC LIMIT 1 OFFSET " . (int)$excess);
+            if ($edge && isset($edge['id'])) {
+                db_query("DELETE FROM analytics_events WHERE id < ?", [(int)$edge['id']]);
+            }
+        }
+    } catch (Throwable $e) {
+    }
 }
 
 /**
  * Bu istek sayılmalı mı? (bot, yönetici, satıcı değilse)
  */
 function analytics_should_track() {
+    if (!ANALYTICS_ENABLED) {
+        return false;
+    }
     if (isset($_SESSION['admin_user']) || isset($_SESSION['store_user'])) {
         return false;
     }
@@ -71,6 +142,9 @@ function track_view($page_type, $book_id = null, $store_id = null) {
     }
     try {
         $ids = analytics_ids();
+        if (!analytics_write_allowed($ids['session'])) {
+            return 0;
+        }
         $ref = parse_url($_SERVER['HTTP_REFERER'] ?? '', PHP_URL_HOST) ?: '';
         $own = parse_url(SITE_URL, PHP_URL_HOST);
         if ($ref !== '' && strcasecmp(preg_replace('/^www\./i', '', $ref), preg_replace('/^www\./i', '', (string)$own)) === 0) {
@@ -81,9 +155,9 @@ function track_view($page_type, $book_id = null, $store_id = null) {
             [$page_type, $book_id ?: null, $store_id ?: null, $ids['visitor'], $ids['session'], $ref !== '' ? substr(strtolower($ref), 0, 120) : null, gmdate('Y-m-d H:i:s')]
         );
         $GLOBALS['yk_track_id'] = (int)db_last_id();
-        // Ara sıra 13 aydan eski kayıtları temizle
+        // Ara sıra eski kayıtları ve tablo tavanını aşan satırları temizle
         if (mt_rand(1, 500) === 1) {
-            db_query("DELETE FROM analytics_events WHERE created_at < ?", [gmdate('Y-m-d H:i:s', strtotime('-400 days'))]);
+            analytics_prune();
         }
     } catch (Throwable $e) {
         // Raporlama hatası sayfayı asla bozmamalı
