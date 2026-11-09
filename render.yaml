@@ -16,3 +16,12 @@ services:
       # İlk kurulumda yönetici parolası; Render panelinde Environment sekmesinden görülebilir
       - key: ADMIN_PASSWORD
         generateValue: true
+      # Ziyaret kaydı sigortaları (bot/saldırı dalgasında disk dolmasın). 0 = kaydı tamamen kapat.
+      - key: ANALYTICS_ENABLED
+        value: "1"
+      - key: ANALYTICS_MAX_PER_MINUTE
+        value: "600"
+      - key: ANALYTICS_MAX_PER_SESSION_MINUTE
+        value: "40"
+      - key: ANALYTICS_MAX_ROWS
+        value: "1000000"
