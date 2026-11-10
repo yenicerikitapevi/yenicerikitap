@@ -7,7 +7,7 @@ import java.util.*;
  *  1.4.6: sunucunun sayfa yanıtındaki "bekle (dakika)" değeri kullanılır (saatlik aktarım sınırı);
  *  1.4.7: her taranan sayfa günlüğe yazılır (sitede olan kitaplar atlanırken uygulama donmuş görünmesin);
  *  1.4.8: NadirKitap liste sayfası açılamazsa (ör. HTTP 504) bekleyip yeniden denenir; aktarım durursa kısa Türkçe mesaj;
- *  1.4.9: her taranan sayfadaki tüm ürün kodları sunucuya bildirilir (satılanları düşürmek için yeniden güncelleme gerekmez). */
+ *  1.4.9: her liste sayfasındaki tüm ürün kodları (ürün türü ve toplam sayfayla) sunucuya bildirilir (satılanları bulmak için). */
 public class Patch {
     static final String H = "com/netarti/nkapp/ui/LimitText";
     static int changes = 0;
@@ -100,9 +100,12 @@ public class Patch {
                         if (stageMethod && op == Opcodes.INVOKEVIRTUAL && owner.equals("com/netarti/nkapp/core/UploadProcessor") && mname.equals("a")
                                 && mdesc.equals("(Ljava/lang/String;I)Lcom/netarti/nkapp/dto/SearchPageResult;")) {
                             // Liste sayfası: açılamazsa (NadirKitap 5xx / bağlantı) bekleyip yeniden dene, hemen aktarımı bitirme
-                            log("liste sayfası çekimi → LimitText.fetchPage (bekleyip yeniden dener)");
+                            // ayrıca sayfadaki tüm ürün kodları (türüyle) sunucuya bildirilir (1.4.9)
+                            log("liste sayfası çekimi → LimitText.fetchPage (bekleyip yeniden dener, görülen kodları bildirir)");
                             super.visitVarInsn(Opcodes.ALOAD, 11);
-                            super.visitMethodInsn(Opcodes.INVOKESTATIC, H, "fetchPage", "(Ljava/lang/Object;Ljava/lang/String;ILcom/netarti/nkapp/ui/ProgressSink;)Ljava/lang/Object;", false);
+                            super.visitVarInsn(Opcodes.ALOAD, 6);
+                            super.visitVarInsn(Opcodes.ALOAD, 7);
+                            super.visitMethodInsn(Opcodes.INVOKESTATIC, H, "fetchPage", "(Ljava/lang/Object;Ljava/lang/String;ILcom/netarti/nkapp/ui/ProgressSink;Ljava/lang/String;Ljava/lang/String;)Ljava/lang/Object;", false);
                             super.visitTypeInsn(Opcodes.CHECKCAST, "com/netarti/nkapp/dto/SearchPageResult");
                             return;
                         }
@@ -114,13 +117,6 @@ public class Patch {
                             super.visitVarInsn(Opcodes.ILOAD, 5);
                             super.visitVarInsn(Opcodes.ALOAD, 18);
                             super.visitMethodInsn(Opcodes.INVOKESTATIC, H, "pageLog", "(Lcom/netarti/nkapp/ui/ProgressSink;ILjava/lang/Integer;)V", false);
-                            // Sayfada görülen tüm ürün kodları sunucuya (satılanları düşürmek için)
-                            log("sayfadaki tüm kodlar sunucuya → LimitText.reportSeen");
-                            super.visitVarInsn(Opcodes.ALOAD, 0);
-                            super.visitVarInsn(Opcodes.ALOAD, 6);
-                            super.visitVarInsn(Opcodes.ALOAD, 7);
-                            super.visitVarInsn(Opcodes.ILOAD, 5);
-                            super.visitMethodInsn(Opcodes.INVOKESTATIC, H, "reportSeen", "(Ljava/lang/Object;Ljava/lang/String;Ljava/lang/String;I)V", false);
                             return;
                         }
                         if (stageMethod && (waitMsgNext || resumeMsgNext) && owner.equals("com/netarti/nkapp/utility/UiMessage") && mname.equals("a")) {

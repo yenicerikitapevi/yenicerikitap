@@ -117,13 +117,13 @@ public final class LimitText {
     private static final long[] RETRY_WAIT_MIN = {3, 10, 20};
 
     /** UploadProcessor'ın liste sayfası çekimi (private a(String,int)); IO/HTTP hatasında bekleyip en fazla 3 kez daha dener */
-    public static Object fetchPage(Object processor, String url, int page, ProgressSink sink) throws Throwable {
+    public static Object fetchPage(Object processor, String url, int page, ProgressSink sink, String runId, String storeCode) throws Throwable {
         java.lang.reflect.Method m = processor.getClass().getDeclaredMethod("a", String.class, int.class);
         m.setAccessible(true);
         for (int i = 0; ; i++) {
             try {
                 Object r = m.invoke(processor, url, page);
-                LAST_PAGE.set(r);
+                reportSeen(processor, runId, storeCode, url, page, r);
                 return r;
             } catch (java.lang.reflect.InvocationTargetException e) {
                 Throwable c = e.getCause() == null ? e : e.getCause();
@@ -192,30 +192,40 @@ public final class LimitText {
     private static volatile okhttp3.OkHttpClient seenClient;
 
     /**
-     * Taranan sayfadaki tüm ürün kodlarını (sitede olup atlananlar dahil) sunucuya bildirir:
-     * POST {base}/pbatch/{mağaza}/seen/{sayfa} {"runId":..., "codes":[...]}.
-     * Sunucu böylece mağazanın tamamı tarandığında NadirKitap'ta artık olmayan (satılmış) kitapları bulabilir.
-     * Hata olursa sessizce geçer; aktarımı asla durdurmaz.
+     * NadirKitap'tan açılan liste sayfasındaki tüm ürün kodlarını (sitede olup atlananlar dahil) sunucuya bildirir:
+     * POST {base}/pbatch/{mağaza}/seen/{BOOK|EPHEMERA}/{sayfa} {"runId":..., "totalPages":N, "codes":[...]}.
+     * Ürün türü sayfa adresinden anlaşılır (Sanat&Koleksiyon aramasında "tip=efemera" vardır); iki tür aynı sayfa
+     * numaralarını kullandığı için sunucu onları ayrı tutar. Hata olursa sessizce geçer; aktarımı asla durdurmaz.
      */
-    private static final ThreadLocal<Object> LAST_PAGE = new ThreadLocal<>();
-
-    public static void reportSeen(Object processor, String runId, String storeCode, int page) {
+    static void reportSeen(Object processor, String runId, String storeCode, String pageUrl, int page, Object pageResult) {
         try {
-            Object pageResult = LAST_PAGE.get();
-            LAST_PAGE.remove();
-            if (processor == null || pageResult == null || runId == null || storeCode == null) return;
+            if (processor == null || pageResult == null || runId == null || storeCode == null || page < 1) return;
             java.util.List<?> links = (java.util.List<?>) pageResult.getClass().getMethod("productLinks").invoke(pageResult);
-            if (links == null || links.isEmpty()) return;
-            StringBuilder json = new StringBuilder("{\"runId\":\"").append(jsonEsc(runId)).append("\",\"codes\":[");
+            int total = 0;
+            try {
+                boolean known = (Boolean) pageResult.getClass().getMethod("totalPagesKnown").invoke(pageResult);
+                if (known) total = (Integer) pageResult.getClass().getMethod("totalPages").invoke(pageResult);
+            } catch (Throwable ignored) {}
+            String ptype = (pageUrl != null && pageUrl.toLowerCase(java.util.Locale.ROOT).contains("tip=efemera")) ? "EPHEMERA" : "BOOK";
+            StringBuilder json = new StringBuilder("{\"runId\":\"").append(jsonEsc(runId)).append("\",\"totalPages\":").append(Math.max(0, total)).append(",\"codes\":[");
             int n = 0;
-            for (Object o : links) {
-                java.util.regex.Matcher m = CODE.matcher(String.valueOf(o).trim());
-                if (!m.find()) continue;
-                if (n++ > 0) json.append(',');
-                json.append('"').append(m.group(1)).append('"');
+            if (links != null) {
+                for (Object o : links) {
+                    java.util.regex.Matcher mm = CODE.matcher(String.valueOf(o).trim());
+                    if (!mm.find()) continue;
+                    if (n++ > 0) json.append(',');
+                    json.append('"').append(mm.group(1)).append('"');
+                }
             }
             json.append("]}");
-            if (n == 0) return;
+            if (n == 0) {
+                // Boş ara sayfa bir şey anlatmaz. Boş 1. sayfa "bu türde ürün yok" demektir; ama yalnızca sayfa gerçekten
+                // NadirKitap arama sayfası olarak tanındıysa (engel/hata sayfası boş liste gibi görünmesin)
+                if (page > 1) return;
+                boolean recognized = false;
+                try { recognized = (Boolean) pageResult.getClass().getMethod("pageRecognized").invoke(pageResult); } catch (Throwable ignored) {}
+                if (!recognized || total != 0) return;
+            }
             Object client = null;
             for (java.lang.reflect.Field f : processor.getClass().getDeclaredFields()) {
                 if (f.getType().getName().equals("com.netarti.nkapp.core.UploadClient")) { f.setAccessible(true); client = f.get(processor); break; }
@@ -224,7 +234,7 @@ public final class LimitText {
             java.lang.reflect.Field bf = client.getClass().getDeclaredField("baseUrl");
             bf.setAccessible(true);
             String base = String.valueOf(bf.get(client)).replaceAll("/+$", "");
-            String url = base + "/pbatch/" + java.net.URLEncoder.encode(storeCode, "UTF-8") + "/seen/" + page;
+            String url = base + "/pbatch/" + java.net.URLEncoder.encode(storeCode, "UTF-8") + "/seen/" + ptype + "/" + page;
             java.lang.reflect.Method build = client.getClass().getDeclaredMethod("buildJsonPost", String.class, String.class);
             build.setAccessible(true);
             okhttp3.Request req = (okhttp3.Request) build.invoke(client, url, json.toString());

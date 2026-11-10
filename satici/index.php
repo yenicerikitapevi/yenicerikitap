@@ -257,9 +257,10 @@ if ($tab === 'dukkan') {
                             <h6 class="fw-bold text-dark mb-1">Satılan Kitapları Düşürme</h6>
                             <p class="text-muted fs-7 mb-2">
                                 NadirKitap sunucumuzdan gelen taramayı engellediği için satılanlar <b>aktarım uygulamasıyla</b> tespit edilir:
-                                uygulamada (1.4.9 ve sonrası) kitap sayısı <b>Sınırsız</b> seçili bir aktarımla mağazanın tamamını tarayın. Uygulama taradığı her sayfadaki
-                                kitap kodlarını bildirir; "yeniden güncelle" işaretlemek gerekmez. Yarıda kalırsa "Sayfa" seçeneğiyle kalan sayfalardan devam edin.
-                                Son <?= NK_RUN_WINDOW_HOURS ?> saatteki taramalarda görünmeyen kitaplar satılmış sayılır.
+                                uygulamada (1.4.9 ve sonrası) <b>Tüm Ürünler</b> ve kitap sayısı <b>Sınırsız</b> seçili bir aktarımla mağazanın tamamını tarayın.
+                                Uygulama taradığı her sayfadaki kitap kodlarını bildirir; "yeniden güncelle" işaretlemek gerekmez. Yarıda kalırsa "Sayfa" seçeneğiyle kalan sayfalardan devam edin.
+                                Son <?= NK_RUN_WINDOW_HOURS ?> saatte iki türün (Kitap & Dergi, Sanat & Koleksiyon) bütün sayfaları tarandıysa, NadirKitap'ta görünmeyen kitaplar
+                                aşağıda listelenir. Tarama sırasında yapılan satışlar sayfaları kaydırabildiği için liste <b>sizin onayınızla</b> kaldırılır.
                             </p>
                             <div class="fs-7 <?= $unseen['complete'] ? 'text-success' : 'text-secondary' ?>"><i class="bi bi-info-circle me-1"></i><?= e($unseen['note']) ?></div>
                             <?php if ($unseen['candidates']): ?>
