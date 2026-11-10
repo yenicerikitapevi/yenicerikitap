@@ -98,7 +98,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && in_array($_POST['action'] ?? '', ['
         set_flash('warning', 'Oturum süresi doldu, tekrar deneyin.');
         redirect('index.php');
     }
-    $res = nk_sold_sync($report_store_id, $_POST['action'] === 'drop_unseen');
+    $shown_ids = $_POST['action'] === 'drop_unseen' ? array_filter(array_map('intval', explode(',', (string)($_POST['ids'] ?? '')))) : null;
+    $res = nk_sold_sync($report_store_id, $_POST['action'] === 'drop_unseen', $shown_ids);
     if (!empty($res['success'])) {
         set_flash('success', $res['message']);
     } else {
@@ -267,7 +268,7 @@ if ($tab === 'dukkan') {
                                 <details class="fs-7 mt-2">
                                     <summary class="fw-semibold text-danger">NadirKitap'ta görünmeyen <?= count($unseen['candidates']) ?> kitap (satılmış olabilir)</summary>
                                     <ul class="mb-0 mt-1" style="max-height: 220px; overflow: auto;">
-                                        <?php foreach (array_slice($unseen['candidates'], 0, 200) as $cb): ?>
+                                        <?php foreach ($unseen['candidates'] as $cb): ?>
                                             <li><?= e($cb['title']) ?> <span class="text-muted">— NK #<?= e($cb['nadirkitap_code']) ?>, <?= format_price($cb['price']) ?></span></li>
                                         <?php endforeach; ?>
                                     </ul>
@@ -291,6 +292,7 @@ if ($tab === 'dukkan') {
                                 <form method="POST" action="" class="mt-2" onsubmit="return confirm('NadirKitap\'ta görünmeyen <?= count($unseen['candidates']) ?> kitap satıştan kaldırılsın mı? Listeyi kontrol ettiğinizden emin olun.');">
                                     <input type="hidden" name="action" value="drop_unseen">
                                     <input type="hidden" name="token" value="<?= e($store_token) ?>">
+                                    <input type="hidden" name="ids" value="<?= e(implode(',', array_map('intval', array_column($unseen['candidates'], 'id')))) ?>">
                                     <button type="submit" class="btn btn-outline-danger btn-sm w-100"><i class="bi bi-check2-square me-1"></i> Listeyi kontrol ettim, <?= count($unseen['candidates']) ?> kitabı kaldır</button>
                                 </form>
                             <?php endif; ?>

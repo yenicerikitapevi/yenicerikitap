@@ -439,7 +439,7 @@ function nk_clean_description($html) {
 // ürün kodları (sitede olup atlananlar dahil) ve NadirKitap'ın bildirdiği toplam sayfa. Satılanları bulmak için (_nk_sync.php).
 if (preg_match('#^/pbatch/([^/]+)/seen/([A-Za-z]+)/(\d+)$#', $route, $m)) {
     $codes = is_array($body['codes'] ?? null) ? array_map('strval', $body['codes']) : [];
-    $ok = nk_seen_record((string)($body['runId'] ?? ''), $auth_store_id, strtoupper($m[2]), (int)$m[3], (int)($body['totalPages'] ?? 0), $codes);
+    $ok = nk_seen_record((string)($body['runId'] ?? ''), $auth_store_id, strtoupper($m[2]), (int)$m[3], (int)($body['totalPages'] ?? 0), $codes, urldecode($m[1]));
     nk_json_response($ok ? count($codes) : 0, true);
 }
 
