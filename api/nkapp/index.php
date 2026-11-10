@@ -306,7 +306,7 @@ if ($route === '/sync-sold' || preg_match('#^/pbatch/([^/]+)/sync-sold$#i', $rou
         // Hiç tam aktarım yoksa eski yöntem: sunucudan tarama (Cloudflare engellerse açıklama döner)
         $res = nk_sync_store($auth_store_id, 40);
         if (!empty($res['is_cloudflare'])) {
-            $res['message'] = 'NadirKitap sunucudan taramayı engelliyor. Satılanları düşürmek için önce "Daha önce aktarılmış kitapları da yeniden güncelle" işaretli bir aktarım yapın (250\'den fazla kitabınız varsa sonraki sayfalardan devam ederek), sonra bu düğmeye tekrar basın.';
+            $res['message'] = 'NadirKitap sunucudan taramayı engelliyor. Satılanları düşürmek için aktarım uygulamasıyla (1.4.9 ve sonrası) "Sınırsız" seçip mağazanın tamamını tarayın, sonra bu düğmeye tekrar basın.';
         }
         nk_json_response($res, $res['success'], [$res['message'] ?? '']);
     } else {
@@ -433,6 +433,21 @@ function nk_clean_description($html) {
     $text = preg_replace("/\r\n|\r/", "\n", $text);
     $text = preg_replace("/\n{3,}/", "\n\n", $text);
     return trim($text);
+}
+
+// 5b. POST /pbatch/{storeCode}/seen/{page} -> uygulamanın (1.4.9+) bu sayfada gördüğü TÜM ürün kodları
+// (sitede olup atlananlar dahil). Mağazanın tamamı tarandığında NadirKitap'ta artık görünmeyen (satılmış) kitaplar
+// "yeniden güncelle" işaretlemeden bulunabilsin diye. Bu aktarım "tüm kodları görüldü" sayılır.
+if (preg_match('#^/pbatch/([^/]+)/seen/(\d+)$#i', $route, $m)) {
+    $run_id = (string)($body['runId'] ?? '');
+    $codes = array_values(array_filter(array_map(function ($c) {
+        return preg_match('/^\d{1,20}$/', (string)$c) ? (string)$c : '';
+    }, is_array($body['codes'] ?? null) ? $body['codes'] : [])));
+    if ($run_id !== '' && $codes && $auth_store_id) {
+        nk_run_page($run_id, $auth_store_id, (int)$m[2], $codes);
+        db_query("UPDATE nk_runs SET forced = 1 WHERE run_id = ? AND store_id = ?", [$run_id, (int)$auth_store_id]);
+    }
+    nk_json_response(count($codes), true);
 }
 
 // 6. POST /pbatch/{storeCode}/{productType}/{page} -> Sayfadaki ürünleri kullanıcının Alt Dükkanına kaydet

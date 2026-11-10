@@ -1,6 +1,6 @@
-# kitapekapp yaması (1.4.8)
+# kitapekapp yaması (1.4.9)
 
-Aktarım uygulamasındaki kitap sınırı değiştirildi. 1.4.8 sürümünde:
+Aktarım uygulamasındaki kitap sınırı değiştirildi. 1.4.9 sürümünde:
 
 - **500** seçeneği açık.
 - **1000** seçeneğinin yerine **Sınırsız** geldi. Sınırsız'ın değeri 100000'dir, yani pratikte mağazadaki tüm kitaplar aktarılır.
@@ -10,6 +10,7 @@ Aktarım uygulamasındaki kitap sınırı değiştirildi. 1.4.8 sürümünde:
 - **1.4.6:** Saatlik aktarım sınırı. Uygulamanın kendi kodunda, her sayfa gönderiminden sonra "bekle (dakika)" değeri gelirse bekleyip kaldığı sayfadan devam eden bir bölüm vardı, ama `UploadClient` sunucunun yanıtını atıp hep 0 döndürüyordu. Yama sunucunun sayfa yanıtını (`payload`, dakika) saklar (`LimitText.rememberPause`) ve dönüş değeri yapar (`LimitText.withPause`). `UploadProcessor` bekleme sırasında gösterdiği "Sunucu bağlantısı tekrar kuruluyor" yazısı yerine saatlik sınır açıklamasını ve devam saatini yazar (`LimitText.pauseStart/pauseEnd`). Bekleme bir bölümün (ör. Kitap&Dergi) son sayfasında gelirse uygulama sayfa arasında beklemiyordu; yama bu beklemeyi sonraki bölümün başında uygular (`pendingWaitStart/End`). Seçilen 25/250/500 sınırı aynı sayfada dolarsa beklenmez. Sayıyı sunucu belirler: `api/nkapp` mağaza başına 1 saatte gelen kitapları sayar, panelde **Site Ayarları → Aktarım: saatte en fazla kitap** (varsayılan 1000) dolunca pencerenin kalan dakikasını döndürür. Eski sürümler bu sayıyı yok sayar.
 - **1.4.7:** Her taranan sayfa günlüğe yazılır (`LimitText.pageLog`; ilk sayfa, her 5 sayfa, son sayfa ve yeni kitap gönderilen sayfalar): "Sayfa 12 / 180 tarandı — henüz yeni kitap yok (sitede olanlar atlanıyor)". Önceden sitede olan kitaplar atlanırken ekranda hiçbir şey değişmiyor, uygulama donmuş görünüyordu.
 - **1.4.8:** NadirKitap liste sayfası açılamazsa (ör. HTTP 504, NadirKitap'ın kendi sunucusunda zaman aşımı) aktarım bitmiyordu: hata "Bilgi" penceresinde HTML olarak görünüp aktarım duruyordu. Artık `UploadProcessor`'ın liste sayfası çekimi `LimitText.fetchPage` üzerinden yapılır; G/Ç ve HTTP hatalarında 3, 10 ve 20 dakika bekleyip yeniden dener (Durdur düğmesi bekleme sırasında da çalışır). Yine de durursa pencere kısa bir Türkçe açıklama ve kaldığı sayfayı gösterir (`LimitText.shortError`).
+- **1.4.9:** Taranan her sayfadaki tüm ürün kodları (sitede olup atlananlar dahil) sunucuya bildirilir: `POST /pbatch/{mağaza}/seen/{sayfa}` (`LimitText.reportSeen`; sayfa listesi `fetchPage` içinde saklanır). Sunucu bu aktarımı "tüm kodları görüldü" sayar; mağazanın tamamı tarandıysa "Satılanları Düşür" NadirKitap'ta artık olmayan kitapları "yeniden güncelle" işaretlemeden bulur. Bildirim başarısız olursa aktarım etkilenmez.
 - `updateControlStates` içinde 500 ve Sınırsız düğmeleri her durum güncellemesinde yeniden kapatılıyordu. Artık 25/250 gibi yalnızca aktarım sürerken kapalı (`!idle`). 1.4.3'teki "düğmeler gri kalıyor" sorunu bu.
 
 Yama, 1.4.2 dağıtımındaki `app/kit-app-1.4.2-small.jar` dosyasının derlenmiş sınıflarına uygulanır. Sınıflar byte-buddy içindeki ASM ile değiştirilir; uygulamanın kaynak kodu gerekmez. Değişen sınıflar:
@@ -19,7 +20,7 @@ Yama, 1.4.2 dağıtımındaki `app/kit-app-1.4.2-small.jar` dosyasının derlenm
 - `NkUploaderApp$2$1`
 - `UploadClient`
 - `ImageUtil` (yalnızca `removeWatermarkBytes` içindeki çağrı)
-- `UploadProcessor` (bekleme yazıları, sayfa günlüğü, liste sayfası yeniden denemesi)
+- `UploadProcessor` (bekleme yazıları, sayfa günlüğü, liste sayfası yeniden denemesi, görülen kodların bildirimi)
 - `NkUploaderApp$2` (aktarım hatası penceresi)
 
 ## Yeniden üretme
@@ -40,11 +41,11 @@ javac -encoding UTF-8 --release 17 -cp "cls:deps/*" -d cls com/netarti/nkapp/ui/
 
 Ardından iki düzenleme yapın:
 
-- `cls/application.properties` dosyasında `app.version=1.4.8` olsun.
-- `app/*.cfg` dosyalarında jar adı `kit-app-1.4.8-small.jar`, `app.version` ve `jpackage.app-version` değerleri `1.4.8` olsun.
+- `cls/application.properties` dosyasında `app.version=1.4.9` olsun.
+- `app/*.cfg` dosyalarında jar adı `kit-app-1.4.9-small.jar`, `app.version` ve `jpackage.app-version` değerleri `1.4.9` olsun.
 
 `deps/` klasörü 1.4.2 dağıtımındaki `app/deps` klasörüdür (WmAlign derlenirken gerekir).
 
-Dağıtım: `downloads/kitapekapp-1.4.8-guncelleme.zip`. Bu paket, mevcut 1.4.2 - 1.4.7 klasörünün içine kopyalanır.
+Dağıtım: `downloads/kitapekapp-1.4.9-guncelleme.zip`. Bu paket, mevcut 1.4.2 - 1.4.8 klasörünün içine kopyalanır.
 
 Sitede zaten olan kitapların fotoğrafları aktarımda yeniden çekilmez. Yeni temizliğin onlara da uygulanması için panelde **Disk Kullanımı → Görselleri yenile** düğmesine basılır; sonraki aktarımda fotoğraflar bir kez yeniden çekilir.

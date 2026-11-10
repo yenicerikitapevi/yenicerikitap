@@ -122,7 +122,9 @@ public final class LimitText {
         m.setAccessible(true);
         for (int i = 0; ; i++) {
             try {
-                return m.invoke(processor, url, page);
+                Object r = m.invoke(processor, url, page);
+                LAST_PAGE.set(r);
+                return r;
             } catch (java.lang.reflect.InvocationTargetException e) {
                 Throwable c = e.getCause() == null ? e : e.getCause();
                 if (i >= RETRY_WAIT_MIN.length || !retryable(c) || Thread.currentThread().isInterrupted()) throw c;
@@ -183,5 +185,69 @@ public final class LimitText {
         } catch (Throwable t) {
             return msg;
         }
+    }
+
+    // --- Sayfada görülen tüm kodlar (1.4.9) ---
+    private static final java.util.regex.Pattern CODE = java.util.regex.Pattern.compile("(\\d+)\\.html(?:[?#].*)?$");
+    private static volatile okhttp3.OkHttpClient seenClient;
+
+    /**
+     * Taranan sayfadaki tüm ürün kodlarını (sitede olup atlananlar dahil) sunucuya bildirir:
+     * POST {base}/pbatch/{mağaza}/seen/{sayfa} {"runId":..., "codes":[...]}.
+     * Sunucu böylece mağazanın tamamı tarandığında NadirKitap'ta artık olmayan (satılmış) kitapları bulabilir.
+     * Hata olursa sessizce geçer; aktarımı asla durdurmaz.
+     */
+    private static final ThreadLocal<Object> LAST_PAGE = new ThreadLocal<>();
+
+    public static void reportSeen(Object processor, String runId, String storeCode, int page) {
+        try {
+            Object pageResult = LAST_PAGE.get();
+            LAST_PAGE.remove();
+            if (processor == null || pageResult == null || runId == null || storeCode == null) return;
+            java.util.List<?> links = (java.util.List<?>) pageResult.getClass().getMethod("productLinks").invoke(pageResult);
+            if (links == null || links.isEmpty()) return;
+            StringBuilder json = new StringBuilder("{\"runId\":\"").append(jsonEsc(runId)).append("\",\"codes\":[");
+            int n = 0;
+            for (Object o : links) {
+                java.util.regex.Matcher m = CODE.matcher(String.valueOf(o).trim());
+                if (!m.find()) continue;
+                if (n++ > 0) json.append(',');
+                json.append('"').append(m.group(1)).append('"');
+            }
+            json.append("]}");
+            if (n == 0) return;
+            Object client = null;
+            for (java.lang.reflect.Field f : processor.getClass().getDeclaredFields()) {
+                if (f.getType().getName().equals("com.netarti.nkapp.core.UploadClient")) { f.setAccessible(true); client = f.get(processor); break; }
+            }
+            if (client == null) return;
+            java.lang.reflect.Field bf = client.getClass().getDeclaredField("baseUrl");
+            bf.setAccessible(true);
+            String base = String.valueOf(bf.get(client)).replaceAll("/+$", "");
+            String url = base + "/pbatch/" + java.net.URLEncoder.encode(storeCode, "UTF-8") + "/seen/" + page;
+            java.lang.reflect.Method build = client.getClass().getDeclaredMethod("buildJsonPost", String.class, String.class);
+            build.setAccessible(true);
+            okhttp3.Request req = (okhttp3.Request) build.invoke(client, url, json.toString());
+            okhttp3.OkHttpClient c = seenClient;
+            if (c == null) {
+                c = new okhttp3.OkHttpClient.Builder()
+                    .connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+                    .readTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+                    .callTimeout(45, java.util.concurrent.TimeUnit.SECONDS).build();
+                seenClient = c;
+            }
+            try (okhttp3.Response r = c.newCall(req).execute()) { /* yanıt içeriği gerekmiyor */ }
+        } catch (Throwable ignored) {
+        }
+    }
+
+    private static String jsonEsc(String s) {
+        StringBuilder b = new StringBuilder();
+        for (char ch : s.toCharArray()) {
+            if (ch == '"' || ch == '\\') b.append('\\').append(ch);
+            else if (ch < 0x20) b.append(' ');
+            else b.append(ch);
+        }
+        return b.toString();
     }
 }

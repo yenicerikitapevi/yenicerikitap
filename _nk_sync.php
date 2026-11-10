@@ -492,17 +492,20 @@ function nk_run_finish($run_id, $store_id, $total, $error) {
 }
 
 /**
- * Son 48 saatin "yeniden güncelle" açık, hatasız biten aktarımlarına göre NadirKitap'ta görünmeyen kitaplar.
+ * Son 48 saatin tüm kodları bildiren aktarımlarına ("yeniden güncelle" açık ya da uygulama 1.4.9+) göre NadirKitap'ta görünmeyen kitaplar.
  * Dönüş: runs, pages (kapsanan sayfalar), seen (görülen kod sayısı), candidates (kitaplar), complete (1..son sayfa boşluksuz
  * ve mağazanın sonuna gelindi), safe (otomatik düşürmeye uygun), note (açıklama)
  */
 function nk_unseen_candidates($store_id) {
     $store_id = (int)$store_id;
     $since = date('Y-m-d H:i:s', time() - NK_RUN_WINDOW_HOURS * 3600);
-    $runs = db_fetch_all("SELECT * FROM nk_runs WHERE store_id = ? AND forced = 1 AND finished_at IS NOT NULL AND (error IS NULL OR error = '') AND started_at >= ? ORDER BY started_at ASC", [$store_id, $since]);
+    // "forced": aktarım sayfadaki tüm kodları bildirdi ("yeniden güncelle" işaretli ya da uygulama 1.4.9+).
+    // Yarıda kalan / hatayla biten aktarımlar da sayılır: kodlar sayfa sayfa, sayfa tamamen işlendikten sonra kaydedilir;
+    // mağazanın tamamının kapsanıp kapsanmadığına aşağıda sayfalara bakarak karar verilir.
+    $runs = db_fetch_all("SELECT * FROM nk_runs WHERE store_id = ? AND forced = 1 AND started_at >= ? ORDER BY started_at ASC", [$store_id, $since]);
     $out = ['runs' => $runs, 'pages' => [], 'seen' => 0, 'candidates' => [], 'complete' => false, 'safe' => false, 'note' => ''];
     if (!$runs) {
-        $out['note'] = 'Son ' . NK_RUN_WINDOW_HOURS . ' saatte "Daha önce aktarılmış kitapları da yeniden güncelle" işaretli, hatasız biten bir aktarım yok.';
+        $out['note'] = 'Son ' . NK_RUN_WINDOW_HOURS . ' saatte mağazanın tamamını tarayan bir aktarım yok (aktarım uygulaması 1.4.9 ve sonrası ile "Sınırsız" seçip tüm mağazayı tarayın).';
         return $out;
     }
     $ids = array_column($runs, 'run_id');
@@ -571,7 +574,7 @@ function nk_sold_sync($store_id, $confirmed = false) {
     }
     $res = nk_sync_store($store_id, 40);
     if (!empty($res['is_cloudflare']) || (empty($res['success']) && stripos((string)$res['message'], 'HTTP 403') !== false)) {
-        $res['message'] = 'NadirKitap sunucudan taramayı engelliyor. Satılanları düşürmek için aktarım uygulamasında "Daha önce aktarılmış kitapları da yeniden güncelle" işaretli bir aktarım yapın (250\'den fazla kitap varsa sonraki sayfalardan devam ederek), sonra tekrar deneyin.';
+        $res['message'] = 'NadirKitap sunucudan taramayı engelliyor. Satılanları düşürmek için aktarım uygulamasıyla (1.4.9 ve sonrası) "Sınırsız" seçip mağazanın tamamını tarayın, sonra tekrar deneyin.';
     }
     return ['success' => !empty($res['success']), 'message' => (string)$res['message']];
 }

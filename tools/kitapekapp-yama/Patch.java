@@ -6,7 +6,8 @@ import java.util.*;
  *  filigran temizliği WmAlign ile (şablon her görselde hizalanır);
  *  1.4.6: sunucunun sayfa yanıtındaki "bekle (dakika)" değeri kullanılır (saatlik aktarım sınırı);
  *  1.4.7: her taranan sayfa günlüğe yazılır (sitede olan kitaplar atlanırken uygulama donmuş görünmesin);
- *  1.4.8: NadirKitap liste sayfası açılamazsa (ör. HTTP 504) bekleyip yeniden denenir; aktarım durursa kısa Türkçe mesaj. */
+ *  1.4.8: NadirKitap liste sayfası açılamazsa (ör. HTTP 504) bekleyip yeniden denenir; aktarım durursa kısa Türkçe mesaj;
+ *  1.4.9: her taranan sayfadaki tüm ürün kodları sunucuya bildirilir (satılanları düşürmek için yeniden güncelleme gerekmez). */
 public class Patch {
     static final String H = "com/netarti/nkapp/ui/LimitText";
     static int changes = 0;
@@ -113,6 +114,13 @@ public class Patch {
                             super.visitVarInsn(Opcodes.ILOAD, 5);
                             super.visitVarInsn(Opcodes.ALOAD, 18);
                             super.visitMethodInsn(Opcodes.INVOKESTATIC, H, "pageLog", "(Lcom/netarti/nkapp/ui/ProgressSink;ILjava/lang/Integer;)V", false);
+                            // Sayfada görülen tüm ürün kodları sunucuya (satılanları düşürmek için)
+                            log("sayfadaki tüm kodlar sunucuya → LimitText.reportSeen");
+                            super.visitVarInsn(Opcodes.ALOAD, 0);
+                            super.visitVarInsn(Opcodes.ALOAD, 6);
+                            super.visitVarInsn(Opcodes.ALOAD, 7);
+                            super.visitVarInsn(Opcodes.ILOAD, 5);
+                            super.visitMethodInsn(Opcodes.INVOKESTATIC, H, "reportSeen", "(Ljava/lang/Object;Ljava/lang/String;Ljava/lang/String;I)V", false);
                             return;
                         }
                         if (stageMethod && (waitMsgNext || resumeMsgNext) && owner.equals("com/netarti/nkapp/utility/UiMessage") && mname.equals("a")) {
