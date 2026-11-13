@@ -332,6 +332,16 @@ if (preg_match('#^/pbatch/([^/]+)/error-report$#i', $route, $m)) {
                 . ', istek sayısı: ' . $f('totalRequestCount') . ', adres: ' . $f('url') . ' | ' . $f('message') . ' ' . $f('details') . "\n";
             @file_put_contents($dir . '/' . date('Ymd') . '.log', $line, FILE_APPEND | LOCK_EX);
         }
+        // Engel bitene kadar uygulama sayfa aralarında bekletilir (nk_hourly_pause_minutes): NadirKitap'ın
+        // Retry-After süresi (saniye), yoksa 15 dakika; en az 5, en çok 120 dakika
+        if ($auth_store_id) {
+            $ra = (int)preg_replace('/\D/', '', (string)($body['retryAfterHeader'] ?? ''));
+            $mins = min(120, max(5, $ra > 0 ? (int)ceil($ra / 60) : 15));
+            $key = 'nk_block_until_' . (int)$auth_store_id;
+            $until = max(time() + $mins * 60, (int)(db_fetch("SELECT setting_value FROM settings WHERE setting_key = ?", [$key])['setting_value'] ?? 0));
+            db_query("DELETE FROM settings WHERE setting_key = ?", [$key]);
+            db_query("INSERT INTO settings (setting_key, setting_value) VALUES (?, ?)", [$key, (string)$until]);
+        }
     } catch (Throwable $e) {
     }
     nk_json_response(null, true);
@@ -385,6 +395,21 @@ function nk_parse_price($val) {
  * Eski sürümler bu sayıyı yok sayar. Ayar: nk_hourly_limit (0 = kapalı).
  */
 function nk_hourly_pause_minutes($store_id, $n) {
+    return max(nk_block_pause_minutes($store_id), nk_hourly_limit_minutes($store_id, $n));
+}
+
+/** NadirKitap engel bildirdiyse (error-report) engelin bitmesine kalan dakika; yoksa 0 */
+function nk_block_pause_minutes($store_id) {
+    try {
+        $until = (int)(db_fetch("SELECT setting_value FROM settings WHERE setting_key = ?", ['nk_block_until_' . (int)$store_id])['setting_value'] ?? 0);
+    } catch (Throwable $e) {
+        return 0;
+    }
+    $left = $until - time();
+    return $left > 0 ? min(120, (int)ceil($left / 60)) : 0;
+}
+
+function nk_hourly_limit_minutes($store_id, $n) {
     $limit = (int)setting('nk_hourly_limit', '1000');
     if ($limit <= 0 || $n <= 0) return 0;
     $key = 'nk_hour_win_' . (int)$store_id;

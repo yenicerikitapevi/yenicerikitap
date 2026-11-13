@@ -7,6 +7,7 @@ import java.util.*;
  *  1.4.6: sunucunun sayfa yanıtındaki "bekle (dakika)" değeri kullanılır (saatlik aktarım sınırı);
  *  1.4.7: her taranan sayfa günlüğe yazılır (sitede olan kitaplar atlanırken uygulama donmuş görünmesin);
  *  1.4.8: NadirKitap liste sayfası açılamazsa (ör. HTTP 504) bekleyip yeniden denenir; aktarım durursa kısa Türkçe mesaj;
+ *  1.4.11: NadirKitap istekleri sınırlayınca ekrana açık mesaj yazılır (uygulama zaten bekleyip yeniden dener);
  *  1.4.9: her liste sayfasındaki tüm ürün kodları (ürün türü ve toplam sayfayla) sunucuya bildirilir (satılanları bulmak için). */
 public class Patch {
     static final String H = "com/netarti/nkapp/ui/LimitText";
@@ -43,6 +44,13 @@ public class Patch {
 
                     public void visitCode() {
                         super.visitCode();
+                        if (cls.endsWith("UploadProcessor") && name.equals("a")
+                                && desc.equals("(Ljava/lang/String;Ljava/lang/String;Lcom/netarti/nkapp/exception/RateLimitException;Lcom/netarti/nkapp/enums/NkRequestType;JJ)V")) {
+                            // NadirKitap istekleri sınırladı: ekrana açık bir mesaj (1.4.11)
+                            log("engel bildirimi → LimitText.rateLimited");
+                            super.visitVarInsn(Opcodes.ALOAD, 3);
+                            super.visitMethodInsn(Opcodes.INVOKESTATIC, H, "rateLimited", "(Ljava/lang/Object;)V", false);
+                        }
                         if (stageMethod) {
                             // Önceki bölümün (ör. Kitap&Dergi) son sayfasında gelen bekleme, sonraki bölüm başlamadan uygulanır
                             log("bölüm başında bekleyen saatlik bekleme → LimitText.pendingWaitStart/End");
