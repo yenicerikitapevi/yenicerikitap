@@ -22,6 +22,9 @@ public final class WmAlign {
         // bu küçük görsellerde olmayan bir deseni "silmeye" çalışıp iz bırakmasın
         BufferedImage logoCleaned = WmLogo.clean(img);
         if (logoCleaned != img) return logoCleaned;
+        // Büyük görsellerde desen ölçeklenmez (sabit boyut, sağ kenara dayalı; yatayda 90° dönük): önce o yerleşim denenir
+        BufferedImage tiled = WmTile.clean(img);
+        if (tiled != null) return tiled;
         try {
             synchronized (ImageUtil.class) {
                 Method load = ImageUtil.class.getDeclaredMethod("loadWatermarkMask");
