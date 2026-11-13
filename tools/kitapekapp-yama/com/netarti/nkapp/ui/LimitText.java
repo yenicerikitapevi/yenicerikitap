@@ -67,8 +67,11 @@ public final class LimitText {
         pauseUntil = 0;
         int m = minutes == null ? 0 : minutes;
         java.time.LocalTime t = java.time.LocalTime.now().plusMinutes(m);
-        return String.format("Saatlik aktarım sınırı doldu (NadirKitap engellemesin diye). %d dakika beklenecek; "
-            + "saat %02d:%02d civarında kaldığı yerden kendiliğinden devam edecek. Uygulamayı kapatmayın.", m, t.getHour(), t.getMinute());
+        String why = (System.currentTimeMillis() - lastRateMsg < 3 * 3600_000L)
+            ? "NadirKitap erişimi sınırladığı için ara veriliyor."
+            : "Saatlik aktarım sınırı doldu (NadirKitap engellemesin diye).";
+        return String.format("%s %d dakika beklenecek; saat %02d:%02d civarında kaldığı yerden kendiliğinden devam edecek. Uygulamayı kapatmayın.",
+            why, m, t.getHour(), t.getMinute());
     }
     public static String pauseEnd() {
         return "Bekleme bitti, aktarım kaldığı yerden devam ediyor.";
@@ -77,6 +80,7 @@ public final class LimitText {
     public static long pendingWaitStart(com.netarti.nkapp.ui.ProgressSink sink) {
         lastDonePage = 0;
         lastTotalPages = 0;
+        if (sink != null) currentSink = sink;
         long left = pauseUntil - System.currentTimeMillis();
         pauseUntil = 0;
         waitedAtStage = left > 0;
@@ -118,6 +122,7 @@ public final class LimitText {
 
     /** UploadProcessor'ın liste sayfası çekimi (private a(String,int)); IO/HTTP hatasında bekleyip en fazla 3 kez daha dener */
     public static Object fetchPage(Object processor, String url, int page, ProgressSink sink, String runId, String storeCode) throws Throwable {
+        if (sink != null) currentSink = sink;
         java.lang.reflect.Method m = processor.getClass().getDeclaredMethod("a", String.class, int.class);
         m.setAccessible(true);
         for (int i = 0; ; i++) {
@@ -259,5 +264,42 @@ public final class LimitText {
             else b.append(ch);
         }
         return b.toString();
+    }
+
+    // --- NadirKitap engeli mesajı (1.4.11) ---
+    private static volatile ProgressSink currentSink;
+    private static volatile long lastRateMsg = 0;
+
+    /**
+     * NadirKitap (Cloudflare) "çok fazla istek" dediğinde çağrılır. Uygulama zaten Retry-After kadar bekleyip aynı isteği
+     * yeniden dener; burada yalnızca kullanıcıya ne olduğu yazılır (en çok dakikada bir).
+     */
+    public static void rateLimited(Object ex) {
+        try {
+            long now = System.currentTimeMillis();
+            if (now - lastRateMsg < 60_000L) return;
+            lastRateMsg = now;
+            long delayMs = 0; int status = 0;
+            if (ex != null) {
+                for (java.lang.reflect.Field f : ex.getClass().getDeclaredFields()) {
+                    if (java.lang.reflect.Modifier.isStatic(f.getModifiers())) continue;
+                    f.setAccessible(true);
+                    if (f.getType() == long.class) delayMs = f.getLong(ex);
+                    else if (f.getType() == int.class) status = f.getInt(ex);
+                }
+            }
+            String when;
+            if (delayMs >= 30_000L) {
+                long min = Math.max(1, Math.round(delayMs / 60000.0));
+                java.time.LocalTime t = java.time.LocalTime.now().plusSeconds(delayMs / 1000);
+                when = String.format("Yaklaşık %d dakika (saat %02d:%02d civarına kadar) beklenecek", min, t.getHour(), t.getMinute());
+            } else {
+                when = "Kısa bir süre beklenecek";
+            }
+            ProgressSink s = currentSink;
+            if (s != null) s.b("NadirKitap çok sık istek geldiği için erişimi geçici olarak sınırladı" + (status > 0 ? " (HTTP " + status + ")" : "")
+                + ". " + when + ", sonra aktarım kendiliğinden devam edecek. Uygulamayı kapatmayın, durdurup yeniden başlatmayın (engeli uzatır).");
+        } catch (Throwable ignored) {
+        }
     }
 }
