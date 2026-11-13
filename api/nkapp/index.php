@@ -306,7 +306,7 @@ if ($route === '/sync-sold' || preg_match('#^/pbatch/([^/]+)/sync-sold$#i', $rou
         // Hiç tam aktarım yoksa eski yöntem: sunucudan tarama (Cloudflare engellerse açıklama döner)
         $res = nk_sync_store($auth_store_id, 40);
         if (!empty($res['is_cloudflare'])) {
-            $res['message'] = 'NadirKitap sunucudan taramayı engelliyor. Satılanları düşürmek için önce "Daha önce aktarılmış kitapları da yeniden güncelle" işaretli bir aktarım yapın (250\'den fazla kitabınız varsa sonraki sayfalardan devam ederek), sonra bu düğmeye tekrar basın.';
+            $res['message'] = 'NadirKitap sunucudan taramayı engelliyor. Satılanları düşürmek için aktarım uygulamasıyla (1.4.9 ve sonrası) "Sınırsız" seçip mağazanın tamamını tarayın, sonra bu düğmeye tekrar basın.';
         }
         nk_json_response($res, $res['success'], [$res['message'] ?? '']);
     } else {
@@ -433,6 +433,14 @@ function nk_clean_description($html) {
     $text = preg_replace("/\r\n|\r/", "\n", $text);
     $text = preg_replace("/\n{3,}/", "\n\n", $text);
     return trim($text);
+}
+
+// 5b. POST /pbatch/{storeCode}/seen/{BOOK|EPHEMERA}/{page} -> uygulamanın (1.4.9+) bu liste sayfasında gördüğü TÜM
+// ürün kodları (sitede olup atlananlar dahil) ve NadirKitap'ın bildirdiği toplam sayfa. Satılanları bulmak için (_nk_sync.php).
+if (preg_match('#^/pbatch/([^/]+)/seen/([A-Za-z]+)/(\d+)$#', $route, $m)) {
+    $codes = is_array($body['codes'] ?? null) ? array_map('strval', $body['codes']) : [];
+    $ok = nk_seen_record((string)($body['runId'] ?? ''), $auth_store_id, strtoupper($m[2]), (int)$m[3], (int)($body['totalPages'] ?? 0), $codes, urldecode($m[1]));
+    nk_json_response($ok ? count($codes) : 0, true);
 }
 
 // 6. POST /pbatch/{storeCode}/{productType}/{page} -> Sayfadaki ürünleri kullanıcının Alt Dükkanına kaydet

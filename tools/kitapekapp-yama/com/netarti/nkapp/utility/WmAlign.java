@@ -18,6 +18,10 @@ public final class WmAlign {
     }
 
     public static BufferedImage clean(BufferedImage img) {
+        // Eski ilanlardaki alttaki büyük logo (WmLogo) bulunduysa yalnızca o temizlenir: çapraz desen temizleyicisi
+        // bu küçük görsellerde olmayan bir deseni "silmeye" çalışıp iz bırakmasın
+        BufferedImage logoCleaned = WmLogo.clean(img);
+        if (logoCleaned != img) return logoCleaned;
         try {
             synchronized (ImageUtil.class) {
                 Method load = ImageUtil.class.getDeclaredMethod("loadWatermarkMask");

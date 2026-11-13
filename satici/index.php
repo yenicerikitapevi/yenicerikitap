@@ -98,7 +98,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && in_array($_POST['action'] ?? '', ['
         set_flash('warning', 'Oturum süresi doldu, tekrar deneyin.');
         redirect('index.php');
     }
-    $res = nk_sold_sync($report_store_id, $_POST['action'] === 'drop_unseen');
+    $shown_ids = $_POST['action'] === 'drop_unseen' ? array_filter(array_map('intval', explode(',', (string)($_POST['ids'] ?? '')))) : null;
+    $res = nk_sold_sync($report_store_id, $_POST['action'] === 'drop_unseen', $shown_ids);
     if (!empty($res['success'])) {
         set_flash('success', $res['message']);
     } else {
@@ -227,15 +228,15 @@ if ($tab === 'dukkan') {
                                 <div class="text-danger fs-8 mt-1"><i class="bi bi-exclamation-triangle-fill me-1"></i>Uygulamayı zip'in içinden çift tıklayarak açmayın ve <b>kitapekapp.exe</b> dosyasının adını değiştirmeyin; ikisi de "Error opening … kitapekapp.cfg" hatası verir.</div></li>
                             <li>Giriş bilgileri: <b>Kullanıcı adı</b> <code><?= e($store['username']) ?></code> • <b>Şifre</b> bu panelin şifresi • <b>NadirKitap kodu</b> <code><?= e($store['nadirkitap_code'] ?: '—') ?></code></li>
                             <li>Açılan Chrome penceresinde NadirKitap güvenlik doğrulaması çıkarsa siz tamamlayın, aktarım kendiliğinden devam eder.</li>
-                            <li><b>1.4.8 güncellemesi:</b> kitap sayısında <b>500</b> ve <b>Sınırsız</b> (mağazadaki tüm kitaplar) seçenekleri gelir; görsellerdeki filigran daha iyi temizlenir. NadirKitap engellemesin diye saatte en fazla 1000 kitap aktarılır: sınır dolunca uygulama bekler, saat dolunca kaldığı yerden kendiliğinden devam eder (bu sırada uygulamayı kapatmayın). Taranan her sayfa ekrana yazılır; NadirKitap geçici olarak yanıt vermezse uygulama bekleyip yeniden dener, aktarım durmaz. Uygulamayı indirip çıkardıktan sonra
-                                <a href="/downloads/kitapekapp-1.4.8-guncelleme.zip">güncelleme dosyasını</a> da indirin; içindeki <b>app</b> klasörünü uygulama klasörüne kopyalayıp "dosyaları değiştir" deyin.</li>
+                            <li><b>1.4.10 güncellemesi:</b> kitap sayısında <b>500</b> ve <b>Sınırsız</b> (mağazadaki tüm kitaplar) seçenekleri gelir; görsellerdeki filigran daha iyi temizlenir (eski ilanlardaki büyük NADIRKITAP logosu dahil). NadirKitap engellemesin diye saatte en fazla 1000 kitap aktarılır: sınır dolunca uygulama bekler, saat dolunca kaldığı yerden kendiliğinden devam eder (bu sırada uygulamayı kapatmayın). Taranan her sayfa ekrana yazılır; NadirKitap geçici olarak yanıt vermezse uygulama bekleyip yeniden dener, aktarım durmaz. Uygulamayı indirip çıkardıktan sonra
+                                <a href="/downloads/kitapekapp-1.4.10-guncelleme.zip">güncelleme dosyasını</a> da indirin; içindeki <b>app</b> klasörünü uygulama klasörüne kopyalayıp "dosyaları değiştir" deyin.</li>
                         </ol>
                     </div>
                     <div class="text-center">
                         <?php if ($app_url !== ''): ?>
                             <a href="<?= e($app_url) ?>" class="btn btn-dark fw-semibold px-4 py-2 rounded-3" target="_blank" rel="noopener"><i class="bi bi-download me-1"></i> Aktarım uygulamasını indir</a>
                             <div class="text-muted fs-8 mt-1">Windows • yaklaşık 380 MB</div>
-                            <a href="/downloads/kitapekapp-1.4.8-guncelleme.zip" class="btn btn-outline-dark btn-sm fw-semibold mt-2 rounded-3"><i class="bi bi-arrow-up-circle me-1"></i> 1.4.8 güncellemesi (170 KB)</a>
+                            <a href="/downloads/kitapekapp-1.4.10-guncelleme.zip" class="btn btn-outline-dark btn-sm fw-semibold mt-2 rounded-3"><i class="bi bi-arrow-up-circle me-1"></i> 1.4.10 güncellemesi (190 KB)</a>
                         <?php else: ?>
                             <div class="text-muted fs-7">İndirme bağlantısı henüz eklenmedi;<br>site yöneticisinden isteyin.</div>
                         <?php endif; ?>
@@ -257,15 +258,17 @@ if ($tab === 'dukkan') {
                             <h6 class="fw-bold text-dark mb-1">Satılan Kitapları Düşürme</h6>
                             <p class="text-muted fs-7 mb-2">
                                 NadirKitap sunucumuzdan gelen taramayı engellediği için satılanlar <b>aktarım uygulamasıyla</b> tespit edilir:
-                                uygulamada <b>"Daha önce aktarılmış kitapları da yeniden güncelle"</b> işaretli ve kitap sayısı <b>Sınırsız</b> seçili aktarım yapın
-                                (uygulama 1.4.8; eski sürümde 250'den fazla kitabınız varsa sonraki sayfalardan devam ederek tüm mağazayı aktarın). Son <?= NK_RUN_WINDOW_HOURS ?> saatteki bu aktarımlarda görünmeyen kitaplar satılmış sayılır.
+                                uygulamada (1.4.9 ve sonrası) <b>Tüm Ürünler</b> ve kitap sayısı <b>Sınırsız</b> seçili bir aktarımla mağazanın tamamını tarayın.
+                                Uygulama taradığı her sayfadaki kitap kodlarını bildirir; "yeniden güncelle" işaretlemek gerekmez. Yarıda kalırsa "Sayfa" seçeneğiyle kalan sayfalardan devam edin.
+                                Son <?= NK_RUN_WINDOW_HOURS ?> saatte iki türün (Kitap & Dergi, Sanat & Koleksiyon) bütün sayfaları tarandıysa, NadirKitap'ta görünmeyen kitaplar
+                                aşağıda listelenir. Tarama sırasında yapılan satışlar sayfaları kaydırabildiği için liste <b>sizin onayınızla</b> kaldırılır.
                             </p>
                             <div class="fs-7 <?= $unseen['complete'] ? 'text-success' : 'text-secondary' ?>"><i class="bi bi-info-circle me-1"></i><?= e($unseen['note']) ?></div>
                             <?php if ($unseen['candidates']): ?>
                                 <details class="fs-7 mt-2">
                                     <summary class="fw-semibold text-danger">NadirKitap'ta görünmeyen <?= count($unseen['candidates']) ?> kitap (satılmış olabilir)</summary>
                                     <ul class="mb-0 mt-1" style="max-height: 220px; overflow: auto;">
-                                        <?php foreach (array_slice($unseen['candidates'], 0, 200) as $cb): ?>
+                                        <?php foreach ($unseen['candidates'] as $cb): ?>
                                             <li><?= e($cb['title']) ?> <span class="text-muted">— NK #<?= e($cb['nadirkitap_code']) ?>, <?= format_price($cb['price']) ?></span></li>
                                         <?php endforeach; ?>
                                     </ul>
@@ -289,6 +292,7 @@ if ($tab === 'dukkan') {
                                 <form method="POST" action="" class="mt-2" onsubmit="return confirm('NadirKitap\'ta görünmeyen <?= count($unseen['candidates']) ?> kitap satıştan kaldırılsın mı? Listeyi kontrol ettiğinizden emin olun.');">
                                     <input type="hidden" name="action" value="drop_unseen">
                                     <input type="hidden" name="token" value="<?= e($store_token) ?>">
+                                    <input type="hidden" name="ids" value="<?= e(implode(',', array_map('intval', array_column($unseen['candidates'], 'id')))) ?>">
                                     <button type="submit" class="btn btn-outline-danger btn-sm w-100"><i class="bi bi-check2-square me-1"></i> Listeyi kontrol ettim, <?= count($unseen['candidates']) ?> kitabı kaldır</button>
                                 </form>
                             <?php endif; ?>
