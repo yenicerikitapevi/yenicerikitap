@@ -1,8 +1,9 @@
 <?php
 /**
  * Excel'den Toplu Ekle – tek satırı kaydeder (admin/modules/bulkimport.php sayfası satırları tek tek gönderir).
- * POST: token, isbn, title, price, author, publisher, category_id, store_id, stock, is_active, lookup (1 = ISBN ile kapak/bilgi çek)
- * Çıktı: {ok, status: 'added'|'exists'|'error', id, title, cover, message}
+ * POST: token, isbn, title, price, old_price, author, publisher, category_id, store_id, stock, is_active,
+ *       lookup (1 = ISBN ile kapak/bilgi çek), cover_url (Excel'deki ürün görseli), add_stock (1 = kayıtlıysa stoğu artır)
+ * Çıktı: {ok, status: 'added'|'exists'|'stock'|'error', id, title, cover, message}
  */
 error_reporting(0);
 ini_set('display_errors', '0');
@@ -37,6 +38,24 @@ if (strpos($isbn, '978') === 0) {
 }
 $ph = implode(',', array_fill(0, count($cands), '?'));
 $ex = db_fetch("SELECT id, title FROM books WHERE REPLACE(REPLACE(UPPER(isbn), '-', ''), ' ', '') IN ($ph) LIMIT 1", $cands);
+if ($ex && !empty($_POST['add_stock'])) {
+    // Kayıtlıysa Excel'deki adet stoğa EKLENİR (yalnızca Yeniçeri'nin kendi kitabı; sahaf kitabına dokunulmaz)
+    $cur = db_fetch("SELECT id, title, stock, price, is_active, store_id FROM books WHERE id = ?", [(int)$ex['id']]);
+    $add = max(0, (int)($_POST['stock'] ?? 0));
+    if ($cur && !empty($cur['store_id'])) {
+        bi_out(['ok' => true, 'status' => 'exists', 'id' => (int)$cur['id'], 'title' => $cur['title'], 'message' => 'Bu ISBN bir sahafın kitabı olarak kayıtlı; stoğuna dokunulmadı']);
+    }
+    if ($cur && $add > 0) {
+        $new_stock = (int)$cur['stock'] + $add;
+        // Stoğu biten ve satıştan kalkan kitap, fiyatı varsa yeniden satışa açılır
+        $reactivate = !(int)$cur['is_active'] && (float)$cur['price'] > 0 && !empty($_POST['is_active']);
+        db_query("UPDATE books SET stock = ?" . ($reactivate ? ", is_active = 1" : "") . " WHERE id = ?", [$new_stock, (int)$cur['id']]);
+        book_touch((int)$cur['id']);
+        log_action('Excel ile Stok Artırıldı', 'Products', (int)$cur['id'], $cur['title'] . ': ' . (int)$cur['stock'] . ' + ' . $add . ' = ' . $new_stock);
+        bi_out(['ok' => true, 'status' => 'stock', 'id' => (int)$cur['id'], 'title' => $cur['title'],
+            'message' => 'Zaten kayıtlı — stok ' . (int)$cur['stock'] . ' + ' . $add . ' = ' . $new_stock . ($reactivate ? ' (yeniden satışa açıldı)' : '')]);
+    }
+}
 if ($ex) {
     // Aynı dosya ikinci kez yüklenirse kitap tekrar eklenmez. İstenirse yalnızca fiyatı Excel'dekiyle güncellenir
     // (sahaf kitabının fiyatına dokunulmaz).
@@ -78,6 +97,9 @@ $x_title     = trim((string)($_POST['title'] ?? ''));
 $x_author    = trim((string)($_POST['author'] ?? ''));
 $x_publisher = trim((string)($_POST['publisher'] ?? ''));
 $price       = (float)str_replace(',', '.', preg_replace('/[^\d,.]/', '', (string)($_POST['price'] ?? '0')));
+$old_price   = (float)str_replace(',', '.', preg_replace('/[^\d,.]/', '', (string)($_POST['old_price'] ?? '0')));
+$old_price   = $old_price > $price && $price > 0 ? $old_price : null;
+$cover_url   = trim((string)($_POST['cover_url'] ?? ''));
 $cat_auto    = ($_POST['category_id'] ?? '') === 'auto';
 $category_id = $cat_auto ? null : ((int)($_POST['category_id'] ?? 0) ?: null);
 $store_id    = (int)($_POST['store_id'] ?? 0) ?: null;
@@ -104,6 +126,8 @@ if ($no_price) $is_active = 0;
 $cover = 'book_placeholder.svg';
 if ($d && !empty($d['covers']) && function_exists('imagecreatefromstring')) {
     $urls = [];
+    // Excel'deki ürün görseli (satıcının kendi fotoğrafı) önce denenir
+    if ($cover_url !== '' && ih_public_url($cover_url)) $urls[] = $cover_url;
     foreach ($d['covers'] as $cv) {
         $u = is_array($cv) ? ($cv['url'] ?? '') : (string)$cv;
         if ($u !== '' && ih_public_url($u)) $urls[] = $u;
@@ -129,6 +153,18 @@ if ($d && !empty($d['covers']) && function_exists('imagecreatefromstring')) {
     }
 }
 
+if ($cover === 'book_placeholder.svg' && $cover_url !== '' && function_exists('imagecreatefromstring') && ih_public_url($cover_url)) {
+    $p = parse_url($cover_url);
+    $got = ih_fetch_many(['x' => ['url' => $cover_url, 'headers' => ['Referer: ' . $p['scheme'] . '://' . $p['host'] . '/', 'Accept: image/*,*/*;q=0.8']]]);
+    $r = $got['x'] ?? null;
+    if ($r && $r['code'] === 200 && strlen($r['body']) <= 15 * 1024 * 1024 && ($im = ih_load_image($r['body']))) {
+        $out = ih_to_600x900($im);
+        if (!is_dir(UPLOAD_DIR)) @mkdir(UPLOAD_DIR, 0775, true);
+        $name = 'cover_' . date('Ymd_His') . '_' . bin2hex(random_bytes(4)) . '.jpg';
+        if (imagejpeg($out, UPLOAD_DIR . '/' . $name, 85)) $cover = $name;
+    }
+}
+
 // Kategori "Otomatik": ISBN aramasındaki kategori adı, yoksa kitap adı/özet ve Excel'deki grup başlığı
 $cat_note = '';
 if ($cat_auto) {
@@ -141,9 +177,9 @@ if ($cat_auto) {
     }
 }
 
-db_query("INSERT INTO books (title, original_title, isbn, author_id, publisher_id, category_id, price, old_price, stock, pages, year, summary, cover_image, is_active, store_id, dimensions) VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?)", [
+db_query("INSERT INTO books (title, original_title, isbn, author_id, publisher_id, category_id, price, old_price, stock, pages, year, summary, cover_image, is_active, store_id, dimensions) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", [
     $title, $d['original_title'] ?? null, $isbn, bi_entity('authors', $author), bi_entity('publishers', $publisher), $category_id,
-    $price, $stock, ($d['pages'] ?? null) ?: null, ($d['year'] ?? null) ?: null, $d['summary'] ?? null, $cover, $is_active, $store_id, ($d['dimensions'] ?? null) ?: null,
+    $price, $old_price, $stock, ($d['pages'] ?? null) ?: null, ($d['year'] ?? null) ?: null, $d['summary'] ?? null, $cover, $is_active, $store_id, ($d['dimensions'] ?? null) ?: null,
 ]);
 $book_id = (int)db_last_id();
 book_refresh_slug($book_id);
