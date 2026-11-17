@@ -447,7 +447,7 @@ body.store {
     --bs-link-hover-color-rgb: 255, 106, 19;
 }
 body.store .text-danger { color: var(--accent-color) !important; }
-body.store .bg-danger { background-color: var(--accent-color) !important; }
+/* bg-danger: Bootstrap --bs-danger-rgb üzerinden turuncu; bg-opacity-* (açık zeminli rozetler) böylece korunur */
 body.store .border-danger { border-color: var(--accent-color) !important; }
 body.store .btn-danger {
     --bs-btn-bg: #ff6a13; --bs-btn-border-color: #ff6a13;
@@ -468,7 +468,11 @@ body.store .btn-dark {
     --bs-btn-active-bg: #0d1a2e; --bs-btn-active-border-color: #0d1a2e;
 }
 body.store .bg-dark { background-color: var(--navy) !important; }
-body.store .badge.bg-danger { background-color: #ef4444 !important; } /* "Son 1 adet" gibi uyarı rozetleri kırmızı kalır */
+/* Düz (saydam olmayan) uyarı rozetleri kırmızı kalır ("Son 1 adet", "Günün Fırsatı") */
+body.store .badge.bg-danger:not([class*="bg-opacity"]) { background-color: #ef4444 !important; }
+/* Açık zeminli rozetler (ör. sahaf adı): açık turuncu zemin, koyu turuncu yazı */
+body.store .bg-danger[class*="bg-opacity"].text-danger,
+body.store .bg-danger[class*="bg-opacity"] .text-danger { color: #c2410c !important; }
 
 /* Üst bilgi çubuğu ve başlık: lacivert */
 body.store .top-bar {

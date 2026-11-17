@@ -36,7 +36,7 @@ $step_keys = array_keys($steps);
 <body class="store bg-light">
     <header class="bg-white py-3 border-bottom shadow-sm">
         <div class="container d-flex align-items-center justify-content-between">
-            <a href="/" class="navbar-brand"><img src="/assets/images/logo_horizontal_light.png" alt="Yeniçeri Kitabevi" width="164" height="48" style="height: 48px; width: auto;"></a>
+            <a href="/" class="navbar-brand"><img src="/assets/images/logo_horizontal_light.png" onerror="this.onerror=null;this.src='/assets/images/logo_horizontal.png'" alt="Yeniçeri Kitabevi" width="164" height="48" style="height: 48px; width: auto;"></a>
             <a href="/" class="btn btn-outline-dark rounded-pill px-3 fw-bold"><i class="bi bi-house-door me-1"></i> Ana Sayfa</a>
         </div>
     </header>
