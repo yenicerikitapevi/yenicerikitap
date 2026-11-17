@@ -100,12 +100,12 @@ track_view('store', null, $store['id'] ?? null);
     ?>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
     <link rel="stylesheet" href="<?= asset_v('assets/css/style.css') ?>">
 </head>
-<body>
+<body class="store">
     <div class="top-bar py-2 border-bottom border-dark">
         <div class="container d-flex align-items-center justify-content-between">
             <div><i class="bi bi-shop text-danger me-1"></i> Yeniçeri Kitabevi — Sahaf & Alt Dükkan Platformu</div>
@@ -125,7 +125,7 @@ track_view('store', null, $store['id'] ?? null);
     <header class="bg-white py-3 border-bottom shadow-sm sticky-top">
         <div class="container d-flex align-items-center justify-content-between gap-3">
             <a href="index.php" class="navbar-brand text-dark d-flex align-items-center">
-                <img src="assets/images/logo_horizontal.png" alt="Yeniçeri Kitabevi" style="height: 48px; max-width: 220px; object-fit: contain;">
+                <img src="assets/images/logo_horizontal_light.png" alt="Yeniçeri Kitabevi" style="height: 48px; max-width: 220px; object-fit: contain;">
             </a>
             <?php if ($store): ?>
                 <form action="magaza.php" method="GET" class="flex-grow-1 d-none d-md-block" style="max-width: 520px;">

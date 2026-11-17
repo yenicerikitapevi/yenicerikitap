@@ -138,7 +138,7 @@ track_view('category');
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
     <link rel="stylesheet" href="<?= asset_v('assets/css/style.css') ?>">
 </head>
-<body>
+<body class="store">
     <?php $header_active = $cat_id; include __DIR__ . '/_site_header.php'; ?>
 
     <div class="container py-5">

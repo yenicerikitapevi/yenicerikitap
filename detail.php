@@ -67,7 +67,7 @@ track_view('detail', $book['id'], $book['store_id'] ?? null);
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
     <link rel="stylesheet" href="<?= asset_v('assets/css/style.css') ?>">
 </head>
-<body>
+<body class="store">
     <?php $header_active = (int)$book['category_id']; include __DIR__ . '/_site_header.php'; ?>
 
     <div class="container py-4">

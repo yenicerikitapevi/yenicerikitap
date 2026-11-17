@@ -1,3 +1,4 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 /* ============================================================
  * YENİÇERİ KİTABEVİ - KIRMIZI & SİYAH (RED & BLACK) PREMIUM TEMA
  * Palette: Deep Black (#0a0a0c), Obsidian (#121216), Crimson Red (#e61919), Dark Ruby (#8d0801)
@@ -414,3 +415,184 @@ footer a:hover {
 .buy-qty { flex-wrap: nowrap; width: 132px; }
 .rec-card + div .btn-add-cart { width: auto; padding: .15rem .55rem; border-radius: 8px; background: transparent; color: #dc3545; border: 1px solid #dc3545; font-weight: 600; }
 .rec-card + div .btn-add-cart:hover { background: #dc3545; color: #fff; box-shadow: none; }
+
+
+/* ============================================================
+ * VİTRİN TEMASI (lacivert + turuncu) — yalnızca body.store sayfaları
+ * Lacivert üst bölüm, turuncu vurgu, açık gri kategori çubuğu, beyaz kartlar.
+ * Yönetim ve satıcı panelleri (body.store yok) eski renklerde kalır.
+ * ============================================================ */
+body.store {
+    --navy: #13233d;
+    --navy-2: #1b3052;
+    --navy-deep: #0d1a2e;
+    --accent-color: #ff6a13;
+    --accent-hover: #e85a05;
+    --accent-glow: rgba(255, 106, 19, 0.28);
+    --accent-soft: #fff1e7;
+    --bg-light: #f4f5f7;
+    --hover-shadow: 0 12px 28px rgba(19, 35, 61, 0.14);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background-color: var(--bg-light);
+    color: #1f2937;
+    /* Bootstrap "danger" vitrinde turuncu vurgu olarak kullanılıyor */
+    --bs-danger: #ff6a13;
+    --bs-danger-rgb: 255, 106, 19;
+    --bs-danger-text-emphasis: #b84400;
+    --bs-danger-bg-subtle: #fff1e7;
+    --bs-danger-border-subtle: #ffc9a6;
+    --bs-link-color: #13233d;
+    --bs-link-color-rgb: 19, 35, 61;
+    --bs-link-hover-color: #ff6a13;
+    --bs-link-hover-color-rgb: 255, 106, 19;
+}
+body.store .text-danger { color: var(--accent-color) !important; }
+body.store .bg-danger { background-color: var(--accent-color) !important; }
+body.store .border-danger { border-color: var(--accent-color) !important; }
+body.store .btn-danger {
+    --bs-btn-bg: #ff6a13; --bs-btn-border-color: #ff6a13;
+    --bs-btn-hover-bg: #e85a05; --bs-btn-hover-border-color: #e85a05;
+    --bs-btn-active-bg: #d65200; --bs-btn-active-border-color: #d65200;
+    --bs-btn-disabled-bg: #ff6a13; --bs-btn-disabled-border-color: #ff6a13;
+    --bs-btn-focus-shadow-rgb: 255, 106, 19;
+}
+body.store .btn-outline-danger {
+    --bs-btn-color: #ff6a13; --bs-btn-border-color: #ff6a13;
+    --bs-btn-hover-bg: #ff6a13; --bs-btn-hover-border-color: #ff6a13; --bs-btn-hover-color: #fff;
+    --bs-btn-active-bg: #e85a05; --bs-btn-active-border-color: #e85a05;
+    --bs-btn-focus-shadow-rgb: 255, 106, 19;
+}
+body.store .btn-dark {
+    --bs-btn-bg: #13233d; --bs-btn-border-color: #13233d;
+    --bs-btn-hover-bg: #1b3052; --bs-btn-hover-border-color: #1b3052;
+    --bs-btn-active-bg: #0d1a2e; --bs-btn-active-border-color: #0d1a2e;
+}
+body.store .bg-dark { background-color: var(--navy) !important; }
+body.store .badge.bg-danger { background-color: #ef4444 !important; } /* "Son 1 adet" gibi uyarı rozetleri kırmızı kalır */
+
+/* Üst bilgi çubuğu ve başlık: lacivert */
+body.store .top-bar {
+    background-color: var(--navy-deep);
+    color: #c3cbd8;
+    border-bottom: 0 !important;
+}
+body.store .top-bar a { color: #c3cbd8; }
+body.store .top-bar a:hover { color: #ffffff; }
+body.store .top-bar .text-warning { color: #ffb37a !important; }
+body.store header {
+    background-color: var(--navy) !important;
+    border-bottom: 0 !important;
+    box-shadow: 0 2px 10px rgba(13, 26, 46, 0.25) !important;
+}
+body.store header .navbar-brand img { filter: none; }
+body.store .search-bar-group { box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15); border-radius: 10px; }
+body.store .search-bar-group .form-control {
+    border-radius: 10px 0 0 10px;
+    border: 0;
+    background-color: #ffffff;
+    color: #1f2937;
+    padding-top: .65rem; padding-bottom: .65rem;
+}
+body.store .search-bar-group .form-control::placeholder { color: #9aa3b2; }
+body.store .search-bar-group .form-control:focus { background-color: #ffffff; color: #1f2937; box-shadow: none; }
+body.store .search-bar-group .form-select {
+    border: 0;
+    border-left: 1px solid #e5e7eb;
+    background-color: #ffffff;
+    color: #374151;
+}
+body.store .search-bar-group .btn-search {
+    border-radius: 0 10px 10px 0;
+    border: 0;
+    background-color: var(--accent-color);
+}
+body.store .search-bar-group .btn-search:hover { background-color: var(--accent-hover); }
+/* Başlıktaki sepet ve hesap düğmeleri lacivert zeminde */
+body.store header .btn-outline-dark,
+body.store header .btn-outline-secondary {
+    color: #ffffff;
+    border-color: rgba(255, 255, 255, 0.35) !important;
+    background: transparent;
+}
+body.store header .btn-outline-dark:hover,
+body.store header .btn-outline-secondary:hover { background: rgba(255, 255, 255, 0.1); color: #ffffff; }
+body.store header .text-dark { color: #ffffff !important; }
+body.store header .text-muted, body.store header .text-secondary { color: #c3cbd8 !important; }
+body.store header a:not(.btn) { color: #ffffff; }
+
+/* Kategori çubuğu: açık gri, koyu yazı, seçili olan turuncu alt çizgi */
+body.store .cat-nav {
+    background-color: #eef0f4;
+    border-bottom: 1px solid #e1e5eb;
+}
+body.store .cat-nav .nav-link {
+    color: #1f2937;
+    font-weight: 600;
+    border-bottom: 3px solid transparent;
+}
+body.store .cat-nav .nav-link:hover,
+body.store .cat-nav .nav-link.active {
+    color: var(--accent-color);
+    background-color: transparent;
+    border-bottom-color: var(--accent-color);
+}
+body.store .cat-nav .nav-link .text-danger { color: var(--accent-color) !important; }
+body.store .cat-nav-all { border-left: 1px solid #dfe3ea; }
+body.store .cat-nav-all > .nav-link.show { color: var(--accent-color); background: #ffffff; }
+body.store .cat-mega-link:hover, body.store .cat-mega-link.active { background: var(--accent-soft); color: var(--accent-hover); }
+
+/* Bölüm başlıkları */
+body.store .section-title { color: var(--navy); font-weight: 800; }
+
+/* Kitap kartları: beyaz, ince çerçeve, turuncu tam genişlik sepet düğmesi */
+body.store .book-card {
+    border: 1px solid #e5e7eb;
+    border-radius: 14px;
+    box-shadow: 0 1px 3px rgba(16, 24, 40, 0.06);
+}
+body.store .book-card:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--hover-shadow);
+    border-color: #d5dae2;
+}
+body.store .book-cover-wrapper { background: #f3f4f6; }
+body.store .book-card:hover .book-cover-img { transform: scale(1.03); }
+body.store .book-title { color: #111827; font-weight: 700; }
+body.store .book-author { color: #6b7280; font-weight: 500; }
+body.store .current-price { color: #111827; font-weight: 800; }
+body.store .old-price { color: #9ca3af; }
+body.store .discount-badge {
+    background: #ef4444;
+    box-shadow: 0 3px 8px rgba(239, 68, 68, 0.35);
+    border-radius: 8px;
+}
+body.store .btn-add-cart {
+    background-color: var(--accent-color);
+    color: #ffffff;
+    border-radius: 10px;
+    font-weight: 700;
+}
+body.store .btn-add-cart:hover {
+    background-color: var(--accent-hover);
+    color: #ffffff;
+    box-shadow: 0 6px 14px var(--accent-glow);
+}
+body.store .buy-box .btn-add-cart.btn-dark { background-color: var(--navy); }
+body.store .rec-card + div .btn-add-cart { color: var(--accent-color); border-color: var(--accent-color); background: transparent; }
+body.store .rec-card + div .btn-add-cart:hover { background: var(--accent-color); color: #fff; }
+body.store .product-tabs .nav-link.active { color: var(--accent-color); border-bottom-color: var(--accent-color); }
+
+/* Koleksiyon kartları ve alt bilgi: lacivert */
+body.store .collection-card {
+    background: linear-gradient(135deg, var(--navy) 0%, var(--navy-2) 100%);
+    border: 0;
+    box-shadow: 0 12px 28px rgba(19, 35, 61, 0.25);
+}
+body.store .collection-card::after { background: rgba(255, 106, 19, 0.12); }
+body.store footer {
+    background-color: var(--navy-deep);
+    color: #aab4c3;
+    border-top: 0;
+}
+body.store footer a { color: #aab4c3; }
+body.store footer a:hover { color: var(--accent-color); }

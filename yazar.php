@@ -62,7 +62,7 @@ track_view('author');
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
     <link rel="stylesheet" href="<?= asset_v('assets/css/style.css') ?>">
 </head>
-<body>
+<body class="store">
     <div class="top-bar py-2 border-bottom border-dark">
         <div class="container d-flex align-items-center justify-content-between">
             <div><i class="bi bi-geo-alt-fill text-danger me-1"></i> Etimesgut / Ankara</div>
@@ -73,7 +73,7 @@ track_view('author');
     <header class="bg-white py-3 border-bottom shadow-sm">
         <div class="container d-flex align-items-center justify-content-between">
             <a href="/" class="navbar-brand text-dark d-flex align-items-center">
-                <img src="/assets/images/logo_horizontal.png" alt="Yeniçeri Kitabevi" width="164" height="48" style="height: 48px; width: auto; max-width: 220px; object-fit: contain;">
+                <img src="/assets/images/logo_horizontal_light.png" alt="Yeniçeri Kitabevi" width="164" height="48" style="height: 48px; width: auto; max-width: 220px; object-fit: contain;">
             </a>
             <button class="btn btn-outline-dark rounded-pill px-3 py-2 fw-bold" data-bs-toggle="offcanvas" data-bs-target="#cartDrawer">
                 <i class="bi bi-bag-handle-fill text-danger me-1"></i> Sepetim <span class="badge bg-danger rounded-pill cart-count-badge">0</span>

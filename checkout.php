@@ -193,11 +193,11 @@ track_view('checkout');
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
     <link rel="stylesheet" href="<?= asset_v('assets/css/style.css') ?>">
 </head>
-<body>
+<body class="store">
     <header class="bg-white py-3 border-bottom shadow-sm">
         <div class="container d-flex align-items-center justify-content-between">
             <a href="index.php" class="navbar-brand text-dark d-flex align-items-center">
-                <img src="assets/images/logo_horizontal.png" alt="Yeniçeri Kitabevi" style="height: 48px; max-width: 220px; object-fit: contain;">
+                <img src="assets/images/logo_horizontal_light.png" alt="Yeniçeri Kitabevi" style="height: 48px; max-width: 220px; object-fit: contain;">
             </a>
             <span class="badge bg-success bg-opacity-10 text-success px-3 py-2 rounded-pill font-bold"><i class="bi bi-shield-lock-fill me-1"></i> 256-Bit SSL Güvenli Ödeme</span>
         </div>

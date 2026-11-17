@@ -33,10 +33,10 @@ $step_keys = array_keys($steps);
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
     <link rel="stylesheet" href="<?= asset_v('assets/css/style.css') ?>">
 </head>
-<body class="bg-light">
+<body class="store bg-light">
     <header class="bg-white py-3 border-bottom shadow-sm">
         <div class="container d-flex align-items-center justify-content-between">
-            <a href="/" class="navbar-brand"><img src="/assets/images/logo_horizontal.png" alt="Yeniçeri Kitabevi" width="164" height="48" style="height: 48px; width: auto;"></a>
+            <a href="/" class="navbar-brand"><img src="/assets/images/logo_horizontal_light.png" alt="Yeniçeri Kitabevi" width="164" height="48" style="height: 48px; width: auto;"></a>
             <a href="/" class="btn btn-outline-dark rounded-pill px-3 fw-bold"><i class="bi bi-house-door me-1"></i> Ana Sayfa</a>
         </div>
     </header>

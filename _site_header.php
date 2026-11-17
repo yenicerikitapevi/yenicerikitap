@@ -33,7 +33,7 @@ $header_active = $header_active ?? '';
             <div class="row align-items-center g-3">
                 <div class="col-6 col-lg-3">
                     <a href="index.php" class="navbar-brand text-dark d-flex align-items-center">
-                        <img src="assets/images/logo_horizontal.png" alt="Yeniçeri Kitabevi" style="height: 52px; max-width: 220px; object-fit: contain;">
+                        <img src="assets/images/logo_horizontal_light.png" alt="Yeniçeri Kitabevi" style="height: 52px; max-width: 220px; object-fit: contain;">
                     </a>
                 </div>
                 <div class="col-12 col-lg-6 order-3 order-lg-2">
