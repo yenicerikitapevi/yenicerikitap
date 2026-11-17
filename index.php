@@ -68,12 +68,12 @@ track_view('home');
     ]) ?>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
     <link rel="stylesheet" href="<?= asset_v('assets/css/style.css') ?>">
 </head>
-<body>
+<body class="store">
 
     <!-- 1. ÜST BİLGİ ÇUBUĞU -->
     <div class="top-bar py-2 border-bottom border-dark">
@@ -105,7 +105,7 @@ track_view('home');
             <div class="row align-items-center g-3">
                 <div class="col-6 col-lg-3">
                     <a href="index.php" class="navbar-brand text-dark d-flex align-items-center">
-                        <img src="assets/images/logo_horizontal.png" alt="Yeniçeri Kitabevi" style="height: 52px; max-width: 220px; object-fit: contain;">
+                        <img src="assets/images/logo_horizontal_light.png" alt="Yeniçeri Kitabevi" style="height: 52px; max-width: 220px; object-fit: contain;">
                     </a>
                 </div>
 
@@ -146,10 +146,10 @@ track_view('home');
         <div class="container">
             <div class="row g-4 align-items-stretch">
                 <div class="col-lg-8">
-                    <div class="card border-0 rounded-4 overflow-hidden shadow-lg text-white h-100 position-relative" style="background: linear-gradient(135deg, #000000 0%, #1a1a24 100%); border: 2px solid #e61919 !important; min-height: 280px;">
+                    <div class="card border-0 rounded-4 overflow-hidden shadow-lg text-white h-100 position-relative" style="background: linear-gradient(135deg, #13233d 0%, #1e3a64 100%); min-height: 280px;">
                         <div class="card-body p-4 p-md-5 d-flex flex-column justify-content-center" style="max-width: 550px;">
                             <span class="badge bg-danger rounded-pill px-3 py-2 w-auto me-auto mb-3 fw-bold"><i class="bi bi-fire me-1"></i> Etimesgut Şubesi Özel</span>
-                            <h1 class="display-6 fw-extrabold text-white mb-2">Okuma Tutkunlarına Özel Kırmızı & Siyah Fırsatlar!</h1>
+                            <h1 class="display-6 fw-extrabold text-white mb-2">Okuma Tutkunlarına Özel Fırsatlar!</h1>
                             <p class="text-light opacity-75 mb-4 fs-6">Klasik romanlar, tarih serileri ve dünya edebiyatının başyapıtlarında cazip fiyat avantajları.</p>
                             <div>
                                 <a href="#showcase_1" class="btn btn-danger btn-lg rounded-pill px-4 fw-bold shadow-lg">
@@ -161,7 +161,7 @@ track_view('home');
                 </div>
 
                 <div class="col-lg-4">
-                    <div class="card border-0 rounded-4 bg-dark text-white p-4 shadow-lg h-100 d-flex flex-column justify-content-between" style="border: 2px solid #e61919 !important;">
+                    <div class="card border-0 rounded-4 bg-dark text-white p-4 shadow-lg h-100 d-flex flex-column justify-content-between">
                         <div>
                             <div class="d-flex align-items-center justify-content-between">
                                 <span class="badge bg-danger text-white font-bold rounded-pill px-3 py-1">Günün Fırsatı</span>
@@ -211,13 +211,13 @@ track_view('home');
                 <?php if ($sc['type'] === 'scroll'): ?>
                     <div class="d-flex gap-3 overflow-x-auto pb-3 scrollbar-custom">
                         <?php foreach ($books as $b): ?>
-                            <div style="min-width: 220px; max-width: 240px;">
+                            <div style="min-width: 170px; max-width: 185px;">
                                 <?php include __DIR__ . '/_book_card.php'; ?>
                             </div>
                         <?php endforeach; ?>
                     </div>
                 <?php else: ?>
-                    <div class="row g-3 row-cols-2 row-cols-md-3 row-cols-lg-4">
+                    <div class="row g-3 row-cols-2 row-cols-sm-3 row-cols-md-4 row-cols-lg-5 row-cols-xl-6">
                         <?php foreach ($books as $b): ?>
                             <div class="col">
                                 <?php include __DIR__ . '/_book_card.php'; ?>
@@ -309,7 +309,7 @@ track_view('home');
             <div class="row g-4 pb-5 border-bottom border-secondary border-opacity-25">
                 <div class="col-lg-4">
                     <div class="bg-white d-inline-block px-3 py-2 rounded-3 mb-3 shadow-sm">
-                        <img src="assets/images/logo_horizontal.png" alt="Yeniçeri Kitabevi" style="height: 40px; object-fit: contain;">
+                        <img src="assets/images/logo_horizontal_light.png" alt="Yeniçeri Kitabevi" style="height: 40px; object-fit: contain;">
                     </div>
                     <p class="fs-7 opacity-75 mb-3">Yeniçeri Kitabevi, binlerce edebi eser, tarih araştırması ve çocuk kitabı ile Ankara Etimesgut merkezli okurlarına hızlı ve güvenli hizmet vermektedir.</p>
                     <div class="d-flex gap-2">

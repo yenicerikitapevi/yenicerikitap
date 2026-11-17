@@ -100,12 +100,12 @@ track_view('store', null, $store['id'] ?? null);
     ?>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
     <link rel="stylesheet" href="<?= asset_v('assets/css/style.css') ?>">
 </head>
-<body>
+<body class="store">
     <div class="top-bar py-2 border-bottom border-dark">
         <div class="container d-flex align-items-center justify-content-between">
             <div><i class="bi bi-shop text-danger me-1"></i> Yeniçeri Kitabevi — Sahaf & Alt Dükkan Platformu</div>
@@ -125,7 +125,7 @@ track_view('store', null, $store['id'] ?? null);
     <header class="bg-white py-3 border-bottom shadow-sm sticky-top">
         <div class="container d-flex align-items-center justify-content-between gap-3">
             <a href="index.php" class="navbar-brand text-dark d-flex align-items-center">
-                <img src="assets/images/logo_horizontal.png" alt="Yeniçeri Kitabevi" style="height: 48px; max-width: 220px; object-fit: contain;">
+                <img src="assets/images/logo_horizontal_light.png" alt="Yeniçeri Kitabevi" style="height: 48px; max-width: 220px; object-fit: contain;">
             </a>
             <?php if ($store): ?>
                 <form action="magaza.php" method="GET" class="flex-grow-1 d-none d-md-block" style="max-width: 520px;">
@@ -204,7 +204,7 @@ track_view('store', null, $store['id'] ?? null);
 
         <div class="container py-5">
             <div class="row g-4">
-                <div class="col-lg-3">
+                <div class="col-lg-3 col-xl-2">
                     <div class="card border-0 shadow-sm rounded-4 p-4 sticky-top" style="top: 100px;">
                         <h5 class="fw-bold mb-3 text-dark"><i class="bi bi-funnel-fill text-danger me-1"></i> Dükkan İçi Filtre</h5>
 
@@ -251,7 +251,7 @@ track_view('store', null, $store['id'] ?? null);
                     </div>
                 </div>
 
-                <div class="col-lg-9">
+                <div class="col-lg-9 col-xl-10">
                     <div class="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-2">
                         <h4 class="fw-extrabold text-dark mb-0">
                             <?= e($store['name']) ?> Vitrin Ürünleri
@@ -270,7 +270,7 @@ track_view('store', null, $store['id'] ?? null);
                             <a href="magaza.php?s=<?= urlencode($store['slug']) ?>" class="btn btn-danger font-semibold">Tüm Dükkan Kitaplarını Gör</a>
                         </div>
                     <?php else: ?>
-                        <div class="row g-3 row-cols-2 row-cols-md-3">
+                        <div class="row g-3 row-cols-2 row-cols-sm-3 row-cols-lg-4 row-cols-xl-6">
                             <?php foreach ($books as $b): ?>
                                 <div class="col">
                                     <?php include __DIR__ . '/_book_card.php'; ?>

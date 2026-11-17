@@ -138,12 +138,12 @@ track_view('category');
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
     <link rel="stylesheet" href="<?= asset_v('assets/css/style.css') ?>">
 </head>
-<body>
+<body class="store">
     <?php $header_active = $cat_id; include __DIR__ . '/_site_header.php'; ?>
 
     <div class="container py-5">
         <div class="row g-4">
-            <div class="col-lg-3">
+            <div class="col-lg-3 col-xl-2">
                 <div class="card border-0 shadow-sm rounded-4 p-4 sticky-top" style="top: 100px;">
                     <h5 class="fw-bold mb-3 text-dark"><i class="bi bi-funnel-fill text-danger me-1"></i> Filtrele</h5>
 
@@ -169,7 +169,7 @@ track_view('category');
                 </div>
             </div>
 
-            <div class="col-lg-9">
+            <div class="col-lg-9 col-xl-10">
                 <div class="mb-2"><?= breadcrumb_html($crumbs) ?></div>
                 <div class="d-flex align-items-center justify-content-between mb-3 gap-2 flex-wrap">
                     <h1 class="h4 fw-extrabold text-dark mb-0">
@@ -221,7 +221,7 @@ track_view('category');
                         <a href="category.php" class="btn btn-danger font-semibold">Tüm Kataloğu Gör</a>
                     </div>
                 <?php else: ?>
-                    <div class="row g-3 row-cols-2 row-cols-md-3">
+                    <div class="row g-3 row-cols-2 row-cols-sm-3 row-cols-lg-4 row-cols-xl-6">
                         <?php $grp_prev = null; foreach ($books as $b): ?>
                             <?php $grp = empty($b['store_id']) ? 'y' : 's';
                             if ($seller === '' && $grp !== $grp_prev && ($grp_prev !== null || ($seller_counts['yeniceri'] ?? 0) > 0) && ($seller_counts['sahaf'] ?? 0) > 0): ?>
