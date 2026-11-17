@@ -596,3 +596,19 @@ body.store footer {
 }
 body.store footer a { color: #aab4c3; }
 body.store footer a:hover { color: var(--accent-color); }
+
+/* Küçük kitap kartları: geniş ekranda yan yana 6 kart */
+body.store .book-card { border-radius: 12px; }
+body.store .book-cover-wrapper { padding-top: 140%; }
+body.store .discount-badge { top: 8px; right: 8px; font-size: .68rem; padding: 3px 7px; border-radius: 6px; }
+body.store .book-card-body { padding: .7rem .75rem .8rem; }
+body.store .book-author { font-size: .74rem; margin-bottom: .2rem; }
+body.store .book-title { font-size: .86rem; line-height: 1.3; height: 2.25rem; margin-bottom: .35rem; font-weight: 700; }
+body.store .book-card-body .fs-8 { font-size: .72rem !important; }
+body.store .book-price-box { gap: 6px; margin-bottom: .6rem !important; flex-wrap: wrap; }
+body.store .current-price { font-size: 1.02rem; }
+body.store .old-price { font-size: .76rem; }
+body.store .book-card-body > .mb-2[style*="margin-top"] { margin-top: -.35rem !important; margin-bottom: .45rem !important; }
+body.store .book-card .btn-add-cart,
+body.store .book-card .btn-secondary { padding: .42rem .5rem; font-size: .82rem; border-radius: 8px; }
+body.store .book-card .badge { font-size: .68rem !important; }

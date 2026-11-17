@@ -204,7 +204,7 @@ track_view('store', null, $store['id'] ?? null);
 
         <div class="container py-5">
             <div class="row g-4">
-                <div class="col-lg-3">
+                <div class="col-lg-3 col-xl-2">
                     <div class="card border-0 shadow-sm rounded-4 p-4 sticky-top" style="top: 100px;">
                         <h5 class="fw-bold mb-3 text-dark"><i class="bi bi-funnel-fill text-danger me-1"></i> Dükkan İçi Filtre</h5>
 
@@ -251,7 +251,7 @@ track_view('store', null, $store['id'] ?? null);
                     </div>
                 </div>
 
-                <div class="col-lg-9">
+                <div class="col-lg-9 col-xl-10">
                     <div class="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-2">
                         <h4 class="fw-extrabold text-dark mb-0">
                             <?= e($store['name']) ?> Vitrin Ürünleri
@@ -270,7 +270,7 @@ track_view('store', null, $store['id'] ?? null);
                             <a href="magaza.php?s=<?= urlencode($store['slug']) ?>" class="btn btn-danger font-semibold">Tüm Dükkan Kitaplarını Gör</a>
                         </div>
                     <?php else: ?>
-                        <div class="row g-3 row-cols-2 row-cols-md-3">
+                        <div class="row g-3 row-cols-2 row-cols-sm-3 row-cols-lg-4 row-cols-xl-6">
                             <?php foreach ($books as $b): ?>
                                 <div class="col">
                                     <?php include __DIR__ . '/_book_card.php'; ?>

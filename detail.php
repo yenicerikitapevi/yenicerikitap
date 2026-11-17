@@ -254,7 +254,7 @@ track_view('detail', $book['id'], $book['store_id'] ?? null);
         <?php if (!empty($author_books)): ?>
             <div class="mt-5 pt-4 border-top">
                 <h2 class="section-title h3">Yazarın Diğer Kitapları: <a href="<?= e(author_path(['slug' => $book['author_slug'], 'name' => $book['author_name']])) ?>" class="text-danger text-decoration-none"><?= e($book['author_name']) ?></a></h2>
-                <div class="row g-3 row-cols-2 row-cols-md-4">
+                <div class="row g-3 row-cols-2 row-cols-sm-3 row-cols-md-4 row-cols-lg-5 row-cols-xl-6">
                     <?php foreach ($author_books as $b): ?>
                         <div class="col">
                             <?php include __DIR__ . '/_book_card.php'; ?>
@@ -267,7 +267,7 @@ track_view('detail', $book['id'], $book['store_id'] ?? null);
         <?php if (!empty($related_books)): ?>
             <div class="mt-5 pt-4 border-top">
                 <h2 class="section-title h3">Aynı Kategoriden Benzer Kitaplar</h2>
-                <div class="row g-3 row-cols-2 row-cols-md-4">
+                <div class="row g-3 row-cols-2 row-cols-sm-3 row-cols-md-4 row-cols-lg-5 row-cols-xl-6">
                     <?php foreach ($related_books as $b): ?>
                         <div class="col">
                             <?php include __DIR__ . '/_book_card.php'; ?>

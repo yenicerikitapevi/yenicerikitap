@@ -211,13 +211,13 @@ track_view('home');
                 <?php if ($sc['type'] === 'scroll'): ?>
                     <div class="d-flex gap-3 overflow-x-auto pb-3 scrollbar-custom">
                         <?php foreach ($books as $b): ?>
-                            <div style="min-width: 220px; max-width: 240px;">
+                            <div style="min-width: 170px; max-width: 185px;">
                                 <?php include __DIR__ . '/_book_card.php'; ?>
                             </div>
                         <?php endforeach; ?>
                     </div>
                 <?php else: ?>
-                    <div class="row g-3 row-cols-2 row-cols-md-3 row-cols-lg-4">
+                    <div class="row g-3 row-cols-2 row-cols-sm-3 row-cols-md-4 row-cols-lg-5 row-cols-xl-6">
                         <?php foreach ($books as $b): ?>
                             <div class="col">
                                 <?php include __DIR__ . '/_book_card.php'; ?>
