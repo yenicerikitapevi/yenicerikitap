@@ -105,7 +105,7 @@ track_view('home');
             <div class="row align-items-center g-3">
                 <div class="col-6 col-lg-3">
                     <a href="index.php" class="navbar-brand text-dark d-flex align-items-center">
-                        <img src="assets/images/logo_horizontal_light.png" alt="Yeniçeri Kitabevi" style="height: 52px; max-width: 220px; object-fit: contain;">
+                        <img src="assets/images/logo_horizontal_light.png" onerror="this.onerror=null;this.src='assets/images/logo_horizontal.png'" alt="Yeniçeri Kitabevi" style="height: 52px; max-width: 220px; object-fit: contain;">
                     </a>
                 </div>
 
@@ -309,7 +309,7 @@ track_view('home');
             <div class="row g-4 pb-5 border-bottom border-secondary border-opacity-25">
                 <div class="col-lg-4">
                     <div class="bg-white d-inline-block px-3 py-2 rounded-3 mb-3 shadow-sm">
-                        <img src="assets/images/logo_horizontal_light.png" alt="Yeniçeri Kitabevi" style="height: 40px; object-fit: contain;">
+                        <img src="assets/images/logo_horizontal_light.png" onerror="this.onerror=null;this.src='assets/images/logo_horizontal.png'" alt="Yeniçeri Kitabevi" style="height: 40px; object-fit: contain;">
                     </div>
                     <p class="fs-7 opacity-75 mb-3">Yeniçeri Kitabevi, binlerce edebi eser, tarih araştırması ve çocuk kitabı ile Ankara Etimesgut merkezli okurlarına hızlı ve güvenli hizmet vermektedir.</p>
                     <div class="d-flex gap-2">
