@@ -290,6 +290,14 @@ if ($tab === 'dukkan') {
                                 <div class="d-flex justify-content-between fs-8 text-muted pt-2">
                                     <span>Kitaplarınızın tutarı</span><span><b class="text-dark"><?= format_price($ssum) ?></b><?= $scom > 0 ? ' · komisyon ' . format_price($scom) . ' · size kalan <b class="text-success">' . format_price($ssum - $scom) . '</b>' : '' ?></span>
                                 </div>
+                                <?php $ship_amt = (float)$so['shipping_amount']; $cust_carrier = shipping_carriers()[$so['shipping_carrier'] ?? '']['name'] ?? ''; ?>
+                                <div class="d-flex justify-content-between fs-8 text-muted pt-1">
+                                    <span>Müşterinin ödediği kargo ücreti<?= $cust_carrier !== '' ? ' (' . e($cust_carrier) . ')' : '' ?><?= !$single ? ' <span class="text-secondary">— siparişin tamamı için</span>' : '' ?></span>
+                                    <b class="text-dark"><?= $ship_amt > 0 ? format_price($ship_amt) : 'Ücretsiz kargo' ?></b>
+                                </div>
+                                <?php if ($single): ?>
+                                    <div class="d-flex justify-content-between fs-8 text-muted pt-1"><span>Müşterinin ödediği toplam</span><b class="text-dark"><?= format_price($so['total_amount']) ?></b></div>
+                                <?php endif; ?>
                             </div>
                             <div class="col-lg-5">
                                 <?php if ($paid): ?>
@@ -309,7 +317,7 @@ if ($tab === 'dukkan') {
                                             <select name="carrier" class="form-select form-select-sm" required>
                                                 <option value="">Seçin</option>
                                                 <?php foreach ($carriers as $ck => $cv): ?>
-                                                    <option value="<?= e($ck) ?>" <?= ($so['sh_carrier'] ?? '') === $ck ? 'selected' : '' ?>><?= e($cv['name']) ?></option>
+                                                    <option value="<?= e($ck) ?>" <?= (($so['sh_carrier'] ?? '') !== '' ? $so['sh_carrier'] : ($so['shipping_carrier'] ?? '')) === $ck ? 'selected' : '' ?>><?= e($cv['name']) ?></option>
                                                 <?php endforeach; ?>
                                             </select>
                                         </div>
