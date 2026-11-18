@@ -79,6 +79,19 @@ $orders = db_fetch_all("SELECT o.*, u.name as customer_name, u.email as customer
                         LEFT JOIN users u ON o.user_id = u.id 
                         WHERE {$where} 
                         ORDER BY o.created_at DESC", $params);
+
+// Siparişlerin kitapları (tek sorgu): ad, ISBN, raf kodu, satıcı (Yeniçeri / sahaf)
+$items_by_order = [];
+if ($orders) {
+    $oids = array_map('intval', array_column($orders, 'id'));
+    foreach (db_fetch_all("SELECT oi.*, b.title, b.isbn, b.shelf_code, b.cover_image, b.nadirkitap_code, s.name AS store_name, s.phone AS store_phone
+                           FROM order_items oi
+                           LEFT JOIN books b ON b.id = oi.book_id
+                           LEFT JOIN stores s ON s.id = b.store_id
+                           WHERE oi.order_id IN (" . implode(',', $oids) . ") ORDER BY oi.id") as $it) {
+        $items_by_order[(int)$it['order_id']][] = $it;
+    }
+}
 ?>
 
 <div class="d-flex align-items-center justify-content-between mb-4">
@@ -107,6 +120,7 @@ $orders = db_fetch_all("SELECT o.*, u.name as customer_name, u.email as customer
                     <tr>
                         <th class="ps-4">Sipariş No & Tarih</th>
                         <th>Müşteri</th>
+                        <th>Kitaplar</th>
                         <th>Ödeme Yöntemi</th>
                         <th>Tutar</th>
                         <th>Durum</th>
@@ -117,7 +131,7 @@ $orders = db_fetch_all("SELECT o.*, u.name as customer_name, u.email as customer
                 <tbody>
                     <?php if (empty($orders)): ?>
                         <tr>
-                            <td colspan="7" class="text-center py-5 text-muted">Seçilen filtrelere ait sipariş bulunamadı.</td>
+                            <td colspan="8" class="text-center py-5 text-muted">Seçilen filtrelere ait sipariş bulunamadı.</td>
                         </tr>
                     <?php else: ?>
                         <?php foreach ($orders as $o): ?>
@@ -129,6 +143,16 @@ $orders = db_fetch_all("SELECT o.*, u.name as customer_name, u.email as customer
                                 <td>
                                     <div class="fw-semibold text-dark fs-7"><?= e($o['customer_name']) ?></div>
                                     <small class="text-muted fs-8"><?= e($o['customer_phone'] ?? $o['customer_email']) ?></small>
+                                </td>
+                                <td class="fs-8" style="max-width: 280px;">
+                                    <?php $its = $items_by_order[(int)$o['id']] ?? []; foreach (array_slice($its, 0, 3) as $it): ?>
+                                        <div class="text-truncate" title="<?= e($it['title'] ?? 'Silinmiş kitap #' . $it['book_id']) ?>">
+                                            <b><?= (int)$it['quantity'] ?>×</b> <?= e($it['title'] ?? 'Silinmiş kitap #' . $it['book_id']) ?>
+                                            <?php if (!empty($it['store_name'])): ?><span class="badge bg-warning text-dark ms-1"><?= e($it['store_name']) ?></span><?php endif; ?>
+                                        </div>
+                                    <?php endforeach; ?>
+                                    <?php if (count($its) > 3): ?><div class="text-muted">+<?= count($its) - 3 ?> kitap daha</div><?php endif; ?>
+                                    <?php if (!$its): ?><span class="text-danger">Kitap kaydı yok</span><?php endif; ?>
                                 </td>
                                 <td>
                                     <span class="badge bg-light text-dark border fs-8"><i class="bi bi-credit-card me-1"></i> <?= e($o['payment_method']) ?></span>
@@ -152,7 +176,7 @@ $orders = db_fetch_all("SELECT o.*, u.name as customer_name, u.email as customer
                                 </td>
                                 <td class="text-end pe-4">
                                     <button class="btn btn-sm btn-outline-danger me-1" data-bs-toggle="modal" data-bs-target="#orderModal_<?= $o['id'] ?>">
-                                        <i class="bi bi-gear-fill me-1"></i> Durum / Kargo
+                                        <i class="bi bi-eye-fill me-1"></i> Detay / Kargo
                                     </button>
                                     <a href="fatura.php?id=<?= $o['id'] ?>" target="_blank" class="btn btn-sm btn-outline-dark">
                                         <i class="bi bi-printer-fill me-1"></i> Fatura
@@ -160,8 +184,18 @@ $orders = db_fetch_all("SELECT o.*, u.name as customer_name, u.email as customer
                                 </td>
                             </tr>
 
+                        <?php endforeach; ?>
+                    <?php endif; ?>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<?php // Pencereler tablonun DIŞINDA: içlerindeki tablo, satır içinde geçersiz HTML olup düzeni bozuyordu ?>
+<?php foreach ($orders as $o): ?>
                             <div class="modal fade" id="orderModal_<?= $o['id'] ?>" tabindex="-1">
-                                <div class="modal-dialog modal-dialog-centered">
+                                <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
                                     <div class="modal-content rounded-4 border-0">
                                         <div class="modal-header border-bottom px-4">
                                             <h5 class="modal-title fw-bold">Sipariş Yönetimi #<?= e($o['order_number']) ?></h5>
@@ -170,6 +204,58 @@ $orders = db_fetch_all("SELECT o.*, u.name as customer_name, u.email as customer
                                         <form method="POST" action="">
                                             <div class="modal-body p-4">
                                                 <input type="hidden" name="update_order_status" value="1">
+                                                <?php $its = $items_by_order[(int)$o['id']] ?? []; ?>
+                                                <div class="fw-semibold text-dark fs-7 mb-2"><i class="bi bi-box-seam me-1"></i> Sipariş İçeriği</div>
+                                                <div class="table-responsive mb-3">
+                                                    <table class="table table-sm align-middle fs-8 mb-0">
+                                                        <thead class="table-light"><tr><th></th><th>Kitap</th><th>Satıcı / Raf</th><th class="text-center">Adet</th><th class="text-end">Fiyat</th><th class="text-end">Tutar</th></tr></thead>
+                                                        <tbody>
+                                                        <?php foreach ($its as $it): ?>
+                                                            <tr>
+                                                                <td style="width: 40px;"><img src="../<?= e(cover_url($it['cover_image'] ?? '')) ?>" alt="" width="32" height="46" style="width: 32px; height: 46px; object-fit: cover;" class="rounded border" loading="lazy"></td>
+                                                                <td>
+                                                                    <div class="fw-semibold"><?= e($it['title'] ?? 'Silinmiş kitap #' . $it['book_id']) ?></div>
+                                                                    <div class="text-muted"><?= !empty($it['isbn']) ? 'ISBN ' . e($it['isbn']) : '' ?><?= !empty($it['nadirkitap_code']) ? ' · NK #' . e($it['nadirkitap_code']) : '' ?> · <a href="index.php?p=Products&action=edit&id=<?= (int)$it['book_id'] ?>" target="_blank">kitap #<?= (int)$it['book_id'] ?></a></div>
+                                                                </td>
+                                                                <td>
+                                                                    <?php if (!empty($it['store_name'])): ?>
+                                                                        <span class="badge bg-warning text-dark"><?= e($it['store_name']) ?></span><?= !empty($it['store_phone']) ? '<div class="text-muted">' . e($it['store_phone']) . '</div>' : '' ?>
+                                                                    <?php else: ?>
+                                                                        <span class="badge bg-dark">Yeniçeri</span>
+                                                                    <?php endif; ?>
+                                                                    <?php if (!empty($it['shelf_code'])): ?><div class="mt-1"><span class="badge bg-light text-dark border"><i class="bi bi-archive me-1"></i><?= e($it['shelf_code']) ?></span></div><?php endif; ?>
+                                                                </td>
+                                                                <td class="text-center fw-bold"><?= (int)$it['quantity'] ?></td>
+                                                                <td class="text-end"><?= format_price($it['price']) ?></td>
+                                                                <td class="text-end fw-semibold"><?= format_price($it['total']) ?></td>
+                                                            </tr>
+                                                        <?php endforeach; ?>
+                                                        <?php if (!$its): ?><tr><td colspan="6" class="text-danger">Bu siparişte kitap kaydı yok.</td></tr><?php endif; ?>
+                                                        </tbody>
+                                                        <tfoot class="fs-8">
+                                                            <?php if ((float)($o['discount_amount'] ?? 0) > 0): ?><tr><td colspan="5" class="text-end text-success">İndirim<?= !empty($o['coupon_code']) ? ' (kupon ' . e($o['coupon_code']) . ')' : '' ?></td><td class="text-end text-success">-<?= format_price($o['discount_amount']) ?></td></tr><?php endif; ?>
+                                                            <tr><td colspan="5" class="text-end text-muted">Kargo<?= !empty($o['shipping_carrier']) ? ' (' . e(shipping_carriers()[$o['shipping_carrier']]['name'] ?? $o['shipping_carrier']) . ')' : '' ?></td><td class="text-end"><?= (float)$o['shipping_amount'] > 0 ? format_price($o['shipping_amount']) : 'Ücretsiz' ?></td></tr>
+                                                            <tr><td colspan="5" class="text-end fw-bold">Toplam</td><td class="text-end fw-bold text-danger"><?= format_price($o['total_amount']) ?></td></tr>
+                                                        </tfoot>
+                                                    </table>
+                                                </div>
+                                                <div class="row g-2 mb-3">
+                                                    <div class="col-md-6">
+                                                        <div class="p-3 bg-light rounded-3 h-100 fs-8">
+                                                            <div class="fw-semibold text-dark fs-7 mb-1"><i class="bi bi-person me-1"></i> Müşteri</div>
+                                                            <div class="fw-semibold"><?= e($o['customer_name'] ?? '—') ?></div>
+                                                            <?php if (!empty($o['customer_phone'])): ?><div><i class="bi bi-telephone me-1"></i><a href="tel:<?= e(preg_replace('/[^\d+]/', '', $o['customer_phone'])) ?>"><?= e($o['customer_phone']) ?></a></div><?php endif; ?>
+                                                            <?php if (!empty($o['customer_email'])): ?><div><i class="bi bi-envelope me-1"></i><a href="mailto:<?= e($o['customer_email']) ?>"><?= e($o['customer_email']) ?></a></div><?php endif; ?>
+                                                            <div class="text-muted mt-1"><?= e($o['payment_method']) ?> · <?= date('d.m.Y H:i', strtotime($o['created_at'])) ?></div>
+                                                        </div>
+                                                    </div>
+                                                    <div class="col-md-6">
+                                                        <div class="p-3 bg-light rounded-3 h-100 fs-8">
+                                                            <div class="fw-semibold text-dark fs-7 mb-1"><i class="bi bi-geo-alt me-1"></i> Teslimat Adresi</div>
+                                                            <div style="white-space: pre-line;"><?= e($o['shipping_address'] ?: '—') ?></div>
+                                                        </div>
+                                                    </div>
+                                                </div>
                                                 <input type="hidden" name="order_id" value="<?= $o['id'] ?>">
 
                                                 <div class="mb-3">
@@ -215,10 +301,7 @@ $orders = db_fetch_all("SELECT o.*, u.name as customer_name, u.email as customer
                                                     <div class="alert alert-info fs-8 py-2">Havale/EFT ödemesi hesabınıza geçtiyse durumu <strong>Hazırlanıyor</strong> yapın; ödeme onaylandı olarak kaydedilir.</div>
                                                 <?php endif; ?>
 
-                                                <div class="p-3 bg-light rounded-3">
-                                                    <div class="fw-semibold text-dark fs-7 mb-1">Teslimat Adresi:</div>
-                                                    <div class="fs-8 text-secondary"><?= e($o['shipping_address']) ?></div>
-                                                </div>
+
                                             </div>
                                             <div class="modal-footer border-top px-4">
                                                 <button type="button" class="btn btn-light" data-bs-dismiss="modal">Kapat</button>
@@ -228,10 +311,4 @@ $orders = db_fetch_all("SELECT o.*, u.name as customer_name, u.email as customer
                                     </div>
                                 </div>
                             </div>
-                        <?php endforeach; ?>
-                    <?php endif; ?>
-                </tbody>
-            </table>
-        </div>
-    </div>
-</div>
+<?php endforeach; ?>
