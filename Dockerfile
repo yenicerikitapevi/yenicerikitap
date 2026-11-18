@@ -1,8 +1,19 @@
+FROM eclipse-temurin:17-jdk AS watermark-build
+WORKDIR /build
+# Sunucuda görsel temizliği: aktarım uygulamasının güncel paketindeki temizleyici (sürüm adı sabit yazılmaz)
+COPY downloads/ ./downloads/
+COPY tools/server-watermark/WatermarkCli.java ./
+RUN set -e; z=$(ls downloads/kitapekapp-*-guncelleme.zip | sort -V | tail -1); echo "temizleyici: $z"; \
+    mkdir x && cd x && jar xf "../$z" && cd .. && cp "$(ls x/app/kit-app-*-small.jar | head -1)" cleaner.jar \
+    && javac -encoding UTF-8 --release 17 -cp cleaner.jar WatermarkCli.java \
+    && jar cf runner.jar WatermarkCli.class
+
 FROM php:8.2-apache
 
 # Install SQLite and PDO extensions
-RUN apt-get update && apt-get install -y \
+RUN mkdir -p /usr/share/man/man1 && apt-get update && apt-get install -y \
     libsqlite3-dev libpng-dev libjpeg62-turbo-dev libwebp-dev \
+    default-jre-headless libslf4j-java libcommons-lang3-java \
     && docker-php-ext-configure gd --with-jpeg --with-webp \
     && docker-php-ext-install pdo pdo_sqlite pdo_mysql gd exif \
     && a2enmod rewrite headers expires deflate \
@@ -20,6 +31,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends unzip git && rm
 # Copy project files
 COPY . /var/www/html/
 WORKDIR /var/www/html
+COPY --from=watermark-build /build/runner.jar /opt/watermark/runner.jar
+COPY --from=watermark-build /build/cleaner.jar /opt/watermark/cleaner.jar
 RUN composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader
 
 # Set permissions

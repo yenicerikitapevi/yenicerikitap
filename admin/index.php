@@ -22,6 +22,7 @@ $allowed_pages = [
     'DataQuality'  => 'dataquality.php',
     'Cleanup'      => 'cleanup.php',
     'Storage'      => 'storage.php',
+    'Watermarks'   => 'watermarks.php',
     'NkCategories' => 'nkcategories.php',
     'Settings'     => 'settings.php'
 ];
@@ -131,6 +132,10 @@ $pending_sellers = db_fetch("SELECT COUNT(*) as cnt FROM stores WHERE approval_s
                     <i class="bi bi-journal-text"></i> İşlem Logları
                 </a>
 
+                <a href="index.php?p=Watermarks" class="nav-link <?= $current_p === 'Watermarks' ? 'active' : '' ?>">
+                    <i class="bi bi-images"></i> Görsel Temizliği
+                </a>
+
                 <a href="index.php?p=Settings" class="nav-link <?= $current_p === 'Settings' ? 'active' : '' ?>">
                     <i class="bi bi-sliders"></i> Site Ayarları
                 </a>
@@ -166,6 +171,7 @@ $pending_sellers = db_fetch("SELECT COUNT(*) as cnt FROM stores WHERE approval_s
                             'DataQuality' => 'Veri Kontrolü (SEO)',
                             'Cleanup' => 'Örnek Veri Temizliği',
                             'Storage' => 'Disk Kullanımı',
+                            'Watermarks' => 'Görsel Temizliği',
                             'NkCategories' => 'NadirKitap Kategori Adları',
                             'Settings' => 'Genel Site Ayarları'
                         ];

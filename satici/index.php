@@ -77,7 +77,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'bulk'
     redirect('index.php?' . http_build_query(array_filter(['q' => $_POST['q'] ?? '', 'durum' => $_POST['durum'] ?? '', 'page' => $_POST['page'] ?? ''])));
 }
 $report_base     = 'index.php?tab=rapor&';
-$tab             = in_array($_GET['tab'] ?? '', ['rapor', 'mesaj'], true) ? $_GET['tab'] : 'dukkan';
+$tab             = in_array($_GET['tab'] ?? '', ['rapor', 'mesaj', 'siparis'], true) ? $_GET['tab'] : 'dukkan';
+
+// Sipariş kargolandı: kargo firması + takip numarası (yalnızca bu dükkânın kitabı olan sipariş)
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'ship') {
+    if (!hash_equals($store_token, (string)($_POST['token'] ?? ''))) {
+        set_flash('warning', 'Oturum süresi doldu, tekrar deneyin.');
+    } else {
+        [$ok, $msg] = so_ship((int)($_POST['order_id'] ?? 0), $report_store_id, $_POST['carrier'] ?? '', $_POST['tracking_number'] ?? '');
+        set_flash($ok ? 'success' : 'danger', $msg);
+    }
+    redirect('index.php?' . http_build_query(array_filter(['tab' => 'siparis', 'f' => $_POST['f'] ?? ''])));
+}
+$to_ship = so_to_ship_count($report_store_id);
 
 // Müşteri sorusuna yanıt (yalnızca bu dükkânın soruları)
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'bq_reply') {
@@ -204,12 +216,117 @@ if ($tab === 'dukkan') {
         <?php endif; ?>
         <ul class="nav nav-pills mb-4 bg-white p-2 rounded-4 shadow-sm border">
             <li class="nav-item"><a class="nav-link fw-semibold <?= $tab === 'dukkan' ? 'active bg-danger text-white' : 'text-secondary' ?>" href="index.php"><i class="bi bi-shop me-1"></i> Dükkânım</a></li>
+            <li class="nav-item"><a class="nav-link fw-semibold <?= $tab === 'siparis' ? 'active bg-danger text-white' : 'text-secondary' ?>" href="index.php?tab=siparis"><i class="bi bi-box-seam me-1"></i> Siparişler<?= $to_ship ? ' <span class="badge bg-warning text-dark">' . $to_ship . '</span>' : '' ?></a></li>
             <li class="nav-item"><a class="nav-link fw-semibold <?= $tab === 'rapor' ? 'active bg-danger text-white' : 'text-secondary' ?>" href="index.php?tab=rapor"><i class="bi bi-graph-up-arrow me-1"></i> Ziyaret & Satış Raporu</a></li>
             <li class="nav-item"><a class="nav-link fw-semibold <?= $tab === 'mesaj' ? 'active bg-danger text-white' : 'text-secondary' ?>" href="index.php?tab=mesaj"><i class="bi bi-chat-dots me-1"></i> Mesajlar<?= $bq_unread ? ' <span class="badge bg-warning text-dark">' . $bq_unread . '</span>' : '' ?></a></li>
         </ul>
 
         <?php if ($tab === 'rapor'): ?>
             <?php include __DIR__ . '/../admin/modules/reports.php'; ?>
+        <?php elseif ($tab === 'siparis'):
+            $sf = in_array($_GET['f'] ?? '', ['gonderilecek', 'gonderildi', 'bekleyen', 'iptal'], true) ? $_GET['f'] : '';
+            $sorders = so_store_orders($report_store_id, $sf);
+            $carriers = shipping_carriers(); ?>
+            <div class="alert alert-light border rounded-4 fs-7">
+                <i class="bi bi-info-circle me-1 text-danger"></i> Kitaplarınız satıldığında kargoyu siz gönderirsiniz. Ödemesi alınan siparişte alıcının adı, telefonu ve adresi burada görünür.
+                Paketi kargoya verince firmayı ve takip numarasını girin; müşteriye otomatik e-posta gider.
+                <?= trim((string)($store['email'] ?? '')) !== '' ? 'Yeni siparişler <b>' . e($store['email']) . '</b> adresine de bildirilir.' : '<span class="text-danger">Dükkânınızın e-posta adresi kayıtlı değil; yeni sipariş e-postası için Yeniçeri Kitabevi\'ne bildirin.</span>' ?>
+            </div>
+            <div class="d-flex flex-wrap gap-2 mb-3">
+                <?php foreach (['' => 'Tümü', 'gonderilecek' => 'Gönderilecek' . ($to_ship ? " ({$to_ship})" : ''), 'gonderildi' => 'Gönderildi', 'bekleyen' => 'Ödeme Bekleniyor', 'iptal' => 'İptal'] as $fk => $fl): ?>
+                    <a href="index.php?<?= http_build_query(array_filter(['tab' => 'siparis', 'f' => $fk])) ?>" class="btn btn-sm <?= $sf === $fk ? 'btn-danger' : 'btn-outline-secondary' ?>"><?= e($fl) ?></a>
+                <?php endforeach; ?>
+            </div>
+            <?php if (!$sorders): ?>
+                <div class="card border-0 shadow-sm rounded-4 p-5 text-center text-muted">Bu listede sipariş yok.</div>
+            <?php endif; ?>
+            <?php foreach ($sorders as $so):
+                $sitems = so_store_items($so['id'], $report_store_id);
+                $paid = in_array($so['status'], so_paid_statuses(), true);
+                $shipped = !empty($so['sh_shipped_at']);
+                $single = so_order_is_single_store($so['id'], $report_store_id);
+                $ssum = array_sum(array_map(function ($it) { return (float)$it['total']; }, $sitems));
+                $scom = array_sum(array_map(function ($it) { return (float)$it['commission_amount']; }, $sitems)); ?>
+                <div class="card border-0 shadow-sm rounded-4 mb-3 <?= $so['status'] === 'Hazırlanıyor' && !$shipped ? 'border-start border-4 border-warning' : '' ?>">
+                    <div class="card-header bg-white p-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
+                        <div>
+                            <b><?= e($so['order_number']) ?></b>
+                            <span class="text-muted fs-8 ms-2"><?= date('d.m.Y H:i', strtotime($so['created_at'])) ?></span>
+                            <?php if (!$single): ?><span class="badge bg-light text-dark border ms-1 fs-8" title="Siparişte başka satıcıların kitapları da var; yalnızca sizinkileri gönderin">karma sipariş</span><?php endif; ?>
+                        </div>
+                        <div>
+                            <?php if ($so['status'] === 'İptal'): ?>
+                                <span class="badge bg-danger">İptal edildi — göndermeyin</span>
+                            <?php elseif ($so['status'] === 'Ödeme Bekliyor'): ?>
+                                <span class="badge bg-info text-dark">Ödeme bekleniyor — henüz göndermeyin</span>
+                            <?php elseif ($shipped): ?>
+                                <span class="badge bg-success">Kargolandı</span>
+                            <?php else: ?>
+                                <span class="badge bg-warning text-dark">Kargolanacak</span>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                    <div class="card-body p-3">
+                        <div class="row g-3">
+                            <div class="col-lg-7">
+                                <?php foreach ($sitems as $it): ?>
+                                    <div class="d-flex gap-2 align-items-center py-1 border-bottom fs-7">
+                                        <?php if (!empty($it['cover_image'])): $cu = cover_url($it['cover_image']); ?><img src="<?= e(preg_match('#^https?://#i', $cu) ? $cu : '../' . $cu) ?>" alt="" style="width:36px;height:50px;object-fit:cover" class="rounded border" loading="lazy"><?php endif; ?>
+                                        <div class="flex-grow-1">
+                                            <div class="fw-semibold"><?= e($it['title'] ?: 'Kitap #' . $it['book_id']) ?> <span class="text-muted">× <?= (int)$it['quantity'] ?></span></div>
+                                            <div class="fs-8 text-muted">
+                                                <?= trim((string)$it['shelf_code']) !== '' ? '<span class="badge bg-warning-subtle text-warning-emphasis border">Raf: ' . e($it['shelf_code']) . '</span> ' : '' ?>
+                                                <?= !empty($it['isbn']) ? 'ISBN ' . e($it['isbn']) . ' ' : '' ?><?= !empty($it['nadirkitap_code']) ? '· NK ' . e($it['nadirkitap_code']) : '' ?>
+                                            </div>
+                                        </div>
+                                        <div class="fw-semibold text-nowrap"><?= format_price($it['total']) ?></div>
+                                    </div>
+                                <?php endforeach; ?>
+                                <div class="d-flex justify-content-between fs-8 text-muted pt-2">
+                                    <span>Kitaplarınızın tutarı</span><span><b class="text-dark"><?= format_price($ssum) ?></b><?= $scom > 0 ? ' · komisyon ' . format_price($scom) . ' · size kalan <b class="text-success">' . format_price($ssum - $scom) . '</b>' : '' ?></span>
+                                </div>
+                            </div>
+                            <div class="col-lg-5">
+                                <?php if ($paid): ?>
+                                    <div class="p-3 bg-light rounded-3 fs-7 mb-2">
+                                        <div class="fw-semibold mb-1"><i class="bi bi-geo-alt me-1"></i> Alıcı</div>
+                                        <div class="fw-semibold"><?= e($so['customer_name'] ?? '—') ?></div>
+                                        <?php if (!empty($so['customer_phone'])): ?><div><a href="tel:<?= e(preg_replace('/[^\d+]/', '', $so['customer_phone'])) ?>"><?= e($so['customer_phone']) ?></a></div><?php endif; ?>
+                                        <div style="white-space: pre-line;"><?= e($so['shipping_address'] ?: '—') ?></div>
+                                    </div>
+                                    <form method="POST" class="row g-2 align-items-end">
+                                        <input type="hidden" name="action" value="ship">
+                                        <input type="hidden" name="token" value="<?= e($store_token) ?>">
+                                        <input type="hidden" name="order_id" value="<?= (int)$so['id'] ?>">
+                                        <input type="hidden" name="f" value="<?= e($sf) ?>">
+                                        <div class="col-sm-5">
+                                            <label class="form-label fs-8 mb-1">Kargo firması</label>
+                                            <select name="carrier" class="form-select form-select-sm" required>
+                                                <option value="">Seçin</option>
+                                                <?php foreach ($carriers as $ck => $cv): ?>
+                                                    <option value="<?= e($ck) ?>" <?= ($so['sh_carrier'] ?? '') === $ck ? 'selected' : '' ?>><?= e($cv['name']) ?></option>
+                                                <?php endforeach; ?>
+                                            </select>
+                                        </div>
+                                        <div class="col-sm-7">
+                                            <label class="form-label fs-8 mb-1">Takip numarası</label>
+                                            <div class="input-group input-group-sm">
+                                                <input type="text" name="tracking_number" class="form-control font-monospace" maxlength="100" required value="<?= e($so['sh_tracking'] ?? '') ?>">
+                                                <button class="btn btn-danger fw-semibold"><?= $shipped ? 'Güncelle' : 'Kargolandı' ?></button>
+                                            </div>
+                                        </div>
+                                        <?php if ($shipped): ?><div class="col-12 fs-8 text-success"><i class="bi bi-check-circle me-1"></i><?= date('d.m.Y H:i', strtotime($so['sh_shipped_at'])) ?> tarihinde kargolandı olarak girildi.</div><?php endif; ?>
+                                    </form>
+                                <?php elseif ($so['status'] === 'Ödeme Bekliyor'): ?>
+                                    <div class="text-muted fs-7">Müşteri havale/EFT ödemesini yapınca alıcı bilgileri burada görünür ve size e-posta gelir.</div>
+                                <?php else: ?>
+                                    <div class="text-muted fs-7">Bu sipariş iptal edildi; kitap stoğunuza geri eklendi.</div>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            <?php endforeach; ?>
         <?php elseif ($tab === 'mesaj'): ?>
             <div class="card border-0 shadow-sm rounded-4">
                 <div class="card-header bg-white p-3"><b>Müşteri Soruları</b> <span class="text-muted fs-8">— kitap sayfalarındaki “Satıcıya soru sor” ile gelir. Yanıtınız müşteriye e-postayla gider; müşterinin e-posta adresi gizlidir.</span></div>

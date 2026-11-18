@@ -72,6 +72,7 @@ flush();
 if ($confirm_order) {
     try {
         send_order_confirmation($confirm_order); // aynı sipariş için ikinci kez gönderilmez
+        so_notify_new_order($confirm_order); // kitabı olan sahaflara "kargolayın" e-postası
     } catch (Throwable $e) {
         error_log('[Yeniceri] Ödeme sonrası e-posta: ' . $e->getMessage());
     }
