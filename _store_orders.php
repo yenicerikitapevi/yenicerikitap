@@ -186,18 +186,23 @@ function so_notify_new_order($order_id) {
                 . '</td><td align="right" style="padding:8px 0;border-bottom:1px solid #f0f0f0;white-space:nowrap">' . e(format_price($it['total'])) . '</td></tr>';
             $list_text .= '- ' . ($it['title'] ?: 'Kitap #' . $it['book_id']) . ' x' . (int)$it['quantity'] . (trim((string)$it['shelf_code']) !== '' ? ' [Raf: ' . $it['shelf_code'] . ']' : '') . ' ' . format_price($it['total']) . "\n";
         }
+        $single = so_order_is_single_store($order_id, $sid);
+        $ship_carrier = shipping_carriers()[$o['shipping_carrier'] ?? '']['name'] ?? '';
+        $ship_text = (float)$o['shipping_amount'] > 0 ? format_price($o['shipping_amount']) : 'Ücretsiz kargo';
         $panel = abs_url('satici/index.php?tab=siparis');
         $subject = 'Yeni sipariş: ' . $o['order_number'] . ' - kargolamanız bekleniyor';
         $html = mail_layout($subject,
             '<h1 style="font-size:20px;margin:0 0 8px">Kitabınız satıldı!</h1>'
             . '<p style="font-size:14px;color:#444">Merhaba ' . e($store['name']) . ', <b>' . e($o['order_number']) . '</b> numaralı siparişin ödemesi alındı. Aşağıdaki kitapları paketleyip kargoya verin, ardından takip numarasını Satıcı Paneli → Siparişler’e girin.</p>'
             . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:14px">' . $rows
-            . '<tr><td style="padding:8px 0;font-weight:bold">Kitaplarınızın tutarı</td><td align="right" style="padding:8px 0;font-weight:bold">' . e(format_price($sum)) . '</td></tr></table>'
+            . '<tr><td style="padding:8px 0;font-weight:bold">Kitaplarınızın tutarı</td><td align="right" style="padding:8px 0;font-weight:bold">' . e(format_price($sum)) . '</td></tr>'
+            . '<tr><td style="padding:4px 0;color:#555">Müşterinin ödediği kargo ücreti' . ($ship_carrier !== '' ? ' (' . e($ship_carrier) . ')' : '') . ($single ? '' : ' — siparişin tamamı için') . '</td><td align="right" style="padding:4px 0">' . e($ship_text) . '</td></tr></table>'
             . '<div style="background:#f6f6f8;border-radius:8px;padding:14px;font-size:14px;margin:16px 0"><b>Alıcı</b><br>' . e($o['customer_name']) . (trim((string)$o['customer_phone']) !== '' ? ' • ' . e($o['customer_phone']) : '')
             . '<br>' . nl2br(e($o['shipping_address'])) . '</div>'
             . mail_button($panel, 'Satıcı Panelinde Aç')
             . '<p style="font-size:12px;color:#888">Takip numarasını girdiğinizde müşteriye otomatik e-posta gider. Sorunuz için ' . e(setting('site_phone')) . '.</p>');
-        $text = "Merhaba {$store['name']},\n\n{$o['order_number']} numaralı siparişin ödemesi alındı. Şu kitapları kargolayın:\n{$list_text}\n"
+        $text = "Merhaba {$store['name']},\n\n{$o['order_number']} numaralı siparişin ödemesi alındı. Şu kitapları kargolayın:\n{$list_text}"
+            . 'Müşterinin ödediği kargo ücreti' . ($ship_carrier !== '' ? " ({$ship_carrier})" : '') . ($single ? '' : ' (siparişin tamamı için)') . ": {$ship_text}\n\n"
             . "Alıcı: {$o['customer_name']} {$o['customer_phone']}\nAdres: {$o['shipping_address']}\n\nTakip numarasını girin: {$panel}\n\n" . APP_NAME;
         if (send_mail($to, $subject, $html, $text, 'store_new_order', $o['id'])) {
             $sent++;
