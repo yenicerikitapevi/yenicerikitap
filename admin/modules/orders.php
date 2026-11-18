@@ -49,6 +49,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_order_status']
             $sent = send_order_shipped($order_id, true);
             $msg .= $sent ? ' Müşteriye kargo e-postası gönderildi.' : ' Kargo e-postası gönderilemedi (Site Ayarları → E-posta kaydını kontrol edin).';
         }
+        // Ödemesi alınan siparişte kitabı olan sahaflara "kargolayın" e-postası (her sahafa bir kez)
+        if (in_array($new_status, so_paid_statuses(), true)) {
+            try {
+                $ns = so_notify_new_order($order_id);
+                if ($ns) $msg .= " {$ns} sahafa sipariş e-postası gönderildi.";
+            } catch (Throwable $e) {
+                error_log('[Yeniceri] Sahaf bildirimi: ' . $e->getMessage());
+            }
+        }
         if (!empty($_POST['resend_confirm_mail'])) {
             mail_claim_release($order_id, 'mail_confirm_sent_at');
             $resent = send_order_confirmation($order_id);
@@ -256,6 +265,23 @@ if ($orders) {
                                                         </div>
                                                     </div>
                                                 </div>
+                                                <?php $o_ships = so_shipments($o['id']); if ($o_ships): ?>
+                                                    <div class="p-3 border rounded-3 mb-3 fs-8">
+                                                        <div class="fw-semibold text-dark fs-7 mb-1"><i class="bi bi-truck me-1"></i> Sahaf Gönderileri</div>
+                                                        <?php foreach ($o_ships as $sh): $sh_link = order_tracking_link(['shipping_carrier' => $sh['carrier'], 'tracking_number' => $sh['tracking_number'], 'tracking_url' => $sh['tracking_url']]); ?>
+                                                            <div class="py-1 border-bottom">
+                                                                <b><?= e($sh['store_name'] ?? ('Dükkân #' . $sh['store_id'])) ?></b>:
+                                                                <?php if ($sh['shipped_at']): ?>
+                                                                    <span class="text-success">kargolandı</span> · <?= e(shipping_carriers()[$sh['carrier']]['name'] ?? $sh['carrier']) ?> ·
+                                                                    <?= $sh_link ? '<a href="' . e($sh_link) . '" target="_blank" rel="noopener" class="font-monospace">' . e($sh['tracking_number']) . '</a>' : '<span class="font-monospace">' . e($sh['tracking_number']) . '</span>' ?>
+                                                                    · <?= date('d.m.Y H:i', strtotime($sh['shipped_at'])) ?>
+                                                                <?php else: ?>
+                                                                    <span class="text-warning-emphasis">henüz kargolamadı</span><?= $sh['notified_at'] ? ' · e-postayla bildirildi ' . date('d.m.Y H:i', strtotime($sh['notified_at'])) : '' ?>
+                                                                <?php endif; ?>
+                                                            </div>
+                                                        <?php endforeach; ?>
+                                                    </div>
+                                                <?php endif; ?>
                                                 <input type="hidden" name="order_id" value="<?= $o['id'] ?>">
 
                                                 <div class="mb-3">

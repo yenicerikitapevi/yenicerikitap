@@ -104,6 +104,26 @@ $step_keys = array_keys($steps);
                 <?php endif; ?>
             </div>
 
+            <?php
+            // Sahafların ayrı paketle gönderdiği kitaplar (siparişin kendi takip numarasıyla aynı olanlar tekrar gösterilmez)
+            $parcels = array_filter(so_shipments($order['id']), function ($sh) use ($order) {
+                return $sh['shipped_at'] && trim((string)$sh['tracking_number']) !== '' && $sh['tracking_number'] !== $order['tracking_number'];
+            });
+            if ($parcels && !$cancel): ?>
+                <div class="card border-0 shadow-sm rounded-4 p-4 mb-4">
+                    <h2 class="h6 fw-bold mb-3">Kargoya Verilen Paketler</h2>
+                    <?php foreach ($parcels as $sh):
+                        $ps = ['shipping_carrier' => $sh['carrier'], 'tracking_number' => $sh['tracking_number'], 'tracking_url' => $sh['tracking_url']];
+                        $pl = order_tracking_link($ps); ?>
+                        <div class="border rounded-3 p-3 mb-2 fs-7">
+                            <div class="text-muted fs-8 mb-1"><?= e(implode(', ', array_map(function ($it) { return $it['title'] ?: 'Kitap #' . $it['book_id']; }, so_store_items($order['id'], $sh['store_id'])))) ?></div>
+                            <?= order_carrier_name($ps) !== '' && order_carrier_name($ps) !== 'Diğer' ? 'Kargo firması: <b>' . e(order_carrier_name($ps)) . '</b> • ' : '' ?>Takip numarası: <b class="font-monospace"><?= e($sh['tracking_number']) ?></b>
+                            <?php if ($pl): ?><a href="<?= e($pl) ?>" target="_blank" rel="noopener nofollow" class="btn btn-danger btn-sm ms-2"><i class="bi bi-box-arrow-up-right me-1"></i> Takip et</a><?php endif; ?>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+            <?php endif; ?>
+
             <div class="card border-0 shadow-sm rounded-4 p-4 mb-4">
                 <h2 class="h6 fw-bold mb-3">Ürünler</h2>
                 <?php foreach ($order['items'] as $it): ?>
