@@ -17,6 +17,7 @@ $allowed_pages = [
     'Members'      => 'members.php',
     'Orders'       => 'orders.php',
     'Transactions' => 'transactions.php',
+    'Payouts'      => 'payouts.php',
     'Messages'     => 'messages.php',
     'ActionLogs'   => 'actionlogs.php',
     'DataQuality'  => 'dataquality.php',
@@ -110,6 +111,10 @@ $pending_sellers = db_fetch("SELECT COUNT(*) as cnt FROM stores WHERE approval_s
                     <i class="bi bi-credit-card-2-front"></i> Ödeme Kayıtları
                 </a>
 
+                <a href="index.php?p=Payouts" class="nav-link <?= $current_p === 'Payouts' ? 'active' : '' ?>">
+                    <i class="bi bi-wallet2"></i> Hakediş Ödemeleri
+                </a>
+
                 <a href="index.php?p=Messages" class="nav-link <?= $current_p === 'Messages' ? 'active' : '' ?>">
                     <i class="bi bi-envelope"></i> Mesajlar
                     <?php if ($unread_messages > 0): ?><span class="badge bg-danger rounded-pill ms-1"><?= (int)$unread_messages ?></span><?php endif; ?>
@@ -166,6 +171,7 @@ $pending_sellers = db_fetch("SELECT COUNT(*) as cnt FROM stores WHERE approval_s
                             'Members' => 'Müşteri & Üye Yönetimi',
                             'Orders' => 'Sipariş Operasyonları',
                             'Transactions' => 'Ödeme & Finans Takibi',
+                            'Payouts' => 'Sahaf Hakediş Ödemeleri',
                             'Messages' => 'Gelen Mesajlar',
                             'ActionLogs' => 'Sistem ve Denetim Logları',
                             'DataQuality' => 'Veri Kontrolü (SEO)',

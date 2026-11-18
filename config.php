@@ -697,6 +697,7 @@ require_once __DIR__ . '/_nk_sync.php';
 require_once __DIR__ . '/_messages.php';
 require_once __DIR__ . '/_store_orders.php';
 require_once __DIR__ . '/_shipping_label.php';
+require_once __DIR__ . '/_payouts.php';
 
 /**
  * Sahaf kitapları için kondisyon (durum) tanımları; vitrinde "Kondisyon durumuna dikkat ediniz" kutusunda gösterilir.
