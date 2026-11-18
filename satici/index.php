@@ -77,7 +77,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'bulk'
     redirect('index.php?' . http_build_query(array_filter(['q' => $_POST['q'] ?? '', 'durum' => $_POST['durum'] ?? '', 'page' => $_POST['page'] ?? ''])));
 }
 $report_base     = 'index.php?tab=rapor&';
-$tab             = in_array($_GET['tab'] ?? '', ['rapor', 'mesaj', 'siparis'], true) ? $_GET['tab'] : 'dukkan';
+$tab             = in_array($_GET['tab'] ?? '', ['rapor', 'mesaj', 'siparis', 'hakedis'], true) ? $_GET['tab'] : 'dukkan';
 
 // Sipariş kargolandı: kargo firması + takip numarası (yalnızca bu dükkânın kitabı olan sipariş)
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'ship') {
@@ -217,6 +217,7 @@ if ($tab === 'dukkan') {
         <ul class="nav nav-pills mb-4 bg-white p-2 rounded-4 shadow-sm border">
             <li class="nav-item"><a class="nav-link fw-semibold <?= $tab === 'dukkan' ? 'active bg-danger text-white' : 'text-secondary' ?>" href="index.php"><i class="bi bi-shop me-1"></i> Dükkânım</a></li>
             <li class="nav-item"><a class="nav-link fw-semibold <?= $tab === 'siparis' ? 'active bg-danger text-white' : 'text-secondary' ?>" href="index.php?tab=siparis"><i class="bi bi-box-seam me-1"></i> Siparişler<?= $to_ship ? ' <span class="badge bg-warning text-dark">' . $to_ship . '</span>' : '' ?></a></li>
+            <li class="nav-item"><a class="nav-link fw-semibold <?= $tab === 'hakedis' ? 'active bg-danger text-white' : 'text-secondary' ?>" href="index.php?tab=hakedis"><i class="bi bi-wallet2 me-1"></i> Hakedişlerim</a></li>
             <li class="nav-item"><a class="nav-link fw-semibold <?= $tab === 'rapor' ? 'active bg-danger text-white' : 'text-secondary' ?>" href="index.php?tab=rapor"><i class="bi bi-graph-up-arrow me-1"></i> Ziyaret & Satış Raporu</a></li>
             <li class="nav-item"><a class="nav-link fw-semibold <?= $tab === 'mesaj' ? 'active bg-danger text-white' : 'text-secondary' ?>" href="index.php?tab=mesaj"><i class="bi bi-chat-dots me-1"></i> Mesajlar<?= $bq_unread ? ' <span class="badge bg-warning text-dark">' . $bq_unread . '</span>' : '' ?></a></li>
         </ul>
@@ -340,6 +341,69 @@ if ($tab === 'dukkan') {
                     </div>
                 </div>
             <?php endforeach; ?>
+        <?php elseif ($tab === 'hakedis'):
+            $psum = po_summary($report_store_id);
+            $phist = po_history($report_store_id, 50); ?>
+            <div class="alert alert-light border rounded-4 fs-7">
+                <i class="bi bi-info-circle me-1 text-danger"></i> Müşteri ödemeyi Yeniçeri Kitabevi'ne yapar; payınız <b>her <?= e(po_weekday_name()) ?></b> hesabınıza havale edilir.
+                Hakediş = kitap satış tutarı − komisyon + kargo payı (kargoyu siz gönderdiğiniz için müşterinin ödediği kargo ücreti size geçer; başka satıcılarla ortak siparişte paket sayısına bölünür).
+                Sipariş kargolandıktan <?= PAYOUT_HOLD_DAYS ?> gün sonra (cayma/iade süresi) ödemeye açılır.
+                <div class="mt-1">Ödeme hesabı: <?= trim((string)($store['iban'] ?? '')) !== '' ? '<b class="font-monospace">' . e(po_format_iban($store['iban'])) . '</b>' : '<span class="text-danger">IBAN kayıtlı değil — Yeniçeri Kitabevi\'ne bildirin.</span>' ?></div>
+            </div>
+            <div class="row g-3 mb-4">
+                <div class="col-md-4"><div class="bg-white rounded-4 shadow-sm p-3 h-100"><div class="text-muted fs-8 fw-semibold">SONRAKİ ÖDEMEDE (<?= date('d.m.Y', strtotime(po_next_payday())) ?>)</div><div class="fs-4 fw-bold text-success"><?= format_price(max(0, $psum['ready'])) ?></div><div class="fs-8 text-muted">vadesi dolmuş hakediş<?= $psum['ready'] < 0 ? ' — iade nedeniyle ' . format_price(-$psum['ready']) . ' sonraki satışlardan düşülecek' : '' ?></div></div></div>
+                <div class="col-md-4"><div class="bg-white rounded-4 shadow-sm p-3 h-100"><div class="text-muted fs-8 fw-semibold">VADESİ BEKLENEN</div><div class="fs-4 fw-bold"><?= format_price($psum['pending']) ?></div><div class="fs-8 text-muted">kargolanınca + <?= PAYOUT_HOLD_DAYS ?> gün</div></div></div>
+                <div class="col-md-4"><div class="bg-white rounded-4 shadow-sm p-3 h-100"><div class="text-muted fs-8 fw-semibold">TOPLAM ÖDENEN</div><div class="fs-4 fw-bold"><?= format_price($psum['paid']) ?></div><div class="fs-8 text-muted"><?= count($phist) ?> ödeme</div></div></div>
+            </div>
+            <div class="card border-0 shadow-sm rounded-4 mb-4">
+                <div class="card-header bg-white p-3 fw-bold">Siparişlere göre hakediş</div>
+                <?php if (!$psum['rows']): ?>
+                    <div class="p-5 text-center text-muted">Henüz ödemesi alınmış satışınız yok.</div>
+                <?php else: ?>
+                    <div class="table-responsive">
+                        <table class="table align-middle mb-0 fs-7">
+                            <thead class="table-light"><tr><th class="ps-3">Sipariş</th><th class="text-end">Kitap</th><th class="text-end">Komisyon</th><th class="text-end">Kargo payı</th><th class="text-end">Hakediş</th><th class="pe-3">Durum</th></tr></thead>
+                            <tbody>
+                            <?php foreach ($psum['rows'] as $r): ?>
+                                <tr>
+                                    <td class="ps-3"><span class="font-monospace"><?= e($r['order_number']) ?></span><div class="text-muted fs-8"><?= date('d.m.Y', strtotime($r['created_at'])) ?> · <?= e($r['status']) ?></div></td>
+                                    <td class="text-end"><?= format_price($r['items_total']) ?></td>
+                                    <td class="text-end"><?= po_money(-$r['commission']) ?></td>
+                                    <td class="text-end"><?= format_price($r['shipping']) ?></td>
+                                    <td class="text-end fw-bold"><?= format_price($r['due']) ?></td>
+                                    <td class="pe-3"><span class="badge <?= $r['state'] === 'Ödendi' ? 'bg-success' : ($r['ready'] ? ($r['delta'] < 0 ? 'bg-warning text-dark' : 'bg-primary') : 'bg-light text-dark border') ?>"><?= e($r['state'] === 'Ödemeye hazır' ? 'Sonraki ödemede' : $r['state']) ?></span></td>
+                                </tr>
+                            <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                <?php endif; ?>
+            </div>
+            <div class="card border-0 shadow-sm rounded-4">
+                <div class="card-header bg-white p-3 fw-bold">Ödeme geçmişi</div>
+                <?php if (!$phist): ?>
+                    <div class="p-4 text-center text-muted fs-7">Henüz ödeme yapılmadı.</div>
+                <?php else: ?>
+                    <div class="list-group list-group-flush">
+                        <?php foreach ($phist as $h): ?>
+                            <details class="list-group-item p-3">
+                                <summary class="d-flex justify-content-between flex-wrap gap-2" style="cursor: pointer;">
+                                    <span><b><?= date('d.m.Y', strtotime($h['paid_at'])) ?></b> <span class="text-muted fs-8"><?= e(po_format_iban($h['iban'])) ?><?= $h['reference'] ? ' · ' . e($h['reference']) : '' ?></span></span>
+                                    <b class="text-success"><?= format_price($h['amount']) ?></b>
+                                </summary>
+                                <table class="table table-sm fs-8 mt-2 mb-0">
+                                    <thead><tr><th>Sipariş</th><th class="text-end">Kitap</th><th class="text-end">Komisyon</th><th class="text-end">Kargo</th><th class="text-end">Net</th></tr></thead>
+                                    <tbody>
+                                    <?php foreach (po_lines($h['id']) as $l): ?>
+                                        <tr><td class="font-monospace"><?= e($l['order_number'] ?: '#' . $l['order_id']) ?></td><td class="text-end"><?= po_money($l['items_total']) ?></td><td class="text-end"><?= po_money(-$l['commission']) ?></td><td class="text-end"><?= po_money($l['shipping']) ?></td><td class="text-end fw-bold"><?= po_money($l['net']) ?></td></tr>
+                                    <?php endforeach; ?>
+                                    </tbody>
+                                </table>
+                            </details>
+                        <?php endforeach; ?>
+                    </div>
+                <?php endif; ?>
+            </div>
         <?php elseif ($tab === 'mesaj'): ?>
             <div class="card border-0 shadow-sm rounded-4">
                 <div class="card-header bg-white p-3"><b>Müşteri Soruları</b> <span class="text-muted fs-8">— kitap sayfalarındaki “Satıcıya soru sor” ile gelir. Yanıtınız müşteriye e-postayla gider; müşterinin e-posta adresi gizlidir.</span></div>
