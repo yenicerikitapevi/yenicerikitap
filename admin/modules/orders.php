@@ -190,6 +190,9 @@ if ($orders) {
                                     <a href="fatura.php?id=<?= $o['id'] ?>" target="_blank" class="btn btn-sm btn-outline-dark">
                                         <i class="bi bi-printer-fill me-1"></i> Fatura
                                     </a>
+                                    <a href="etiket.php?id=<?= $o['id'] ?>" target="_blank" class="btn btn-sm btn-outline-secondary" title="Kargo adres etiketi (Yeniçeri'nin kitapları)">
+                                        <i class="bi bi-tag-fill me-1"></i> Etiket
+                                    </a>
                                 </td>
                             </tr>
 
@@ -278,6 +281,7 @@ if ($orders) {
                                                                 <?php else: ?>
                                                                     <span class="text-warning-emphasis">henüz kargolamadı</span><?= $sh['notified_at'] ? ' · e-postayla bildirildi ' . date('d.m.Y H:i', strtotime($sh['notified_at'])) : '' ?>
                                                                 <?php endif; ?>
+                                                                · <a href="etiket.php?id=<?= (int)$o['id'] ?>&amp;store=<?= (int)$sh['store_id'] ?>" target="_blank">etiket</a>
                                                             </div>
                                                         <?php endforeach; ?>
                                                     </div>

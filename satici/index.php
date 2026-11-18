@@ -236,6 +236,10 @@ if ($tab === 'dukkan') {
                 <?php foreach (['' => 'Tümü', 'gonderilecek' => 'Gönderilecek' . ($to_ship ? " ({$to_ship})" : ''), 'gonderildi' => 'Gönderildi', 'bekleyen' => 'Ödeme Bekleniyor', 'iptal' => 'İptal'] as $fk => $fl): ?>
                     <a href="index.php?<?= http_build_query(array_filter(['tab' => 'siparis', 'f' => $fk])) ?>" class="btn btn-sm <?= $sf === $fk ? 'btn-danger' : 'btn-outline-secondary' ?>"><?= e($fl) ?></a>
                 <?php endforeach; ?>
+                <?php if ($to_ship):
+                    $ship_ids = array_column(so_store_orders($report_store_id, 'gonderilecek'), 'id'); ?>
+                    <a href="etiket.php?ids=<?= e(implode(',', array_map('intval', $ship_ids))) ?>" target="_blank" class="btn btn-sm btn-dark ms-auto"><i class="bi bi-tags-fill me-1"></i> Gönderileceklerin etiketlerini yazdır (<?= count($ship_ids) ?>)</a>
+                <?php endif; ?>
             </div>
             <?php if (!$sorders): ?>
                 <div class="card border-0 shadow-sm rounded-4 p-5 text-center text-muted">Bu listede sipariş yok.</div>
@@ -254,7 +258,8 @@ if ($tab === 'dukkan') {
                             <span class="text-muted fs-8 ms-2"><?= date('d.m.Y H:i', strtotime($so['created_at'])) ?></span>
                             <?php if (!$single): ?><span class="badge bg-light text-dark border ms-1 fs-8" title="Siparişte başka satıcıların kitapları da var; yalnızca sizinkileri gönderin">karma sipariş</span><?php endif; ?>
                         </div>
-                        <div>
+                        <div class="d-flex align-items-center gap-2">
+                            <?php if ($paid): ?><a href="etiket.php?id=<?= (int)$so['id'] ?>" target="_blank" class="btn btn-sm btn-outline-dark py-0" title="Kargo adres etiketi"><i class="bi bi-tag-fill me-1"></i>Etiket</a><?php endif; ?>
                             <?php if ($so['status'] === 'İptal'): ?>
                                 <span class="badge bg-danger">İptal edildi — göndermeyin</span>
                             <?php elseif ($so['status'] === 'Ödeme Bekliyor'): ?>
