@@ -108,7 +108,7 @@ $bq_unread = bq_unread_count($report_store_id);
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && in_array($_POST['action'] ?? '', ['sync_nk', 'drop_unseen'], true)) {
     if ($_POST['action'] === 'drop_unseen' && !hash_equals($store_token, (string)($_POST['token'] ?? ''))) {
         set_flash('warning', 'Oturum süresi doldu, tekrar deneyin.');
-        redirect('index.php');
+        redirect('index.php#satilanlar');
     }
     $shown_ids = $_POST['action'] === 'drop_unseen' ? array_filter(array_map('intval', explode(',', (string)($_POST['ids'] ?? '')))) : null;
     $res = nk_sold_sync($report_store_id, $_POST['action'] === 'drop_unseen', $shown_ids);
@@ -117,7 +117,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && in_array($_POST['action'] ?? '', ['
     } else {
         set_flash('warning', $res['message']);
     }
-    redirect('index.php');
+    redirect('index.php#satilanlar');
 }
 
 // NadirKitap Mağaza Kodu / Link Güncelleme
@@ -346,9 +346,16 @@ if ($tab === 'dukkan') {
                 <?= bq_list_html(bq_list($report_store_id), 'index.php?tab=mesaj', $store_token) ?>
             </div>
         <?php else: ?>
+            <!-- NADİRKİTAP ARAÇLARI: sekmeler kapalı başlar; sahaf gerektiğinde açar (adres #aktarim / #satilanlar ile açık gelir) -->
+            <div class="bg-white rounded-4 shadow-sm border p-2 mb-4 d-flex flex-wrap align-items-center gap-2" id="nkTools">
+                <span class="text-muted fs-8 fw-semibold px-2"><i class="bi bi-tools me-1"></i>NadirKitap araçları:</span>
+                <button type="button" class="btn btn-sm btn-outline-secondary fw-semibold nk-tab" data-target="aktarim" aria-expanded="false" aria-controls="nk-aktarim"><i class="bi bi-pc-display me-1"></i> Aktarım Uygulaması</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary fw-semibold nk-tab" data-target="satilanlar" aria-expanded="false" aria-controls="nk-satilanlar"><i class="bi bi-lightning-charge me-1"></i> Satılanları Düşür<?= $unseen['candidates'] ? ' <span class="badge bg-danger ms-1" title="NadirKitap\'ta görünmeyen kitaplar">' . count($unseen['candidates']) . '</span>' : '' ?></button>
+            </div>
+
             <!-- AKTARIM UYGULAMASI: indirme ve giriş bilgileri -->
             <?php $app_url = trim(setting('nk_app_download_url', '')) ?: 'https://github.com/yenicerikitapevi/yenicerikitap/releases/download/kitapekapp-v1.4.2/kitapekapp-1.4.2-dagitim.zip'; // Site Ayarları'nda adres girilmediyse GitHub sürümü ?>
-            <div class="card border-0 shadow-sm rounded-4 mb-4 bg-white">
+            <div class="card border-0 shadow-sm rounded-4 mb-4 bg-white nk-panel" id="nk-aktarim" hidden>
                 <div class="card-body p-4 d-flex justify-content-between align-items-center flex-wrap gap-3">
                     <div style="max-width: 760px;">
                         <h6 class="fw-bold text-dark mb-1"><i class="bi bi-pc-display text-danger me-1"></i> Aktarım Uygulaması (kitapekapp)</h6>
@@ -375,7 +382,7 @@ if ($tab === 'dukkan') {
             </div>
 
             <!-- NADİRKİTAP SENKRONİZASYON VE SATILANLARI DÜŞÜRME KARTI -->
-            <div class="card border-0 shadow-sm rounded-4 mb-4 bg-white overflow-hidden border-start border-danger border-4">
+            <div class="card border-0 shadow-sm rounded-4 mb-4 bg-white overflow-hidden border-start border-danger border-4 nk-panel" id="nk-satilanlar" hidden>
                 <div class="card-body p-4">
                     <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
                         <div style="max-width: 720px;">
@@ -430,6 +437,32 @@ if ($tab === 'dukkan') {
                     </div>
                 </div>
             </div>
+
+            <script>
+            (function () {
+                var tabs = document.querySelectorAll('#nkTools .nk-tab');
+                function show(name) {
+                    tabs.forEach(function (t) {
+                        var on = t.dataset.target === name, panel = document.getElementById('nk-' + t.dataset.target);
+                        panel.hidden = !on;
+                        t.setAttribute('aria-expanded', on ? 'true' : 'false');
+                        t.classList.toggle('btn-danger', on);
+                        t.classList.toggle('text-white', on);
+                        t.classList.toggle('btn-outline-secondary', !on);
+                    });
+                }
+                tabs.forEach(function (t) {
+                    t.addEventListener('click', function () {
+                        var open = t.getAttribute('aria-expanded') === 'true';
+                        show(open ? '' : t.dataset.target);
+                        history.replaceState(null, '', open ? location.pathname + location.search : '#' + t.dataset.target);
+                    });
+                });
+                function fromHash() { var h = location.hash.replace('#', ''); if (h === 'aktarim' || h === 'satilanlar') show(h); }
+                window.addEventListener('hashchange', fromHash);
+                fromHash();
+            })();
+            </script>
 
             <div class="row g-4 mb-4">
                 <div class="col-lg-5">
