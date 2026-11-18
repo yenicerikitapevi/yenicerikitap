@@ -292,16 +292,18 @@ $header_active = '';
                 <?php endif; ?>
             </div>
 
-            <?php $my_q = db_fetch_all("SELECT q.*, b.title AS book_title, b.slug AS book_slug, s.name AS store_name FROM book_questions q LEFT JOIN books b ON b.id = q.book_id LEFT JOIN stores s ON s.id = q.store_id WHERE q.customer_id = ? ORDER BY q.id DESC LIMIT 30", [(int)$user['id']]); ?>
+            <?php $my_q = db_fetch_all("SELECT q.*, b.title AS book_title, b.slug AS book_slug, s.name AS store_name FROM book_questions q LEFT JOIN books b ON b.id = q.book_id LEFT JOIN stores s ON s.id = q.store_id WHERE q.customer_id = ? ORDER BY q.id DESC LIMIT 30", [(int)$user['id']]);
+                  if ($my_q) bq_mark_customer_read($user['id']); // listede "Yeni yanıt" görünür, sonra okundu sayılır ?>
             <?php if ($my_q): ?>
                 <div class="card border-0 shadow-sm rounded-4 p-4 mb-4" id="sorularim">
-                    <h2 class="h6 fw-bold mb-3"><i class="bi bi-chat-dots me-1 text-danger"></i>Sorularım</h2>
+                    <h2 class="h6 fw-bold mb-3"><i class="bi bi-chat-dots me-1 text-danger"></i>Sorularım<?php $new_rep = count(array_filter($my_q, function ($q) { return $q['reply'] !== null && empty($q['customer_read_at']); })); echo $new_rep ? ' <span class="badge bg-danger">' . $new_rep . ' yeni yanıt</span>' : ''; ?></h2>
                     <?php foreach ($my_q as $q): ?>
                         <div class="border-bottom pb-2 mb-2 fs-7">
                             <div class="fs-8 text-muted mb-1"><?= e(date('d.m.Y', strtotime($q['created_at']))) ?> • <?= e($q['store_name'] ?: APP_NAME) ?><?php if ($q['book_title']): ?> • <a href="<?= e(book_path(['id' => $q['book_id'], 'slug' => $q['book_slug']])) ?>" class="text-danger"><?= e($q['book_title']) ?></a><?php endif; ?></div>
                             <div style="white-space: pre-line;"><?= e($q['message']) ?></div>
+                            <div class="mt-1"><?= bq_read_badge($q['seller_read_at'] ?? null, 'Satıcı') ?></div>
                             <?php if ($q['reply'] !== null): ?>
-                                <div class="border-start border-3 border-danger ps-2 mt-1 text-secondary" style="white-space: pre-line;"><b>Yanıt:</b> <?= e($q['reply']) ?></div>
+                                <div class="border-start border-3 border-danger ps-2 mt-1 text-secondary" style="white-space: pre-line;"><b>Yanıt:</b> <?= e($q['reply']) ?><?= empty($q['customer_read_at']) ? ' <span class="badge bg-danger ms-1">Yeni yanıt</span>' : '' ?></div>
                             <?php else: ?>
                                 <div class="text-muted fs-8 mt-1"><i class="bi bi-hourglass-split me-1"></i>Yanıt bekleniyor</div>
                             <?php endif; ?>

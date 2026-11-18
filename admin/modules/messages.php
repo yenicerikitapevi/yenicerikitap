@@ -32,7 +32,7 @@ $bq_store_counts = db_fetch_all("SELECT s.name, COUNT(*) AS cnt, SUM(CASE WHEN q
 <div class="mb-4">
     <h5 class="fw-bold text-dark mb-1">Kitap Soruları <?= ($bq_n = bq_unread_count(null)) ? '<span class="badge bg-warning text-dark">' . $bq_n . ' yanıt bekliyor</span>' : '' ?></h5>
     <p class="text-muted fs-7 mb-2">Müşterilerin Yeniçeri Kitabevi kitaplarında “Satıcıya soru sor” ile gönderdiği sorular. Yanıtınız müşteriye e-postayla gider.</p>
-    <div class="card border-0 shadow-sm rounded-4"><?= bq_list_html(bq_list(null), 'index.php?p=Messages', '', '../') ?></div>
+    <div class="card border-0 shadow-sm rounded-4"><?php $bq_rows = bq_list(null); bq_mark_seller_read(null); ?><?= bq_list_html($bq_rows, 'index.php?p=Messages', '', '../') ?></div>
     <?php if ($bq_store_counts): ?>
         <div class="fs-8 text-muted mt-2">Sahaflara gelen sorular (kendi panellerinden yanıtlanır):
             <?php foreach ($bq_store_counts as $sc): ?><span class="me-2"><b><?= e($sc['name']) ?></b> <?= (int)$sc['cnt'] ?> soru<?= $sc['waiting'] ? ', ' . (int)$sc['waiting'] . ' bekliyor' : '' ?></span><?php endforeach; ?>

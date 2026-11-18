@@ -747,7 +747,9 @@ function condition_guide_html($highlight = '') {
 /** Üst çubuktaki müşteri bağlantısı: girişliyse "Hesabım", değilse "Giriş Yap / Üye Ol" */
 function customer_nav_link($class = '') {
     if (!empty($_SESSION['customer_user'])) {
-        return '<a href="hesap.php" class="' . e($class) . '"><i class="bi bi-person-circle me-1"></i>Hesabım</a>';
+        $n = function_exists('bq_customer_unread_count') ? bq_customer_unread_count($_SESSION['customer_user']['id']) : 0;
+        return '<a href="hesap.php' . ($n ? '#sorularim' : '') . '" class="' . e($class) . '"><i class="bi bi-person-circle me-1"></i>Hesabım'
+            . ($n ? ' <span class="badge bg-danger" title="Sorularınıza gelen okunmamış yanıt">' . $n . '</span>' : '') . '</a>';
     }
     return '<a href="hesap.php?a=giris" class="' . e($class) . '"><i class="bi bi-person me-1"></i>Giriş Yap</a>'
         . '<a href="hesap.php?a=kayit" class="' . e($class) . ' fw-semibold"><i class="bi bi-person-plus me-1"></i>Üye Ol</a>';
