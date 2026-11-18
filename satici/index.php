@@ -343,7 +343,8 @@ if ($tab === 'dukkan') {
         <?php elseif ($tab === 'mesaj'): ?>
             <div class="card border-0 shadow-sm rounded-4">
                 <div class="card-header bg-white p-3"><b>Müşteri Soruları</b> <span class="text-muted fs-8">— kitap sayfalarındaki “Satıcıya soru sor” ile gelir. Yanıtınız müşteriye e-postayla gider; müşterinin e-posta adresi gizlidir.</span></div>
-                <?= bq_list_html(bq_list($report_store_id), 'index.php?tab=mesaj', $store_token) ?>
+                <?php $bq_rows = bq_list($report_store_id); bq_mark_seller_read($report_store_id); // listede "Yeni" görünür, sonra okundu sayılır ?>
+                <?= bq_list_html($bq_rows, 'index.php?tab=mesaj', $store_token) ?>
             </div>
         <?php else: ?>
             <!-- NADİRKİTAP ARAÇLARI: sekmeler kapalı başlar; sahaf gerektiğinde açar (adres #aktarim / #satilanlar ile açık gelir) -->
