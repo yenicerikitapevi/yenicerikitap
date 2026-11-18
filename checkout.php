@@ -113,8 +113,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['complete_checkout']))
                     // Satır tutarı indirim sonrası nettir; sahaf kitaplarında komisyon net tutar üzerinden hesaplanır
                     $commission_rate = !empty($line['store_id']) ? store_commission_rate($line['store_id']) : null;
                     $commission_amount = $commission_rate !== null ? round($line['net'] * $commission_rate / 100, 2) : 0;
-                    db_query("INSERT INTO order_items (order_id, book_id, quantity, price, total, discount_amount, commission_rate, commission_amount) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                        [$order_id, $line['id'], $line['qty'], $line['price'], $line['net'], $line['discount'], $commission_rate, $commission_amount]);
+                    db_query("INSERT INTO order_items (order_id, book_id, quantity, price, total, discount_amount, commission_rate, commission_amount, store_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        [$order_id, $line['id'], $line['qty'], $line['price'], $line['net'], $line['discount'], $commission_rate, $commission_amount, !empty($line['store_id']) ? (int)$line['store_id'] : null]);
                     // Aynı anda gelen siparişlerde stok eksiye düşmesin
                     $updated = db_query("UPDATE books SET stock = stock - ? WHERE id = ? AND stock >= ?", [$line['qty'], $line['id'], $line['qty']]);
                     if ($updated->rowCount() !== 1) {

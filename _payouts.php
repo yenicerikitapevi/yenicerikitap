@@ -12,6 +12,19 @@ if (!defined('SITE_URL')) exit;
 
 define('PAYOUT_HOLD_DAYS', 14);
 
+// Satan dükkân sipariş satırına yazılır (kitap sonradan başka dükkâna geçse de hakediş doğru satıcıya kalır).
+// Sütun ilk eklendiğinde mevcut satırlar kitabın şu anki dükkânıyla bir kez doldurulur.
+(function () {
+    global $pdo;
+    $sqlite = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite';
+    $have = $sqlite ? array_column($pdo->query("PRAGMA table_info(order_items)")->fetchAll(), 'name')
+                    : array_column($pdo->query("SHOW COLUMNS FROM order_items")->fetchAll(), 'Field');
+    if (!in_array('store_id', $have, true)) {
+        $pdo->exec("ALTER TABLE order_items ADD COLUMN store_id " . ($sqlite ? 'INTEGER NULL' : 'INT NULL'));
+        $pdo->exec("UPDATE order_items SET store_id = (SELECT b.store_id FROM books b WHERE b.id = order_items.book_id)");
+    }
+})();
+
 if ($pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite') {
     $pdo->exec("CREATE TABLE IF NOT EXISTS payouts (id INTEGER PRIMARY KEY AUTOINCREMENT, store_id INTEGER NOT NULL, amount REAL NOT NULL, items_total REAL DEFAULT 0,
         commission_total REAL DEFAULT 0, shipping_total REAL DEFAULT 0, iban TEXT, reference TEXT, paid_at DATETIME, created_by TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP);");
@@ -53,16 +66,16 @@ function po_rows($store_id = null) {
     $params = [];
     $sw = '';
     if ($store_id !== null) {
-        $sw = ' AND b.store_id = ?';
+        $sw = ' AND oi.store_id = ?';
         $params[] = (int)$store_id;
     }
     // Sahaf kitabı olan, ödemesi alınmış siparişler + iptal edilmiş ama önceden hakedişi ödenmiş olanlar
-    $items = db_fetch_all("SELECT oi.order_id, b.store_id, SUM(oi.total) AS items_total, SUM(COALESCE(oi.commission_amount, 0)) AS commission
-                           FROM order_items oi JOIN books b ON b.id = oi.book_id JOIN orders o ON o.id = oi.order_id
-                           WHERE b.store_id IS NOT NULL{$sw}
+    $items = db_fetch_all("SELECT oi.order_id, oi.store_id, SUM(oi.total) AS items_total, SUM(COALESCE(oi.commission_amount, 0)) AS commission
+                           FROM order_items oi JOIN orders o ON o.id = oi.order_id
+                           WHERE oi.store_id IS NOT NULL{$sw}
                              AND (o.status IN ('Hazırlanıyor', 'Kargolandı', 'Tamamlandı')
-                                  OR (o.status = 'İptal' AND EXISTS (SELECT 1 FROM payout_lines pl WHERE pl.order_id = oi.order_id AND pl.store_id = b.store_id)))
-                           GROUP BY oi.order_id, b.store_id", $params);
+                                  OR (o.status IN ('İptal', 'Ödeme Bekliyor') AND EXISTS (SELECT 1 FROM payout_lines pl WHERE pl.order_id = oi.order_id AND pl.store_id = oi.store_id)))
+                           GROUP BY oi.order_id, oi.store_id", $params);
     if (!$items) return [];
     $oids = array_values(array_unique(array_map('intval', array_column($items, 'order_id'))));
     $in = implode(',', $oids);
@@ -70,8 +83,8 @@ function po_rows($store_id = null) {
     foreach (db_fetch_all("SELECT id, order_number, status, shipping_amount, shipped_at, created_at FROM orders WHERE id IN ({$in})") as $o) $orders[(int)$o['id']] = $o;
     // Paket sayısı: siparişteki sahaf sayısı + (Yeniçeri'nin kitabı varsa) 1
     $parcels = [];
-    foreach (db_fetch_all("SELECT oi.order_id, COUNT(DISTINCT b.store_id) AS stores, SUM(CASE WHEN b.store_id IS NULL OR b.id IS NULL THEN 1 ELSE 0 END) AS own
-                           FROM order_items oi LEFT JOIN books b ON b.id = oi.book_id WHERE oi.order_id IN ({$in}) GROUP BY oi.order_id") as $r) {
+    foreach (db_fetch_all("SELECT order_id, COUNT(DISTINCT store_id) AS stores, SUM(CASE WHEN store_id IS NULL THEN 1 ELSE 0 END) AS own
+                           FROM order_items WHERE order_id IN ({$in}) GROUP BY order_id") as $r) {
         $parcels[(int)$r['order_id']] = max(1, (int)$r['stores'] + ((int)$r['own'] > 0 ? 1 : 0));
     }
     $ships = [];
@@ -89,7 +102,8 @@ function po_rows($store_id = null) {
         $o = $orders[$oid] ?? null;
         if (!$o) continue;
         $key = $oid . ':' . $sid;
-        $cancel = $o['status'] === 'İptal';
+        // İptal ya da ödemesi geri alınmış sipariş: hakediş 0 (önceden ödendiyse sonraki ödemeden düşülür)
+        $cancel = in_array($o['status'], ['İptal', 'Ödeme Bekliyor'], true);
         $items_total = round((float)$it['items_total'], 2);
         $commission = round((float)$it['commission'], 2);
         $shipping = round((float)$o['shipping_amount'] / ($parcels[$oid] ?? 1), 2);
@@ -106,11 +120,12 @@ function po_rows($store_id = null) {
         $matures = $base ? date('Y-m-d H:i:s', strtotime($base) + PAYOUT_HOLD_DAYS * 86400) : null;
         if (abs($delta) < 0.005) {
             $ready = false;
-            $state = $cancel ? 'İptal (iade düşüldü)' : 'Ödendi';
+            $state = $cancel ? ($o['status'] === 'İptal' ? 'İptal (iade düşüldü)' : 'Ödeme bekleniyor (düşüldü)') : 'Ödendi';
         } elseif ($delta < 0) {
             $ready = true; // iptal/iade: sonraki ödemeden düşülür
             $state = 'İade düşülecek';
-        } elseif ($o['status'] === 'Hazırlanıyor' || !$matures) {
+        } elseif (!$matures || ($o['status'] === 'Hazırlanıyor' && empty($ships[$key]))) {
+            // Sahaf kendi paketini kargoladıysa sipariş Hazırlanıyor'da kalsa da vadesi kendi kargo tarihinden işler
             $ready = false;
             $state = 'Kargolanınca vadeye girer';
         } elseif (strtotime($matures) > $now) {
@@ -155,6 +170,8 @@ function po_record($store_id, $expected, $reference, $admin_name = '') {
     if (!$store) return [false, 'Satıcı bulunamadı.', 0];
     $pdo->beginTransaction();
     try {
+        // MySQL: aynı satıcıya aynı anda iki ödeme kaydı yazılmasın (SQLite'ta yazma kilidi zaten tekildir)
+        if ($pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'mysql') db_fetch("SELECT id FROM stores WHERE id = ? FOR UPDATE", [(int)$store['id']]);
         $sum = po_summary($store['id']);
         if ($sum['ready'] <= 0) {
             $pdo->rollBack();
@@ -193,8 +210,16 @@ function po_record($store_id, $expected, $reference, $admin_name = '') {
 function po_undo($payout_id) {
     $p = db_fetch("SELECT p.*, s.name AS store_name FROM payouts p LEFT JOIN stores s ON s.id = p.store_id WHERE p.id = ?", [(int)$payout_id]);
     if (!$p) return [false, 'Ödeme kaydı bulunamadı.'];
-    db_query("DELETE FROM payout_lines WHERE payout_id = ?", [(int)$payout_id]);
-    db_query("DELETE FROM payouts WHERE id = ?", [(int)$payout_id]);
+    global $pdo;
+    $pdo->beginTransaction();
+    try {
+        db_query("DELETE FROM payout_lines WHERE payout_id = ?", [(int)$payout_id]);
+        db_query("DELETE FROM payouts WHERE id = ?", [(int)$payout_id]);
+        $pdo->commit();
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        return [false, 'Geri alınamadı: ' . $e->getMessage()];
+    }
     log_action('Hakediş Kaydı Geri Alındı', 'Payouts', (int)$payout_id, ($p['store_name'] ?? '') . ': ' . format_price($p['amount']));
     return [true, 'Ödeme kaydı geri alındı; tutar yeniden ödenecekler listesinde.'];
 }

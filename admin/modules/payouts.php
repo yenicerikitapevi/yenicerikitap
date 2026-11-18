@@ -105,7 +105,7 @@ $history = po_history(null, 30);
                         </table>
                     </div>
                     <?php if ($sum['ready'] > 0): ?>
-                        <form method="POST" class="row g-2 align-items-end" onsubmit="return confirm('<?= e($s['name']) ?> için <?= e(format_price($sum['ready'])) ?> havale yapıldı olarak kaydedilsin mi?');">
+                        <form method="POST" class="row g-2 align-items-end" data-confirm="<?= e($s['name'] . ' için ' . format_price($sum['ready']) . ' havale yapıldı olarak kaydedilsin mi?') ?>" onsubmit="return confirm(this.dataset.confirm);">
                             <input type="hidden" name="token" value="<?= e($po_token) ?>">
                             <input type="hidden" name="action" value="pay">
                             <input type="hidden" name="store_id" value="<?= (int)$s['id'] ?>">
