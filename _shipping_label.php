@@ -70,7 +70,7 @@ function label_sender($store_id = null) {
 }
 
 /**
- * Etiket verisi: $store_id null → Yeniçeri'nin kendi kitapları (hiç yoksa tümü), aksi halde o sahafın kitapları.
+ * Etiket verisi: $store_id null → Yeniçeri'nin kendi kitapları, aksi halde o sahafın kitapları.
  * Dönüş null: sipariş yok ya da bu gönderene ait kitap yok.
  */
 function label_data($order_id, $store_id = null) {
@@ -82,7 +82,7 @@ function label_data($order_id, $store_id = null) {
         if (!$items) return null;
     } else {
         $items = db_fetch_all($sql . " AND (b.id IS NULL OR b.store_id IS NULL) ORDER BY oi.id", [(int)$order_id]);
-        if (!$items) $items = db_fetch_all($sql . " ORDER BY oi.id", [(int)$order_id]);
+        if (!$items) return null; // Yeniçeri'nin kitabı yok: her sahafın paketi ayrı etikettir (?store=ID)
     }
     $total_items = (int)(db_fetch("SELECT COUNT(*) AS c FROM order_items WHERE order_id = ?", [(int)$order_id])['c'] ?? 0);
     $carrier = shipping_carriers()[$o['shipping_carrier'] ?? ''] ?? null;
@@ -98,7 +98,6 @@ function label_data($order_id, $store_id = null) {
 /** Bir ya da birden çok etiketi tam sayfa olarak basar. $size: '10x15' | 'a4' */
 function label_render_page(array $labels, $size, $skipped = [], $back_url = '') {
     $size = $size === 'a4' ? 'a4' : '10x15';
-    $self = strtok($_SERVER['REQUEST_URI'] ?? '', '?');
     $q = $_GET;
     ?>
 <!DOCTYPE html>
@@ -125,7 +124,11 @@ function label_render_page(array $labels, $size, $skipped = [], $back_url = '') 
     .k { font-size: 7pt; font-weight: bold; letter-spacing: .5px; text-transform: uppercase; color: #333; }
     .from .n { font-weight: bold; font-size: 10pt; }
     .from .a { font-size: 8pt; white-space: pre-line; line-height: 1.25; }
-    .to { flex: 1 1 auto; }
+    .to { flex: 1 1 auto; min-height: 0; overflow: hidden; } /* uzun adres barkodu taşırmasın: alıcı alanı küçülür */
+    .to.long .n { font-size: 12pt; }
+    .to.long .a { font-size: 9.5pt; line-height: 1.2; }
+    .to.long .p { font-size: 10pt; }
+    .sec:not(.to), .bc, .items { flex-shrink: 0; }
     .to .n { font-weight: bold; font-size: 15pt; line-height: 1.15; margin: 1mm 0; }
     .to .a { font-size: 12pt; white-space: pre-line; line-height: 1.3; }
     .to .p { font-size: 12pt; font-weight: bold; margin-top: 1.5mm; }
@@ -154,8 +157,8 @@ function label_render_page(array $labels, $size, $skipped = [], $back_url = '') 
 <div class="bar">
     <?php if ($back_url !== ''): ?><a href="<?= e($back_url) ?>">← Geri</a><?php endif; ?>
     <span>Boyut:</span>
-    <a href="<?= e($self . '?' . http_build_query(array_merge($q, ['boyut' => '10x15']))) ?>" class="<?= $size === '10x15' ? 'on' : '' ?>">10×15 cm termal</a>
-    <a href="<?= e($self . '?' . http_build_query(array_merge($q, ['boyut' => 'a4']))) ?>" class="<?= $size === 'a4' ? 'on' : '' ?>">A4 (kes-yapıştır + hazırlama listesi)</a>
+    <a href="<?= e('?' . http_build_query(array_merge($q, ['boyut' => '10x15']))) ?>" class="<?= $size === '10x15' ? 'on' : '' ?>">10×15 cm termal</a>
+    <a href="<?= e('?' . http_build_query(array_merge($q, ['boyut' => 'a4']))) ?>" class="<?= $size === 'a4' ? 'on' : '' ?>">A4 (kes-yapıştır + hazırlama listesi)</a>
     <button type="button" class="print" onclick="window.print()">Yazdır</button>
 </div>
 <?php if ($skipped): ?><div class="warn">Etiketi basılmayan siparişler: <?= e(implode(', ', $skipped)) ?> (ödemesi alınmamış, iptal edilmiş ya da size ait kitap yok).</div><?php endif; ?>
@@ -174,7 +177,8 @@ function label_render_page(array $labels, $size, $skipped = [], $back_url = '') 
                 <?php if ($s['sub'] !== ''): ?><div class="a"><?= e($s['sub']) ?></div><?php endif; ?>
                 <div class="a"><?= e($s['address']) ?><?= $s['phone'] !== '' ? "\nTel: " . e($s['phone']) : '' ?></div>
             </div>
-            <div class="sec to">
+            <?php $addr_len = mb_strlen(trim((string)$o['shipping_address']) . (string)$o['customer_name'], 'UTF-8') + 40 * max(0, count($shown) - 3); ?>
+            <div class="sec to<?= $addr_len > 170 ? ' long' : '' ?>">
                 <div class="k">Alıcı</div>
                 <div class="n"><?= e(trim((string)$o['customer_name']) ?: '—') ?></div>
                 <div class="a"><?= e(trim((string)$o['shipping_address']) ?: '—') ?></div>
