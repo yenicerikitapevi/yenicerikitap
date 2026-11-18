@@ -27,6 +27,10 @@ try {
         $op = (string)($_POST['op'] ?? '');
         if ($op === 'create') {
             $job = wm_create();
+        } elseif ($op === 'purge') {
+            if (!wm_exec('SELECT id FROM wm_jobs WHERE id = ?', [$job])->fetch()) throw new RuntimeException('İş bulunamadı.');
+            $freed = wm_purge($job);
+            if (function_exists('log_action')) log_action('Görsel Temizliği Yedekleri Silindi', 'Watermarks', null, 'İş: ' . $job . ', ' . round($freed / 1048576, 1) . ' MB');
         } elseif ($op === 'retry') {
             $item = wm_item((string)($_POST['item'] ?? ''));
             if ($item['job_id'] !== $job) throw new RuntimeException('İşlem kaydı bu işe ait değil.');
@@ -39,7 +43,8 @@ try {
             // Tek istekte en çok ~20 sn ya da $limit görsel (binlerce görselde istek sayısı azalır; PHP süre sınırı aşılmaz)
             $until = microtime(true) + 20; $done = 0;
             do {
-                $s = wm_exec('SELECT * FROM wm_items WHERE job_id = ? AND status = ?' . ($itemId !== '' ? ' AND id = ?' : '') . " AND COALESCE(error, '') = '' ORDER BY seq LIMIT 1", $itemId !== '' ? [$job, $state, $itemId] : [$job, $state]);
+                // Geri alma ters sırada (aynı kitabın görselleri en son yayımlanandan başlayarak)
+            $s = wm_exec('SELECT * FROM wm_items WHERE job_id = ? AND status = ?' . ($itemId !== '' ? ' AND id = ?' : '') . " AND COALESCE(error, '') = '' ORDER BY seq " . ($op === 'restore' ? 'DESC' : 'ASC') . " LIMIT 1", $itemId !== '' ? [$job, $state, $itemId] : [$job, $state]);
                 $item = $s->fetch(PDO::FETCH_ASSOC); $s->closeCursor();
                 if (!$item) break;
                 try {
@@ -58,6 +63,9 @@ try {
         flock($lock, LOCK_UN); fclose($lock);
     }
     $result = wm_status($job, (int)($_GET['offset'] ?? 0));
+    $result['processed'] = $done ?? 0;
+    if (isset($freed)) $result['freed'] = $freed;
+    $result['disk'] = wm_disk_usage();
     $result['remaining'] = isset($state) ? (int)wm_exec("SELECT COUNT(*) FROM wm_items WHERE job_id = ? AND status = ? AND COALESCE(error, '') = ''", [$job, $state])->fetchColumn() : 0;
     header('Content-Type: application/json; charset=utf-8'); echo json_encode($result, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
 } catch (Throwable $e) {

@@ -2,7 +2,7 @@
     'use strict';
     const $ = id => document.getElementById(id);
     const csrf = JSON.parse($('wm-config').textContent).csrf;
-    const labels = {pending: 'Bekliyor', ready: 'Önizleme hazır', applied: 'Yayımlandı', skipped: 'Atlandı', error: 'Hata', restored: 'Geri alındı'};
+    const labels = {pending: 'Bekliyor', ready: 'Önizleme hazır', applied: 'Yayımlandı', skipped: 'Atlandı', error: 'Hata', restored: 'Geri alındı', final: 'Yayımlandı (yedek silindi)'};
     let running = false, stopping = false, offset = 0, total = 0;
     const text = (tag, value, cls = '') => { const el = document.createElement(tag); el.textContent = value; el.className = cls; return el; };
     function busy(value) {
@@ -25,7 +25,7 @@
     }
     function render(data) {
         total = data.total;
-        if (typeof data.remaining === 'number') lastRemaining = data.remaining;
+        if (typeof data.disk === 'number' && $('wm-disk')) $('wm-disk').textContent = 'İşlem klasörü (yedekler ve önizlemeler): ' + (data.disk / 1048576).toFixed(1) + ' MB';
         $('wm-counts').textContent = `Toplam ${total} görsel. ` + Object.entries(data.counts).map(([k, n]) => `${labels[k] || k}: ${n}`).join(' · ');
         $('wm-page').textContent = total ? `${offset + 1}–${Math.min(offset + 12, total)} / ${total}` : 'Görsel bulunamadı';
         $('wm-items').replaceChildren();
@@ -62,15 +62,19 @@
             $('wm-items').append(col);
         }
     }
-    let lastRemaining = Infinity;
-    const data0 = () => Number.isFinite(lastRemaining) ? lastRemaining : 0;
     async function refresh() { if ($('wm-job').value) render(await request()); }
     async function run(op, limit = Infinity, item) {
         if (running) return;
         if (op === 'apply' && !confirm('Hazır temiz kopyalar sitede yayımlansın mı? Kontrol etmediğiniz önizlemeleri önce inceleyin.')) return;
+        if (op === 'purge' && !confirm('Bu işin yedekleri ve önizlemeleri silinsin mi? Yayımlanan görseller sitede kalır ama artık GERİ ALINAMAZ. Yayımlanmamış önizlemeler yeniden hazırlanmayı bekler.')) return;
         if (op === 'restore' && !confirm('Seçilen görseller yedeklerine geri döndürülsün mü? Sonradan değişen kitaplar korunur.')) return;
         stopping = false; busy(true);
         try {
+            if (op === 'purge') {
+                const data = await request(op); render(data);
+                $('wm-message').textContent = 'Yedekler silindi: ' + ((data.freed || 0) / 1048576).toFixed(1) + ' MB yer açıldı.';
+                return;
+            }
             if (op === 'create') {
                 offset = 0;
                 const data = await request(op);
@@ -81,8 +85,8 @@
                 for (let n = 0; n < limit && !stopping; ) {
                     $('wm-message').textContent = 'İşlem sürüyor…';
                     const batch = item ? 1 : Math.min(50, limit - n);
-                    const before = data0(); const data = await request(op, item, Number.isFinite(batch) ? batch : 50); render(data);
-                    n += Math.max(1, before - (data.remaining || 0));
+                    const data = await request(op, item, Number.isFinite(batch) ? batch : 50); render(data);
+                    n += Math.max(1, data.processed || 0);
                     if (!data.remaining || item) break;
                 }
             }

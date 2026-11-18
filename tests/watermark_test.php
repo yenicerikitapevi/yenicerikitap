@@ -37,14 +37,28 @@ try {
     check(!is_file(UPLOAD_DIR . '/cover.png') && hash_file('sha256', wm_dir($item) . '/original') === $hash, 'Unused source file removed after publish; verified backup kept');
     check(!is_file(wm_dir($item) . '/preview.jpg'), 'Preview removed after publish');
     check(wm_status(wm_create())['total'] === 0, 'Never enqueue generated output images');
+    // Kitapta başka bir değişiklik olsa da yalnızca bu görselin adı geri alınır, diğer değişiklik korunur
     wm_exec('UPDATE books SET extra_images = ? WHERE id = 2', ['["new.png"]']);
-    fail_expected(fn() => wm_restore($item), 'Refuse rollback after a concurrent book edit');
-    check(wm_exec('SELECT cover_image FROM books WHERE id = 1')->fetchColumn() === $item['output_name'], 'A rollback conflict leaves all book references unchanged');
-    wm_exec('UPDATE books SET extra_images = NULL WHERE id = 2');
     $outName = $item['output_name']; wm_restore($item);
+    check(wm_exec('SELECT extra_images FROM books WHERE id = 2')->fetchColumn() === '["new.png"]', 'Rollback keeps unrelated later edits of the book');
+    wm_exec('UPDATE books SET extra_images = NULL WHERE id = 2');
     check(!is_file(UPLOAD_DIR . '/' . $outName), 'Unused cleaned copy removed after rollback');
     check(hash_file('sha256', wm_source('cover.png')) === $hash, 'Restore original bytes even after orphan cleanup');
     check(wm_exec('SELECT cover_image FROM books WHERE id = 1')->fetchColumn() === 'cover.png' && wm_item($item['id'])['status'] === 'restored', 'Restore cover and extra-image references');
+    // Çok görselli kitap: hepsi yayımlanıp toplu (ters sırada) geri alınınca kitap tamamen eski haline döner
+    fixture('m1.png', 0x111111); fixture('m2.png', 0x222222); fixture('m3.png', 0x333333);
+    wm_exec('INSERT INTO books VALUES (10, ?, ?)', ['m1.png', '["m1.png","m2.png","m3.png"]']);
+    $mj = wm_create(); $mi = wm_exec('SELECT * FROM wm_items WHERE job_id = ? ORDER BY seq', [$mj])->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($mi as $x) wm_apply(ready($x));
+    check(!str_contains(wm_exec('SELECT extra_images FROM books WHERE id = 10')->fetchColumn(), 'm2.png'), 'Multi-image book fully published');
+    foreach (array_reverse($mi) as $x) wm_restore(wm_item($x['id']));
+    $b10 = wm_exec('SELECT * FROM books WHERE id = 10')->fetch(PDO::FETCH_ASSOC);
+    check($b10['cover_image'] === 'm1.png' && $b10['extra_images'] === '["m1.png","m2.png","m3.png"]', 'Bulk rollback restores every image of a multi-image book');
+    foreach ([0, 1, 2] as $k) wm_restore(wm_item($mi[$k]['id'])); // zaten geri alınmış: no-op
+    // Yedek silme: yayımlananlar 'final' olur, yedek klasörü kalkar
+    $pj = wm_create(); $pi = wm_exec('SELECT * FROM wm_items WHERE job_id = ? ORDER BY seq', [$pj])->fetchAll(PDO::FETCH_ASSOC);
+    wm_apply(ready($pi[0])); $freed = wm_purge($pj);
+    check($freed > 0 && wm_item($pi[0]['id'])['status'] === 'final' && !is_dir(wm_root() . '/' . $pj . '/' . $pi[0]['id']), 'Purge frees backups and marks published images final');
     $other = ready($items[1]); file_put_contents(wm_dir($other) . '/original', 'broken');
     fail_expected(fn() => wm_apply($other), 'Reject corrupt backups before publication');
     wm_exec("UPDATE wm_items SET status = 'pending' WHERE id = ?", [$other['id']]);

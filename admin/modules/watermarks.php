@@ -25,11 +25,13 @@ try {
         <button type="button" class="btn btn-success" data-wm="apply">Hazır kopyaları yayımla</button>
         <button type="button" class="btn btn-outline-danger" data-wm="restore">Bu işte yayımlananları geri al</button>
         <button type="button" class="btn btn-secondary" id="wm-stop" disabled>Duraklat</button>
+        <button type="button" class="btn btn-outline-secondary ms-auto" data-wm="purge" title="Yayımlananlar geri alınamaz hale gelir">Bu işin yedeklerini sil (yer aç)</button>
     </div>
-    <small class="text-muted mt-2">İşlem bu sayfa açıkken ilerler (her adımda birkaç görsel). Duraklatma, çalışan görsel tamamlandığında etkili olur. Sayfayı yeniden açıp devam edebilirsiniz. Yayımlanan görselin eski dosyası silinir; orijinalin yedeği işlem klasöründe kalır (geri almak için). Diskte 300 MB'tan az yer kalırsa işlem durur.</small>
+    <small class="text-muted mt-2">İşlem bu sayfa açıkken ilerler (her adımda birkaç görsel). Duraklatma, çalışan görsel tamamlandığında etkili olur. Sayfayı yeniden açıp devam edebilirsiniz. Yayımlanan görselin eski dosyası silinir; orijinalin yedeği işlem klasöründe kalır (geri almak için). Sonuçlardan eminseniz "Bu işin yedeklerini sil" ile yer açın. Diskte 300 MB'tan az yer kalırsa işlem durur.</small>
 </div>
 <p id="wm-message" role="status" aria-live="polite"></p>
 <p id="wm-counts"></p>
+<p id="wm-disk" class="text-muted small"></p>
 <div id="wm-items" class="row g-3"></div>
 <div class="d-flex align-items-center gap-3 mt-3">
     <button type="button" class="btn btn-outline-secondary" id="wm-prev">Önceki</button>

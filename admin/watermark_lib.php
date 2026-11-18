@@ -190,6 +190,8 @@ function wm_restore(array $item): void {
     $dest = UPLOAD_DIR . '/' . $item['source_name'];
     if (file_exists($dest) || is_link($dest)) {
         if (is_link($dest) || hash_file('sha256', $dest) !== $item['source_sha']) throw new RuntimeException('Eski dosya adı farklı bir içerikle kullanılıyor; üzerine yazılmadı.');
+        // Disk Kullanımı'nın "1 saatten eski kullanılmayan görselleri sil" işlemi bu dosyayı silmesin
+        @touch($dest);
     } else {
         // Exclusive create: never replace a file produced by another operation.
         $out = @fopen($dest, 'xb'); $in = fopen($backup, 'rb');
@@ -198,13 +200,58 @@ function wm_restore(array $item): void {
         if (!$ok || hash_file('sha256', $dest) !== $item['source_sha']) { @unlink($dest); throw new RuntimeException('Geri yüklenen dosya doğrulanamadı.'); }
     }
     $changes = json_decode((string)$item['changes_json'], true, 512, JSON_THROW_ON_ERROR);
+    $out = (string)$item['output_name'];
     $GLOBALS['pdo']->beginTransaction();
     try {
-        foreach ($changes as $c) wm_swap_book((int)$c['id'], $c['after'], $c['before']);
+        // Kitabın ŞU ANKİ satırında yalnızca bu görselin adı geri değiştirilir: aynı kitabın diğer görselleri
+        // sonradan da temizlenmiş olabilir (tüm satırı eski haline beklemek toplu geri almayı bozuyordu)
+        $touched = 0;
+        foreach ($changes as $c) {
+            $cur = wm_exec('SELECT cover_image, extra_images FROM books WHERE id = ?', [(int)$c['id']])->fetch(PDO::FETCH_ASSOC);
+            if (!$cur) continue;
+            $after = ['cover_image' => $cur['cover_image'], 'extra_images' => $cur['extra_images']];
+            if ($cur['cover_image'] === $out) $after['cover_image'] = $item['source_name'];
+            $extras = json_decode((string)$cur['extra_images'], true);
+            if (is_array($extras) && in_array($out, $extras, true)) {
+                $after['extra_images'] = json_encode(array_map(fn($x) => $x === $out ? $item['source_name'] : $x, $extras), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+            }
+            if ($after === ['cover_image' => $cur['cover_image'], 'extra_images' => $cur['extra_images']]) continue;
+            wm_swap_book((int)$c['id'], $cur, $after);
+            $touched++;
+        }
+        if (!$touched) throw new RuntimeException('Temiz kopya artık hiçbir kitapta kullanılmıyor (kitap sonradan değişmiş); geri alınacak bir şey yok.');
         wm_exec("UPDATE wm_items SET status = 'restored', error = '' WHERE id = ?", [$item['id']]);
         $GLOBALS['pdo']->commit();
     } catch (Throwable $e) { $GLOBALS['pdo']->rollBack(); throw $e; }
     if (!empty($item['output_name'])) wm_unlink_if_unused($item['output_name']);
+}
+/**
+ * İşin yedeklerini siler (disk): yayımlananların orijinal yedeği (geri alma imkânı kalkar → 'final'), hazırlanıp
+ * yayımlanmamışların önizleme+yedeği (→ yeniden 'pending'), diğer geçici dosyalar. Dönüş: silinen bayt.
+ */
+function wm_purge(string $job): int {
+    if (!preg_match('/^[a-f0-9]{32}$/D', $job)) throw new RuntimeException('İş kimliği geçersiz.');
+    $freed = 0;
+    foreach (wm_exec('SELECT * FROM wm_items WHERE job_id = ?', [$job])->fetchAll(PDO::FETCH_ASSOC) as $it) {
+        $d = wm_root() . '/' . $job . '/' . $it['id'];
+        if (is_dir($d)) {
+            foreach (glob($d . '/*') ?: [] as $f) { $freed += (int)@filesize($f); @unlink($f); }
+            @rmdir($d);
+        }
+        if ($it['status'] === 'applied') wm_exec("UPDATE wm_items SET status = 'final', error = '' WHERE id = ?", [$it['id']]);
+        elseif ($it['status'] === 'ready') wm_exec("UPDATE wm_items SET status = 'pending', error = '' WHERE id = ?", [$it['id']]);
+    }
+    @rmdir(wm_root() . '/' . $job);
+    return $freed;
+}
+/** İşlem klasörünün toplam boyutu (bayt) */
+function wm_disk_usage(): int {
+    $n = 0;
+    try {
+        $it = new RecursiveIteratorIterator(new RecursiveDirectoryIterator(wm_root(), FilesystemIterator::SKIP_DOTS));
+        foreach ($it as $f) if ($f->isFile()) $n += $f->getSize();
+    } catch (Throwable $e) {}
+    return $n;
 }
 function wm_status(string $job, int $offset = 0): array {
     $counts = [];
