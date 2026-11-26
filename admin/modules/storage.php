@@ -35,6 +35,8 @@ function storage_referenced_files() {
     try {
         foreach (db_fetch_all("SELECT logo FROM stores") as $s) $add($s['logo']);
     } catch (Throwable $e) {}
+    // Toplu görsel yüklemede değiştirilen eski görseller 30 gün geri alınabilsin diye korunur
+    if (function_exists('bulk_images_protected_files')) $ref += bulk_images_protected_files();
     return $ref;
 }
 

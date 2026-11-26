@@ -698,6 +698,7 @@ require_once __DIR__ . '/_messages.php';
 require_once __DIR__ . '/_store_orders.php';
 require_once __DIR__ . '/_shipping_label.php';
 require_once __DIR__ . '/_payouts.php';
+require_once __DIR__ . '/_bulk_images.php';
 
 /**
  * Sahaf kitapları için kondisyon (durum) tanımları; vitrinde "Kondisyon durumuna dikkat ediniz" kutusunda gösterilir.
