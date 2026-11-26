@@ -77,7 +77,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'bulk'
     redirect('index.php?' . http_build_query(array_filter(['q' => $_POST['q'] ?? '', 'durum' => $_POST['durum'] ?? '', 'page' => $_POST['page'] ?? ''])));
 }
 $report_base     = 'index.php?tab=rapor&';
-$tab             = in_array($_GET['tab'] ?? '', ['rapor', 'mesaj', 'siparis', 'hakedis'], true) ? $_GET['tab'] : 'dukkan';
+$tab             = in_array($_GET['tab'] ?? '', ['rapor', 'mesaj', 'siparis', 'hakedis', 'gorsel'], true) ? $_GET['tab'] : 'dukkan';
 
 // Sipariş kargolandı: kargo firması + takip numarası (yalnızca bu dükkânın kitabı olan sipariş)
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'ship') {
@@ -217,6 +217,7 @@ if ($tab === 'dukkan') {
         <ul class="nav nav-pills mb-4 bg-white p-2 rounded-4 shadow-sm border">
             <li class="nav-item"><a class="nav-link fw-semibold <?= $tab === 'dukkan' ? 'active bg-danger text-white' : 'text-secondary' ?>" href="index.php"><i class="bi bi-shop me-1"></i> Dükkânım</a></li>
             <li class="nav-item"><a class="nav-link fw-semibold <?= $tab === 'siparis' ? 'active bg-danger text-white' : 'text-secondary' ?>" href="index.php?tab=siparis"><i class="bi bi-box-seam me-1"></i> Siparişler<?= $to_ship ? ' <span class="badge bg-warning text-dark">' . $to_ship . '</span>' : '' ?></a></li>
+            <li class="nav-item"><a class="nav-link fw-semibold <?= $tab === 'gorsel' ? 'active bg-danger text-white' : 'text-secondary' ?>" href="index.php?tab=gorsel"><i class="bi bi-images me-1"></i> Toplu Görsel</a></li>
             <li class="nav-item"><a class="nav-link fw-semibold <?= $tab === 'hakedis' ? 'active bg-danger text-white' : 'text-secondary' ?>" href="index.php?tab=hakedis"><i class="bi bi-wallet2 me-1"></i> Hakedişlerim</a></li>
             <li class="nav-item"><a class="nav-link fw-semibold <?= $tab === 'rapor' ? 'active bg-danger text-white' : 'text-secondary' ?>" href="index.php?tab=rapor"><i class="bi bi-graph-up-arrow me-1"></i> Ziyaret & Satış Raporu</a></li>
             <li class="nav-item"><a class="nav-link fw-semibold <?= $tab === 'mesaj' ? 'active bg-danger text-white' : 'text-secondary' ?>" href="index.php?tab=mesaj"><i class="bi bi-chat-dots me-1"></i> Mesajlar<?= $bq_unread ? ' <span class="badge bg-warning text-dark">' . $bq_unread . '</span>' : '' ?></a></li>
@@ -341,6 +342,11 @@ if ($tab === 'dukkan') {
                     </div>
                 </div>
             <?php endforeach; ?>
+        <?php elseif ($tab === 'gorsel'):
+            $bimg_seller_store = $report_store_id; ?>
+            <div class="bg-white rounded-4 shadow-sm p-4">
+                <?php include __DIR__ . '/../admin/modules/bulkimages.php'; ?>
+            </div>
         <?php elseif ($tab === 'hakedis'):
             $psum = po_summary($report_store_id);
             $phist = po_history($report_store_id, 50); ?>

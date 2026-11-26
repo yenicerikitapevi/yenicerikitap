@@ -22,7 +22,8 @@ define('BULK_IMAGES_KEEP_DAYS', 30);
     $sqlite = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite';
     $have = $sqlite ? array_column($pdo->query("PRAGMA table_info(bulk_image_log)")->fetchAll(), 'name')
                     : array_column($pdo->query("SHOW COLUMNS FROM bulk_image_log")->fetchAll(), 'Field');
-    foreach (['new_cover' => $sqlite ? 'TEXT' : 'VARCHAR(500) NULL', 'new_extra' => $sqlite ? 'TEXT' : 'TEXT NULL'] as $c => $t) {
+    // store_scope: yüklemeyi yapan sahaf (NULL = yönetici); sahaf yalnızca kendi yüklemelerini görür ve geri alır
+    foreach (['new_cover' => $sqlite ? 'TEXT' : 'VARCHAR(500) NULL', 'new_extra' => $sqlite ? 'TEXT' : 'TEXT NULL', 'store_scope' => $sqlite ? 'INTEGER NULL' : 'INT NULL'] as $c => $t) {
         if (!in_array($c, $have, true)) $pdo->exec("ALTER TABLE bulk_image_log ADD COLUMN {$c} {$t}");
     }
 })();

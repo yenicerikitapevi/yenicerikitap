@@ -3,13 +3,17 @@
  * ADMIN MODULE: Toplu Görsel Yükleme (p=BulkImages)
  * Bilgisayardaki fotoğraf klasörü seçilir; dosya adındaki NadirKitap kodu ya da ISBN'e göre kitaplara eşlenir,
  * önizlemeden sonra tarayıcı fotoğrafları küçük gruplar hâlinde yükler (admin/bulk_images_api.php).
+ * Satıcı Paneli de bu dosyayı kullanır: $bimg_seller_store (dükkân id) verilirse yalnızca o dükkânın kitapları ve yüklemeleri.
  */
 if (!defined('SITE_URL')) exit;
+$bimg_seller_store = isset($bimg_seller_store) ? (int)$bimg_seller_store : null;
+$bimg_api = $bimg_seller_store !== null ? '../admin/bulk_images_api.php' : 'bulk_images_api.php';
 
 if (empty($_SESSION['bulk_images_token'])) $_SESSION['bulk_images_token'] = bin2hex(random_bytes(16));
 $bimg_token = $_SESSION['bulk_images_token'];
-$bimg_stores = db_fetch_all("SELECT id, name FROM stores ORDER BY name");
-$bimg_runs = db_fetch_all("SELECT run_id, COUNT(*) AS books, MIN(created_at) AS started, MAX(created_by) AS who, SUM(CASE WHEN undone_at IS NULL THEN 1 ELSE 0 END) AS active FROM bulk_image_log GROUP BY run_id ORDER BY MIN(id) DESC LIMIT 10");
+$bimg_stores = $bimg_seller_store === null ? db_fetch_all("SELECT id, name FROM stores ORDER BY name") : [];
+$bimg_runs = db_fetch_all("SELECT run_id, COUNT(*) AS books, MIN(created_at) AS started, MAX(created_by) AS who, SUM(CASE WHEN undone_at IS NULL THEN 1 ELSE 0 END) AS active FROM bulk_image_log"
+    . ($bimg_seller_store !== null ? ' WHERE store_scope = ' . $bimg_seller_store : '') . " GROUP BY run_id ORDER BY MIN(id) DESC LIMIT 10");
 ?>
 <div class="mb-4">
     <h5 class="fw-bold text-dark mb-1">Toplu Görsel Yükleme</h5>
@@ -29,6 +33,9 @@ $bimg_runs = db_fetch_all("SELECT run_id, COUNT(*) AS books, MIN(created_at) AS 
                 <input type="file" id="bimgDir" class="form-control" webkitdirectory directory multiple>
                 <div class="form-text fs-8">Klasörü seçin (alt klasörler dahil). Tarayıcı "yükle" onayı sorabilir.</div>
             </div>
+            <?php if ($bimg_seller_store !== null): ?>
+                <input type="hidden" id="bimgScope" value="store:<?= $bimg_seller_store ?>">
+            <?php else: ?>
             <div class="col-lg-3">
                 <label class="form-label fw-semibold fs-7" for="bimgScope">Hangi kitaplar</label>
                 <select id="bimgScope" class="form-select">
@@ -37,6 +44,7 @@ $bimg_runs = db_fetch_all("SELECT run_id, COUNT(*) AS books, MIN(created_at) AS 
                     <option value="all">Tüm kitaplar</option>
                 </select>
             </div>
+            <?php endif; ?>
             <div class="col-lg-3">
                 <label class="form-label fw-semibold fs-7" for="bimgMode">Mevcut görseller</label>
                 <select id="bimgMode" class="form-select">
@@ -89,7 +97,7 @@ $bimg_runs = db_fetch_all("SELECT run_id, COUNT(*) AS books, MIN(created_at) AS 
 
 <script>
 (function () {
-    var API = 'bulk_images_api.php', TOKEN = <?= json_encode($bimg_token) ?>;
+    var API = <?= json_encode($bimg_api) ?>, TOKEN = <?= json_encode($bimg_token) ?>;
     // İstek başına dosya sayısı sunucu sınırının altında kalır (PHP fazlasını sessizce atar)
     var MAX_FILES = Math.max(1, Math.min(25, <?= (int)ini_get('max_file_uploads') ?: 20 ?> - 2));
     var lastRun = null; // yarıda kalan yükleme "Eşleştir" ile aynı çalıştırmada sürdürülür
@@ -142,7 +150,7 @@ $bimg_runs = db_fetch_all("SELECT run_id, COUNT(*) AS books, MIN(created_at) AS 
             if (r.unmatched_sample.length) {
                 h += '<details class="fs-8 mb-3"><summary class="text-danger">Eşleşmeyen dosyalardan örnekler (' + r.unmatched + ')</summary><ul class="mb-0 mt-1">';
                 r.unmatched_sample.forEach(function (n) { h += '<li class="font-monospace">' + esc(n) + '</li>'; });
-                h += '</ul><div class="text-muted mt-1">Dosya adında bu kapsamdaki bir kitabın NadirKitap kodu ya da ISBN\'i yok. Kapsamı "Tüm kitaplar" yapmayı deneyin.</div></details>';
+                h += '</ul><div class="text-muted mt-1">Dosya adında bu kapsamdaki bir kitabın NadirKitap kodu ya da ISBN\'i yok. <?= $bimg_seller_store === null ? 'Kapsamı \\"Tüm kitaplar\\" yapmayı deneyin.' : 'Yalnızca kendi kitaplarınızla eşleşir.' ?></div></details>';
             }
             if (plan.length) {
                 var replace = document.getElementById('bimgMode').value === 'replace';
@@ -195,7 +203,7 @@ $bimg_runs = db_fetch_all("SELECT run_id, COUNT(*) AS books, MIN(created_at) AS 
         function finish(ok, msg) {
             running = false; window.onbeforeunload = null; dir.disabled = false; btn.disabled = false;
             if (ok) lastRun = null;
-            status.innerHTML = (ok ? '<b class="text-success">Tamamlandı.</b> ' : '<b class="text-danger">Durdu:</b> ' + esc(msg) + ' ') + saved + ' fotoğraf kaydedildi' + (failed ? ', ' + failed + ' dosya hatalı' : '') + '. <a href="index.php?p=BulkImages">Sayfayı yenile</a>';
+            status.innerHTML = (ok ? '<b class="text-success">Tamamlandı.</b> ' : '<b class="text-danger">Durdu:</b> ' + esc(msg) + ' ') + saved + ' fotoğraf kaydedildi' + (failed ? ', ' + failed + ' dosya hatalı' : '') + '. <a href="<?= $bimg_seller_store !== null ? 'index.php?tab=gorsel' : 'index.php?p=BulkImages' ?>">Sayfayı yenile</a>';
         }
         batch();
     }
