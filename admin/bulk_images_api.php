@@ -36,6 +36,8 @@ if ($action === 'match') {
     $scope = (string)($_POST['scope'] ?? 'yeniceri');
     $mode = ($_POST['mode'] ?? 'replace') === 'empty' ? 'empty' : 'replace';
     [$by_nk, $by_isbn, $books] = bimg_index($scope);
+    // Yarıda kalan yüklemeye devam: o çalıştırmada başlanmış kitaplar 'yalnızca görselsizler' modunda da tamamlanır
+    $in_run = $run !== '' ? array_flip(array_map('intval', array_column(db_fetch_all("SELECT book_id FROM bulk_image_log WHERE run_id = ? AND undone_at IS NULL", [$run]), 'book_id'))) : [];
     $files = [];
     $unmatched = [];
     foreach ($names as $i => $path) {
@@ -50,11 +52,14 @@ if ($action === 'match') {
     foreach ($files as $bid => $list) {
         $b = $books[$bid];
         $has = bimg_has_images($b);
-        if ($mode === 'empty' && $has) { $skipped_has++; continue; }
+        if ($mode === 'empty' && $has && !isset($in_run[$bid])) { $skipped_has++; continue; }
         // Sıra: ek numarası olmayan (5550001.jpg) kapak, sonra _2, (3)…; eşitse dosya yolu
         usort($list, function ($a, $c) {
             $d = bimg_order_key($a['path']) <=> bimg_order_key($c['path']);
-            return $d ?: strnatcasecmp($a['path'], $c['path']);
+            if ($d) return $d;
+            $na = preg_replace('/\.[a-z0-9]+$/i', '', basename(str_replace('\\', '/', $a['path'])));
+            $nc = preg_replace('/\.[a-z0-9]+$/i', '', basename(str_replace('\\', '/', $c['path'])));
+            return strnatcasecmp($na, $nc) ?: strnatcasecmp($a['path'], $c['path']); // "kod.jpg" "kod-arka.jpg"dan önce
         });
         if (count($list) > 8) { $over += count($list) - 8; $list = array_slice($list, 0, 8); }
         foreach ($list as $seq => $f) $plan[] = ['i' => $f['i'], 'book' => (int)$bid, 'seq' => $seq];
@@ -88,35 +93,50 @@ if ($action === 'upload') {
         if ($f['size'][$k] > 15 * 1048576) { $errors[] = $nm . ': 15 MB\'tan büyük'; continue; }
         $info = @getimagesize($f['tmp_name'][$k]);
         if (!$info || !isset($allowed[$info[2]])) { $errors[] = $nm . ': JPG/PNG/WEBP değil'; continue; }
+        bimg_fix_orientation($f['tmp_name'][$k], $info[2]); // telefon fotoğrafı yan/ters görünmesin
         $md5 = md5_file($f['tmp_name'][$k]);
         $fname = 'bulk_' . $bid . '_' . (($seqs[$k] ?? 0) + 1) . '_' . substr($md5, 0, 8) . '.' . $allowed[$info[2]];
+        $is_new = !file_exists(UPLOAD_DIR . '/' . $fname);
         if (!@move_uploaded_file($f['tmp_name'][$k], UPLOAD_DIR . '/' . $fname)) { $errors[] = $nm . ': kaydedilemedi'; continue; }
-        $by_book[$bid][] = ['seq' => $seqs[$k] ?? 0, 'name' => $fname];
+        $by_book[$bid][] = ['seq' => $seqs[$k] ?? 0, 'name' => $fname, 'new' => $is_new];
         $saved++;
     }
+    // Sunucunun dosya sayısı sınırı yüzünden alınmayan dosyalar sessizce kaybolmasın
+    for ($k = count($f['name']); $k < count($book_ids); $k++) $errors[] = 'Dosya #' . ($k + 1) . ': sunucu bu gruptaki dosyayı almadı';
     $updated = 0;
     foreach ($by_book as $bid => $list) {
         usort($list, function ($a, $b) { return $a['seq'] <=> $b['seq']; });
-        $updated += bimg_apply($run, $bid, array_column($list, 'name'), $mode, $admin_name) ? 1 : 0;
+        if (bimg_apply($run, $bid, array_column($list, 'name'), $mode, $admin_name)) { $updated++; continue; }
+        // Kitaba yazılmadıysa bu istekte oluşturulan dosyalar silinir (diskte sahipsiz kalmasın)
+        foreach ($list as $x) if ($x['new']) @unlink(UPLOAD_DIR . '/' . $x['name']);
+        $saved -= count($list);
+        $errors[] = 'Kitap #' . $bid . ': atlandı (artık görseli var ya da kitap bulunamadı)';
     }
     bimg_out(['ok' => true, 'saved' => $saved, 'books' => $updated, 'errors' => $errors, 'free_mb' => (int)(bimg_free() / 1048576)]);
 }
 
 if ($action === 'undo') {
-    $rows = db_fetch_all("SELECT * FROM bulk_image_log WHERE run_id = ? AND undone_at IS NULL", [$run]);
-    if (!$rows) bimg_out(['ok' => false, 'message' => 'Geri alınacak kayıt yok.']);
+    $rows = db_fetch_all("SELECT * FROM bulk_image_log WHERE run_id = ? AND undone_at IS NULL AND created_at >= ?", [$run, date('Y-m-d H:i:s', time() - BULK_IMAGES_KEEP_DAYS * 86400)]);
+    if (!$rows) bimg_out(['ok' => false, 'message' => 'Geri alınacak kayıt yok ya da ' . BULK_IMAGES_KEEP_DAYS . ' günlük geri alma süresi doldu.']);
     $n = 0;
     $kept = 0;
     foreach ($rows as $r) {
         // Kitap daha sonraki (geri alınmamış) bir yüklemede de değiştiyse dokunulmaz; önce o yükleme geri alınmalı
         $later = db_fetch("SELECT id FROM bulk_image_log WHERE book_id = ? AND id > ? AND undone_at IS NULL LIMIT 1", [(int)$r['book_id'], (int)$r['id']]);
         if ($later) { $kept++; continue; }
-        db_query("UPDATE books SET cover_image = ?, extra_images = ? WHERE id = ?", [$r['old_cover'], $r['old_extra'], (int)$r['book_id']]);
+        // Kitabın görselleri bu yüklemeden sonra elle değiştirildiyse dokunulmaz
+        if ($r['new_cover'] !== null) {
+            $st = db_query("UPDATE books SET cover_image = ?, extra_images = ? WHERE id = ? AND COALESCE(cover_image, '') = ? AND COALESCE(extra_images, '') = ?",
+                [$r['old_cover'], $r['old_extra'], (int)$r['book_id'], (string)$r['new_cover'], (string)$r['new_extra']]);
+            if ($st->rowCount() !== 1) { $kept++; continue; }
+        } else {
+            db_query("UPDATE books SET cover_image = ?, extra_images = ? WHERE id = ?", [$r['old_cover'], $r['old_extra'], (int)$r['book_id']]);
+        }
         db_query("UPDATE bulk_image_log SET undone_at = ? WHERE id = ?", [date('Y-m-d H:i:s'), (int)$r['id']]);
         $n++;
     }
     log_action('Toplu Görsel Geri Alındı', 'Products', null, "{$n} kitabın görselleri eski hâline döndü ({$run})" . ($kept ? ", {$kept} kitap sonraki yüklemede değiştiği için atlandı" : ''));
-    bimg_out(['ok' => true, 'message' => "{$n} kitabın görselleri eski hâline döndürüldü." . ($kept ? " {$kept} kitap daha sonraki bir yüklemede de değiştiği için atlandı; önce o yüklemeyi geri alın." : '')]);
+    bimg_out(['ok' => true, 'message' => "{$n} kitabın görselleri eski hâline döndürüldü." . ($kept ?  " {$kept} kitap sonradan değiştiği (daha yeni bir yükleme ya da elle düzenleme) için atlandı." : '')]);
 }
 
 bimg_out(['ok' => false, 'message' => 'Bilinmeyen işlem.'], 400);
@@ -223,6 +243,19 @@ function bimg_order_key($path) {
     return preg_match('/([0-9]{1,3})/', $rest, $m) ? (int)$m[1] : 0;
 }
 
+/** JPEG'in EXIF yönünü uygular (GD ve WebP dönüşümü EXIF'i yok sayar); gerekmiyorsa dosyaya dokunmaz */
+function bimg_fix_orientation($path, $type) {
+    if ($type !== IMAGETYPE_JPEG || !function_exists('exif_read_data')) return;
+    $ex = @exif_read_data($path);
+    $deg = [3 => 180, 6 => -90, 8 => 90][(int)($ex['Orientation'] ?? 1)] ?? 0;
+    if (!$deg) return;
+    $im = @imagecreatefromjpeg($path);
+    if (!$im) return;
+    $r = imagerotate($im, $deg, 0);
+    if ($r) { @imagejpeg($r, $path, 88); imagedestroy($r); }
+    imagedestroy($im);
+}
+
 function bimg_has_images($b) {
     $c = trim((string)$b['cover_image']);
     return $c !== '' && $c !== 'book_placeholder.svg';
@@ -251,8 +284,9 @@ function bimg_apply($run, $book_id, array $names, $mode, $admin_name) {
             $current = array_values(array_unique($current));
         }
         $all = array_slice(array_values(array_unique(array_merge($current, $names))), 0, 8);
-        db_query("UPDATE books SET cover_image = ?, extra_images = ? WHERE id = ?",
-            [$all[0], count($all) > 1 ? json_encode($all, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) : null, (int)$book_id]);
+        $new_extra = count($all) > 1 ? json_encode($all, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) : null;
+        db_query("UPDATE books SET cover_image = ?, extra_images = ? WHERE id = ?", [$all[0], $new_extra, (int)$book_id]);
+        db_query("UPDATE bulk_image_log SET new_cover = ?, new_extra = ? WHERE run_id = ? AND book_id = ?", [$all[0], $new_extra, $run, (int)$book_id]);
         $pdo->commit();
         return true;
     } catch (Throwable $e) {

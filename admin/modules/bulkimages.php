@@ -72,6 +72,8 @@ $bimg_runs = db_fetch_all("SELECT run_id, COUNT(*) AS books, MIN(created_at) AS 
                     <td class="text-end pe-3">
                         <?php if (!(int)$r['active']): ?>
                             <span class="text-muted fs-8">Geri alındı</span>
+                        <?php elseif (strtotime($r['started']) < time() - BULK_IMAGES_KEEP_DAYS * 86400): ?>
+                            <span class="text-muted fs-8">Geri alma süresi doldu</span>
                         <?php else: ?>
                             <button type="button" class="btn btn-sm btn-outline-secondary bimg-undo" data-run="<?= e($r['run_id']) ?>">Geri al</button>
                         <?php endif; ?>
@@ -88,6 +90,9 @@ $bimg_runs = db_fetch_all("SELECT run_id, COUNT(*) AS books, MIN(created_at) AS 
 <script>
 (function () {
     var API = 'bulk_images_api.php', TOKEN = <?= json_encode($bimg_token) ?>;
+    // İstek başına dosya sayısı sunucu sınırının altında kalır (PHP fazlasını sessizce atar)
+    var MAX_FILES = Math.max(1, Math.min(25, <?= (int)ini_get('max_file_uploads') ?: 20 ?> - 2));
+    var lastRun = null; // yarıda kalan yükleme "Eşleştir" ile aynı çalıştırmada sürdürülür
     var dir = document.getElementById('bimgDir'), btn = document.getElementById('bimgMatch');
     var prev = document.getElementById('bimgPreview'), prog = document.getElementById('bimgProgress');
     var bar = document.getElementById('bimgBar'), status = document.getElementById('bimgStatus'), errs = document.getElementById('bimgErrors');
@@ -102,7 +107,7 @@ $bimg_runs = db_fetch_all("SELECT run_id, COUNT(*) AS books, MIN(created_at) AS 
     dir.addEventListener('change', function () {
         files = Array.prototype.filter.call(dir.files, function (f) { return /\.(jpe?g|png|webp)$/i.test(f.name); });
         btn.disabled = !files.length;
-        prev.hidden = true; prog.hidden = true; plan = null;
+        prev.hidden = true; prog.hidden = true; plan = null; lastRun = null;
         status.textContent = '';
         if (dir.files.length) { prev.hidden = false; prev.innerHTML = '<div class="text-muted fs-7">' + files.length + ' fotoğraf seçildi (' + dir.files.length + ' dosya). "Eşleştir"e basın.</div>'; }
     });
@@ -113,6 +118,7 @@ $bimg_runs = db_fetch_all("SELECT run_id, COUNT(*) AS books, MIN(created_at) AS 
         fd.append('scope', document.getElementById('bimgScope').value);
         fd.append('mode', document.getElementById('bimgMode').value);
         fd.append('names', JSON.stringify(files.map(function (f) { return f.webkitRelativePath || f.name; })));
+        if (lastRun) fd.append('run', lastRun);
         btn.disabled = true;
         prev.hidden = false; prev.innerHTML = '<div class="text-muted fs-7"><span class="spinner-border spinner-border-sm me-1"></span> Eşleştiriliyor…</div>';
         post(fd).then(function (r) {
@@ -154,7 +160,8 @@ $bimg_runs = db_fetch_all("SELECT run_id, COUNT(*) AS books, MIN(created_at) AS 
         if (running || !plan || !plan.length) return;
         running = true; st.disabled = true; btn.disabled = true; dir.disabled = true;
         prog.hidden = false; errs.innerHTML = '';
-        var run = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+        var run = lastRun || (Date.now().toString(36) + Math.random().toString(36).slice(2, 8));
+        lastRun = run;
         var mode = document.getElementById('bimgMode').value;
         var idx = 0, saved = 0, books = 0, failed = 0, retries = 0;
         window.onbeforeunload = function () { return 'Yükleme sürüyor'; };
@@ -162,7 +169,7 @@ $bimg_runs = db_fetch_all("SELECT run_id, COUNT(*) AS books, MIN(created_at) AS 
             if (idx >= plan.length) return finish(true, '');
             var fd = new FormData(), bytes = 0, n = 0, end = idx;
             fd.append('action', 'upload'); fd.append('run', run); fd.append('mode', mode);
-            while (end < plan.length && n < 25 && (n === 0 || bytes + files[plan[end].i].size < 20 * 1048576)) {
+            while (end < plan.length && n < MAX_FILES && (n === 0 || bytes + files[plan[end].i].size < 20 * 1048576)) {
                 var p = plan[end], f = files[p.i];
                 fd.append('files[]', f, f.name); fd.append('book[]', p.book); fd.append('seq[]', p.seq);
                 bytes += f.size; n++; end++;
@@ -187,10 +194,12 @@ $bimg_runs = db_fetch_all("SELECT run_id, COUNT(*) AS books, MIN(created_at) AS 
         }
         function finish(ok, msg) {
             running = false; window.onbeforeunload = null; dir.disabled = false; btn.disabled = false;
+            if (ok) lastRun = null;
             status.innerHTML = (ok ? '<b class="text-success">Tamamlandı.</b> ' : '<b class="text-danger">Durdu:</b> ' + esc(msg) + ' ') + saved + ' fotoğraf kaydedildi' + (failed ? ', ' + failed + ' dosya hatalı' : '') + '. <a href="index.php?p=BulkImages">Sayfayı yenile</a>';
         }
         batch();
     }
+    ['bimgScope', 'bimgMode'].forEach(function (id) { document.getElementById(id).addEventListener('change', function () { if (!running) lastRun = null; }); });
     document.querySelectorAll('.bimg-undo').forEach(function (b) {
         b.addEventListener('click', function () {
             if (!confirm('Bu yüklemede değişen kitapların görselleri eski hâline döndürülsün mü?')) return;

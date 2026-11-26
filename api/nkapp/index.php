@@ -242,7 +242,7 @@ if ($route === '/existing-product-codes') {
         $c = trim((string)$r['nadirkitap_code']);
         if ($refresh_at > 0) {
             $cv = basename((string)$r['cover_image']);
-            if ($cv !== '' && $cv !== 'book_placeholder.svg' && !preg_match('#^https?://#i', (string)$r['cover_image'])) {
+            if ($cv !== '' && $cv !== 'book_placeholder.svg' && strncmp($cv, 'bulk_', 5) !== 0 && !preg_match('#^https?://#i', (string)$r['cover_image'])) { // bulk_: Toplu Görsel Yükleme'nin özgün fotoğrafları korunur
                 $mt = @filemtime(UPLOAD_DIR . '/' . $cv);
                 if ($mt !== false && $mt < $refresh_at) continue;
             }
@@ -594,6 +594,7 @@ if (preg_match('#^/pbatch/([^/]+)/([^/]+)/(\d+)$#i', $route, $m)) {
                 $refresh_at = (int)setting('nk_image_refresh_at', '0');
                 $keep_images = $old_cover !== '' && $old_cover !== 'book_placeholder.svg'
                     && (preg_match('#^https?://#i', (string)$existing_book['cover_image'])
+                        || strncmp($old_cover, 'bulk_', 5) === 0
                         || (is_file(UPLOAD_DIR . '/' . $old_cover) && @filemtime(UPLOAD_DIR . '/' . $old_cover) >= $refresh_at));
             }
             $saved_images = [];
