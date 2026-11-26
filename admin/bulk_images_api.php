@@ -19,11 +19,21 @@ function bimg_out($data, $code = 200) {
     exit;
 }
 
-if (($_SESSION['admin_user']['role'] ?? '') !== 'admin') bimg_out(['ok' => false, 'message' => 'Oturum kapalı, yeniden giriş yapın.'], 401);
+// Yönetici her kitaba; sahaf (Satıcı Paneli) yalnızca kendi dükkânının kitaplarına yükler
+$seller_store = null;
+if (($_SESSION['admin_user']['role'] ?? '') === 'admin') {
+    $admin_name = $_SESSION['admin_user']['name'] ?? '';
+} elseif (!empty($_SESSION['store_user']['id'])) {
+    $st = db_fetch("SELECT id, name, is_active FROM stores WHERE id = ?", [(int)$_SESSION['store_user']['id']]);
+    if (!$st || !$st['is_active']) bimg_out(['ok' => false, 'message' => 'Oturum kapalı, yeniden giriş yapın.'], 401);
+    $seller_store = (int)$st['id'];
+    $admin_name = $st['name'] . ' (sahaf)';
+} else {
+    bimg_out(['ok' => false, 'message' => 'Oturum kapalı, yeniden giriş yapın.'], 401);
+}
 if ($_SERVER['REQUEST_METHOD'] !== 'POST' || empty($_SESSION['bulk_images_token']) || !hash_equals($_SESSION['bulk_images_token'], (string)($_POST['token'] ?? ''))) {
     bimg_out(['ok' => false, 'message' => 'Geçersiz istek. Sayfayı yenileyin.'], 403);
 }
-$admin_name = $_SESSION['admin_user']['name'] ?? '';
 session_write_close();
 
 $action = (string)($_POST['action'] ?? '');
@@ -33,7 +43,7 @@ if ($action === 'match') {
     $names = json_decode((string)($_POST['names'] ?? '[]'), true);
     if (!is_array($names) || !$names) bimg_out(['ok' => false, 'message' => 'Klasörde görsel bulunamadı.']);
     $names = array_slice(array_values(array_filter($names, 'is_string')), 0, 50000);
-    $scope = (string)($_POST['scope'] ?? 'yeniceri');
+    $scope = $seller_store !== null ? 'store:' . $seller_store : (string)($_POST['scope'] ?? 'yeniceri');
     $mode = ($_POST['mode'] ?? 'replace') === 'empty' ? 'empty' : 'replace';
     [$by_nk, $by_isbn, $books] = bimg_index($scope);
     // Yarıda kalan yüklemeye devam: o çalıştırmada başlanmış kitaplar 'yalnızca görselsizler' modunda da tamamlanır
@@ -106,7 +116,7 @@ if ($action === 'upload') {
     $updated = 0;
     foreach ($by_book as $bid => $list) {
         usort($list, function ($a, $b) { return $a['seq'] <=> $b['seq']; });
-        if (bimg_apply($run, $bid, array_column($list, 'name'), $mode, $admin_name)) { $updated++; continue; }
+        if (bimg_apply($run, $bid, array_column($list, 'name'), $mode, $admin_name, $seller_store)) { $updated++; continue; }
         // Kitaba yazılmadıysa bu istekte oluşturulan dosyalar silinir (diskte sahipsiz kalmasın)
         foreach ($list as $x) if ($x['new']) @unlink(UPLOAD_DIR . '/' . $x['name']);
         $saved -= count($list);
@@ -116,7 +126,8 @@ if ($action === 'upload') {
 }
 
 if ($action === 'undo') {
-    $rows = db_fetch_all("SELECT * FROM bulk_image_log WHERE run_id = ? AND undone_at IS NULL AND created_at >= ?", [$run, date('Y-m-d H:i:s', time() - BULK_IMAGES_KEEP_DAYS * 86400)]);
+    $rows = db_fetch_all("SELECT * FROM bulk_image_log WHERE run_id = ? AND undone_at IS NULL AND created_at >= ?" . ($seller_store !== null ? ' AND store_scope = ' . (int)$seller_store : ''),
+        [$run, date('Y-m-d H:i:s', time() - BULK_IMAGES_KEEP_DAYS * 86400)]);
     if (!$rows) bimg_out(['ok' => false, 'message' => 'Geri alınacak kayıt yok ya da ' . BULK_IMAGES_KEEP_DAYS . ' günlük geri alma süresi doldu.']);
     $n = 0;
     $kept = 0;
@@ -267,17 +278,19 @@ function bimg_free() {
 }
 
 /** Kitaba görselleri yazar; bu çalıştırmada kitap ilk kez görülüyorsa eski hâli günlüğe alınır (geri alma için) */
-function bimg_apply($run, $book_id, array $names, $mode, $admin_name) {
+function bimg_apply($run, $book_id, array $names, $mode, $admin_name, $seller_store = null) {
     global $pdo;
     $pdo->beginTransaction();
     try {
-        $b = db_fetch("SELECT id, cover_image, extra_images FROM books WHERE id = ?", [(int)$book_id]);
+        $b = $seller_store !== null
+            ? db_fetch("SELECT id, cover_image, extra_images FROM books WHERE id = ? AND store_id = ?", [(int)$book_id, (int)$seller_store]) // başka dükkânın kitabı yazılamaz
+            : db_fetch("SELECT id, cover_image, extra_images FROM books WHERE id = ?", [(int)$book_id]);
         if (!$b) { $pdo->rollBack(); return false; }
         $log = db_fetch("SELECT id FROM bulk_image_log WHERE run_id = ? AND book_id = ?", [$run, (int)$book_id]);
         if (!$log) {
             if ($mode === 'empty' && bimg_has_images($b)) { $pdo->rollBack(); return false; }
-            db_query("INSERT INTO bulk_image_log (run_id, book_id, old_cover, old_extra, created_by) VALUES (?, ?, ?, ?, ?)",
-                [$run, (int)$book_id, $b['cover_image'], $b['extra_images'], mb_substr($admin_name, 0, 120, 'UTF-8')]);
+            db_query("INSERT INTO bulk_image_log (run_id, book_id, old_cover, old_extra, created_by, store_scope) VALUES (?, ?, ?, ?, ?, ?)",
+                [$run, (int)$book_id, $b['cover_image'], $b['extra_images'], mb_substr($admin_name, 0, 120, 'UTF-8'), $seller_store]);
             $current = []; // ilk dosyalar: eski görsellerin yerine
         } else {
             $current = array_values(array_filter(array_merge([(string)$b['cover_image']], (array)(json_decode((string)$b['extra_images'], true) ?: []))));
