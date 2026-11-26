@@ -20,7 +20,7 @@ RUN mkdir -p /usr/share/man/man1 && apt-get update && apt-get install -y \
     && sed -i '/<Directory \/var\/www\/>/,/<\/Directory>/ s/AllowOverride None/AllowOverride All/' /etc/apache2/apache2.conf
 
 # Kapak resmi ve toplu kitap (kitApp) yüklemeleri için PHP boyut sınırları
-RUN printf "upload_max_filesize=64M\npost_max_size=64M\nmemory_limit=256M\nmax_execution_time=180\n" > /usr/local/etc/php/conf.d/uploads.ini
+RUN printf "upload_max_filesize=64M\npost_max_size=64M\nmax_file_uploads=50\nmemory_limit=256M\nmax_execution_time=180\n" > /usr/local/etc/php/conf.d/uploads.ini
 # PHP hataları ziyaretçiye/uygulamaya gösterilmez, Render loglarına (stderr) yazılır (JSON yanıtlar bozulmasın)
 RUN printf "display_errors=Off\ndisplay_startup_errors=Off\nlog_errors=On\nerror_log=/dev/stderr\nerror_reporting=E_ALL & ~E_DEPRECATED & ~E_STRICT\n" > /usr/local/etc/php/conf.d/errors.ini
 
